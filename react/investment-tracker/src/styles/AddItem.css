@@ -1,0 +1,33 @@
+.dropdown-item-custom {
+  cursor: pointer;
+}
+
+.dropdown-item-custom:hover {
+  background-color: #f1f1f1;
+}
+
+@media (max-width: 1200px) {
+  .flex-grow-1,
+  .col-md-2,
+  .col-md-1 {
+    flex: 1 1 100%;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}
+
+@media (min-width: 1200px) {
+  .col-md-1 {
+    max-width: 8%;
+  }
+
+  .col-md-2 {
+    max-width: 12%;
+  }
+
+  .col-md-3 {
+    max-width: 20%;
+  }
+}

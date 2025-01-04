@@ -1,0 +1,13 @@
+.activation-box {
+  background-color: #ffffff;
+  border-radius: 10px;
+  margin-top: 100px;
+}
+
+.activation-box h2 {
+  color: #333333;
+}
+
+.activation-box .alert {
+  margin-bottom: 1rem;
+}

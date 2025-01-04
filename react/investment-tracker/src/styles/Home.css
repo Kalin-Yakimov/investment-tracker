@@ -1,0 +1,18 @@
+.table .table-row-link {
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.table .table-row-link:hover {
+  background-color: #681a1a;
+}
+
+.table .table-row-link td {
+  padding: 8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}

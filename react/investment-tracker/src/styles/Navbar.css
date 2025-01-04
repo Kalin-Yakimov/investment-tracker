@@ -1,0 +1,21 @@
+.custom-navbar {
+  background-color: #0b1e2e;
+}
+
+.custom-navbar .logo {
+  color: #ccc;
+  text-decoration: none;
+}
+
+.custom-navbar .logo:hover {
+  color: #fff;
+}
+
+.custom-navbar .dropdown-customization {
+  color: #ccc;
+  text-decoration: none;
+}
+
+.custom-navbar .dropdown-customization:hover {
+  color: #fff;
+}
