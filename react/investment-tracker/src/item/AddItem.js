@@ -11,27 +11,72 @@ import "react-datepicker/dist/react-datepicker.module.css";
 export default function AddItem({ onItemAdded }) {
   const [item, setItem] = useState({
     itemName: "",
+    csItemId: null,
     itemStatus: "PICK",
     date: new Date(),
     quantity: "",
     price: "",
   });
 
+  const [csItems, setCsItems] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [error, setError] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [page, setPage] = useState(0);
   const navigate = useNavigate();
 
   const { itemName, itemStatus, date, quantity, price } = item;
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (itemName && itemName.length > 1) {
+        fetchCsItems(itemName);
+      } else {
+        setCsItems([]);
+        setShowDropdown(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [itemName]);
+
+  const fetchCsItems = async (query) => {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.get(
+        `http://localhost:8080/cs-items/search`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          params: {
+            query: query,
+          },
+        },
+      );
+      setCsItems(response.data);
+      setShowDropdown(true);
+    } catch (error) {
+      console.error("Error fetching CS items:", error);
+    }
+  };
 
   const onInputChange = (e) => {
     const { name, value } = e.target;
     setItem((prevItem) => ({
       ...prevItem,
       [name]: value,
+      // If user types in name manually, clear the ID to ensure we don't link to wrong item unless they select it
+      ...(name === "itemName" ? { csItemId: null } : {}),
     }));
-
     setError("");
+  };
+
+  const selectCsItem = (selectedItem) => {
+    setItem((prevItem) => ({
+      ...prevItem,
+      itemName: selectedItem.name,
+      csItemId: selectedItem.id,
+    }));
+    setShowDropdown(false);
   };
 
   const handleDateChange = (date) => {
@@ -45,13 +90,15 @@ export default function AddItem({ onItemAdded }) {
   const clearForm = () => {
     setItem({
       itemName: "",
+      csItemId: null,
       itemStatus: "PICK",
       date: new Date(),
       quantity: "",
       price: "",
     });
     setError("");
-    setSearchTerm("");
+    setCsItems([]);
+    setShowDropdown(false);
   };
 
   const onSubmit = async (e) => {
@@ -107,19 +154,32 @@ export default function AddItem({ onItemAdded }) {
                   value={itemName}
                   onChange={onInputChange}
                   id="itemName"
-                  style={{ borderRadius: "0.25rem 0 0 0.25rem" }}
+                  style={{ borderRadius: "0.25rem" }}
                   required
+                  autoComplete="off"
                 />
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  style={{
-                    borderRadius: "0 0.25rem 0.25rem 0",
-                    cursor: "pointer",
-                  }}
-                >
-                  &#x25BC;
-                </button>
+                {showDropdown && csItems.length > 0 && (
+                  <ul
+                    className="list-group position-absolute w-100"
+                    style={{
+                      top: "100%",
+                      zIndex: 1000,
+                      maxHeight: "200px",
+                      overflowY: "auto",
+                    }}
+                  >
+                    {csItems.map((csItem) => (
+                      <li
+                        key={csItem.id}
+                        className="list-group-item list-group-item-action"
+                        onClick={() => selectCsItem(csItem)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        {csItem.name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
             <div className="flex-grow-1 me-2">
