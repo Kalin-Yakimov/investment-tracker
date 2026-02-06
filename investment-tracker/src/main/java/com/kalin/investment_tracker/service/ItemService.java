@@ -1,8 +1,10 @@
 package com.kalin.investment_tracker.service;
 
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
+import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.model.ItemStatus;
+import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.security.JwtService;
 import com.kalin.investment_tracker.user.User;
@@ -25,6 +27,9 @@ public class ItemService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private CsItemRepository csItemRepository;
+
     public User validateUser(String token, JwtService jwtService) {
         String jwt = token.substring(7);
         String userIdStr = jwtService.extractUserId(jwt);
@@ -35,7 +40,15 @@ public class ItemService {
     public Item addItem(Item newItem, String token, JwtService jwtService) {
         User user = validateUser(token, jwtService);
         newItem.setUser(user);
-        newItem.setItemName(normalizeString(newItem.getItemName()));
+        
+        if (newItem.getCsItemId() != null) {
+            CsItem csItem = csItemRepository.findById(newItem.getCsItemId())
+                    .orElseThrow(() -> new RuntimeException("CS Item not found"));
+            newItem.setItemName(csItem.getName());
+        } else {
+            newItem.setItemName(normalizeString(newItem.getItemName()));
+        }
+        
         ItemStatus itemStatus = ItemStatus.valueOf(newItem.getItemStatus().toString());
         newItem.setItemStatus(itemStatus);
         return itemRepository.save(newItem);
@@ -48,7 +61,14 @@ public class ItemService {
                     if (!item.getUser().getId().equals(user.getId())) {
                         throw new RuntimeException("You are not authorized to update this item.");
                     }
-                    item.setItemName(normalizeString(newItem.getItemName()));
+                    if (newItem.getCsItemId() != null) {
+                        CsItem csItem = csItemRepository.findById(newItem.getCsItemId())
+                                .orElseThrow(() -> new RuntimeException("CS Item not found"));
+                        item.setItemName(csItem.getName());
+                        item.setCsItemId(newItem.getCsItemId());
+                    } else {
+                        item.setItemName(normalizeString(newItem.getItemName()));
+                    }
                     item.setItemStatus(newItem.getItemStatus());
                     item.setDate(newItem.getDate());
                     item.setQuantity(newItem.getQuantity());
@@ -95,4 +115,3 @@ public class ItemService {
                 .orElseThrow(() -> new ItemNotFoundException(id));
     }
 }
-

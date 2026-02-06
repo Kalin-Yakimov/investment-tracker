@@ -1,12 +1,17 @@
 package com.kalin.investment_tracker.controller;
+
+import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.security.JwtService;
+import com.kalin.investment_tracker.service.CsItemService;
 import com.kalin.investment_tracker.service.ItemService;
 import com.kalin.investment_tracker.user.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @CrossOrigin("http://localhost:3000")
@@ -23,6 +28,9 @@ public class ItemController {
 
     @Autowired
     private ItemService itemService;
+
+    @Autowired
+    private CsItemService csItemService;
 
     @PostMapping("/item")
     public Item newItem(@RequestBody Item newItem, @RequestHeader("Authorization") String token) {
@@ -85,6 +93,9 @@ public class ItemController {
             throw new RuntimeException("Failed to delete item: " + e.getMessage());
         }
     }
+
+    @GetMapping("/items/search")
+    public List<CsItem> searchCsItems(@RequestParam String query) {
+        return csItemService.searchItems(query);
+    }
 }
-
-

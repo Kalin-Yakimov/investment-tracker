@@ -1,6 +1,5 @@
 package com.kalin.investment_tracker.user;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.kalin.investment_tracker.model.DropdownItem;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.role.Role;
 import jakarta.persistence.*;
@@ -44,10 +43,6 @@ public class User implements UserDetails, Principal {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private  List<Item> items;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonManagedReference
-    private List<DropdownItem> dropdownItems;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
@@ -101,10 +96,6 @@ public class User implements UserDetails, Principal {
 
     public String fullName() {
         return firstName + " " + lastName;
-    }
-
-    public List<DropdownItem> getDropdownItem() {
-        return dropdownItems;
     }
 
 }

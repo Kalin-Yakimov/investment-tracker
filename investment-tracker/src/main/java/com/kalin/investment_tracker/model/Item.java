@@ -17,6 +17,8 @@ public class Item {
 
     private String itemName;
 
+    private Long csItemId;
+
     @Enumerated(EnumType.STRING)
     private ItemStatus itemStatus;
 
@@ -82,6 +84,14 @@ public class Item {
         this.itemName = itemName;
     }
 
+    public Long getCsItemId() {
+        return csItemId;
+    }
+
+    public void setCsItemId(Long csItemId) {
+        this.csItemId = csItemId;
+    }
+
     public User getUser() {
         return user;
     }
@@ -90,4 +100,3 @@ public class Item {
         this.user = user;
     }
 }
-

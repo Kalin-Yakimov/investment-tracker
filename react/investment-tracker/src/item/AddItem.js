@@ -17,40 +17,12 @@ export default function AddItem({ onItemAdded }) {
     price: "",
   });
 
-  const [dropdownItems, setDropdownItems] = useState([]);
   const [error, setError] = useState("");
-  const [dropdownVisible, setDropdownVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
   const navigate = useNavigate();
 
   const { itemName, itemStatus, date, quantity, price } = item;
-
-  useEffect(() => {
-    fetchDropdownItems();
-  }, [searchTerm]);
-
-  const fetchDropdownItems = async () => {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(
-        `http://localhost:8080/dropdownItems/search`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          params: {
-            searchTerm: searchTerm,
-            page: page,
-            size: 10,
-          },
-        }
-      );
-      setDropdownItems(response.data.content); // the backend returns a paginated response
-    } catch (error) {
-      console.error("Error fetching dropdown items:", error);
-    }
-  };
 
   const onInputChange = (e) => {
     const { name, value } = e.target;
@@ -58,11 +30,6 @@ export default function AddItem({ onItemAdded }) {
       ...prevItem,
       [name]: value,
     }));
-
-    if (name === "itemName") {
-      setSearchTerm(value); // Set the search term to trigger the dropdown filtering
-      setDropdownVisible(true); // Show the dropdown when typing
-    }
 
     setError("");
   };
@@ -84,8 +51,6 @@ export default function AddItem({ onItemAdded }) {
       price: "",
     });
     setError("");
-    setDropdownVisible(false);
-    setDropdownItems([]);
     setSearchTerm("");
   };
 
@@ -110,25 +75,13 @@ export default function AddItem({ onItemAdded }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
       clearForm();
       onItemAdded();
     } catch (error) {
       console.error("There was an error submitting the form!", error);
     }
-  };
-
-  const selectDropdownItem = (selectedItemName) => {
-    setItem((prevItem) => ({
-      ...prevItem,
-      itemName: selectedItemName,
-    }));
-    setDropdownVisible(false);
-  };
-
-  const toggleDropdown = () => {
-    setDropdownVisible(!dropdownVisible);
   };
 
   return (
@@ -160,7 +113,6 @@ export default function AddItem({ onItemAdded }) {
                 <button
                   type="button"
                   className="btn btn-outline-secondary"
-                  onClick={toggleDropdown}
                   style={{
                     borderRadius: "0 0.25rem 0.25rem 0",
                     cursor: "pointer",
@@ -169,34 +121,6 @@ export default function AddItem({ onItemAdded }) {
                   &#x25BC;
                 </button>
               </div>
-              {dropdownVisible && (
-                <ul
-                  className="list-group position-absolute"
-                  style={{
-                    width: "100%",
-                    zIndex: 1000,
-                    maxHeight: "150px", // Max height to show 5 items (30px each)
-                    overflowY: "scroll", // Scrollbar for overflow items
-                  }}
-                >
-                  {dropdownItems.length === 0 ? (
-                    <li className="list-group-item">No items found</li>
-                  ) : (
-                    dropdownItems.map((dropdownItem) => (
-                      <li
-                        key={dropdownItem.id}
-                        className="list-group-item dropdown-item-custom"
-                        onClick={() =>
-                          selectDropdownItem(dropdownItem.itemName)
-                        }
-                        style={{ cursor: "pointer" }}
-                      >
-                        {dropdownItem.itemName}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              )}
             </div>
             <div className="flex-grow-1 me-2">
               <label htmlFor="itemStatus" className="form-label">
