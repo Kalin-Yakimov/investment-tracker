@@ -164,18 +164,30 @@ export default function AddItem({ onItemAdded }) {
                     style={{
                       top: "100%",
                       zIndex: 1000,
-                      maxHeight: "200px",
+                      maxHeight: "300px",
                       overflowY: "auto",
                     }}
                   >
                     {csItems.map((csItem) => (
                       <li
                         key={csItem.id}
-                        className="list-group-item list-group-item-action"
+                        className="list-group-item list-group-item-action d-flex align-items-center"
                         onClick={() => selectCsItem(csItem)}
                         style={{ cursor: "pointer" }}
                       >
-                        {csItem.name}
+                        {csItem.image && (
+                          <img
+                            src={csItem.image}
+                            alt={csItem.name}
+                            style={{
+                              width: "50px",
+                              height: "auto",
+                              marginRight: "10px",
+                              objectFit: "contain",
+                            }}
+                          />
+                        )}
+                        <span>{csItem.name}</span>
                       </li>
                     ))}
                   </ul>

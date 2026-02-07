@@ -17,7 +17,7 @@ public class Item {
 
     private String itemName;
 
-    private Long csItemId;
+    private String csItemId; // Changed to String to match CsItem ID type
 
     @Enumerated(EnumType.STRING)
     private ItemStatus itemStatus;
@@ -84,11 +84,11 @@ public class Item {
         this.itemName = itemName;
     }
 
-    public Long getCsItemId() {
+    public String getCsItemId() {
         return csItemId;
     }
 
-    public void setCsItemId(Long csItemId) {
+    public void setCsItemId(String csItemId) {
         this.csItemId = csItemId;
     }
 

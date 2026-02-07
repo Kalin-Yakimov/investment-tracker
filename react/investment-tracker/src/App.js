@@ -6,7 +6,6 @@ import Home from "./pages/Home";
 import AddItem from "./item/AddItem";
 import EditItem from "./item/EditItem";
 import ViewItem from "./item/ViewItem";
-import DropdownCustomization from "./pages/DropdownCustomization";
 import NotFoundPage from "./pages/NotFoundPage";
 import LoginPage from "./auth/LoginPage";
 import RegistrationPage from "./auth/RegistrationPage";
@@ -48,15 +47,6 @@ function App() {
                   <AddItem onItemAdded={handleItemAdded} />
                   <Home key={refresh} />
                 </>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            exact
-            path="/dropdownCustomization"
-            element={
-              <ProtectedRoute>
-                <DropdownCustomization />
               </ProtectedRoute>
             }
           />
