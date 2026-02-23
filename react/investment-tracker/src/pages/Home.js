@@ -29,7 +29,7 @@ export default function Home() {
         setLoading(false);
       }
     },
-    [itemsPerPage]
+    [itemsPerPage],
   );
 
   useEffect(() => {
@@ -103,7 +103,7 @@ export default function Home() {
             <Table bordered hover responsive size="md">
               <thead>
                 <tr>
-                  <th scope="col">Id</th>
+                  <th scope="col">Image</th>
                   <th scope="col">Name</th>
                   <th scope="col">Status</th>
                   <th scope="col">Date</th>
@@ -112,18 +112,40 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => (
+                {items.map((item) => (
                   <tr
-                    key={index}
+                    key={item.id}
                     onClick={() => handleRowClick(item.id)}
                     className="table-row-link"
                   >
-                    <td>{currentPage * itemsPerPage + index + 1}</td>
+                    <td>
+                      {item.image && (
+                        <img
+                          src={item.image}
+                          alt={item.itemName}
+                          style={{
+                            width: "60px",
+                            height: "auto",
+                            objectFit: "contain",
+                          }}
+                        />
+                      )}
+                    </td>
                     <td>{item.itemName}</td>
-                    <td>{item.itemStatus === "BOUGHT" ? "Bought" : "Sold"}</td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          item.itemStatus === "BOUGHT"
+                            ? "bg-success"
+                            : "bg-danger"
+                        }`}
+                      >
+                        {item.itemStatus === "BOUGHT" ? "Bought" : "Sold"}
+                      </span>
+                    </td>
                     <td>{item.date}</td>
                     <td>{item.quantity}</td>
-                    <td>{Number(item.price).toFixed(2)}</td>
+                    <td>${Number(item.price).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

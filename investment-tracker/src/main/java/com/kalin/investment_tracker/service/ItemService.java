@@ -1,5 +1,6 @@
 package com.kalin.investment_tracker.service;
 
+import com.kalin.investment_tracker.dto.ItemResponseDto;
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
 import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
@@ -78,28 +79,26 @@ public class ItemService {
                 .orElseThrow(() -> new ItemNotFoundException(id));
     }
 
-    public Page<Item> getUserItems(String token, JwtService jwtService, int page, int size) {
+    public Page<ItemResponseDto> getUserItems(String token, JwtService jwtService, int page, int size) {
         User user = validateUser(token, jwtService);
         Pageable pageable = PageRequest.of(page, size);
         Page<Item> items = itemRepository.findByUserIdOrderByDateDesc(user.getId(), pageable);
-        //formating each item name
-        items.forEach(item -> item.setItemName(formatString(item.getItemName())));
-        return items;
+        
+        return items.map(this::mapToDto);
     }
 
-    public Item getItemById(Long id) {
+    public ItemResponseDto getItemById(Long id) {
         Item item = itemRepository.findById(id)
                 .orElseThrow(() -> new ItemNotFoundException(id));
-        item.setItemName(formatString(item.getItemName()));
-        return item;
+        return mapToDto(item);
     }
 
-    public Page<Item> getItemHistory(String token, JwtService jwtService, String name, int page, int size) {
+    public Page<ItemResponseDto> getItemHistory(String token, JwtService jwtService, String name, int page, int size) {
         User user = validateUser(token, jwtService);
         Pageable pageable = PageRequest.of(page, size);
         Page<Item> items = itemRepository.findByUserIdAndItemNameOrderByDateDesc(user.getId(), normalizeString(name), pageable);
-        items.forEach(item -> item.setItemName(formatString(item.getItemName())));
-        return  items;
+        
+        return items.map(this::mapToDto);
     }
 
     public String deleteItem(Long id, String token, JwtService jwtService) {
@@ -113,5 +112,25 @@ public class ItemService {
                     return "Item with id" + id + "has been deleted successfully.";
                 })
                 .orElseThrow(() -> new ItemNotFoundException(id));
+    }
+
+    private ItemResponseDto mapToDto(Item item) {
+        String imageUrl = null;
+        if (item.getCsItemId() != null) {
+            imageUrl = csItemRepository.findById(item.getCsItemId())
+                    .map(CsItem::getImage)
+                    .orElse(null);
+        }
+        
+        return ItemResponseDto.builder()
+                .id(item.getId())
+                .itemName(item.getItemName())
+                .csItemId(item.getCsItemId())
+                .itemStatus(item.getItemStatus())
+                .date(item.getDate())
+                .quantity(item.getQuantity())
+                .price(item.getPrice())
+                .image(imageUrl)
+                .build();
     }
 }

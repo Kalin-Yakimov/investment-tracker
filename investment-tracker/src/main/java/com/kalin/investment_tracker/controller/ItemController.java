@@ -1,5 +1,6 @@
 package com.kalin.investment_tracker.controller;
 
+import com.kalin.investment_tracker.dto.ItemResponseDto;
 import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.repository.ItemRepository;
@@ -43,7 +44,7 @@ public class ItemController {
     }
 
     @GetMapping("/get-user-items")
-    public Page<Item> getAllUserItems(
+    public Page<ItemResponseDto> getAllUserItems(
             @RequestHeader("Authorization") String token,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -56,12 +57,12 @@ public class ItemController {
     }
 
     @GetMapping("/item/{id}")
-    public Item getItemById(@PathVariable Long id) {
+    public ItemResponseDto getItemById(@PathVariable Long id) {
         return itemService.getItemById(id);
     }
 
     @GetMapping("/item/history")
-    public Page<Item> getItemHistory(
+    public Page<ItemResponseDto> getItemHistory(
             @RequestHeader("Authorization") String token,
             @RequestParam String name,
             @RequestParam(defaultValue = "0") int page,

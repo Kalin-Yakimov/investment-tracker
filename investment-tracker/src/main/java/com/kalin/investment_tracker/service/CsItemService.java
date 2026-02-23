@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -28,20 +30,12 @@ public class CsItemService {
 
     @PostConstruct
     public void init() {
-        log.info("Checking if CS items database is empty...");
-        long count = csItemRepository.count();
-        log.info("Current item count: {}", count);
-        
-        if (count == 0) {
-            log.info("Database is empty. Starting fetch from API...");
-            fetchAndSaveItems();
-        } else {
-            log.info("Database already populated. Skipping fetch.");
-        }
+        log.info("Starting CS items database synchronization...");
+        fetchAndSaveItems();
     }
 
     public void fetchAndSaveItems() {
-        String url = "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins_not_grouped.json";
+        String url = "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/all.json";
         try {
             log.info("Sending request to: {}", url);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, null, String.class);
@@ -55,19 +49,22 @@ public class CsItemService {
                 log.info("Found {} items from API", rootNode.size());
                 
                 List<CsItem> csItems = new ArrayList<>();
-                if (rootNode.isArray()) {
-                    for (JsonNode node : rootNode) {
-                        String id = node.path("id").asText();
-                        String name = node.path("name").asText();
-                        String image = node.path("image").asText();
-                        
-                        if (id != null && !id.isEmpty() && name != null && !name.isEmpty()) {
-                             csItems.add(CsItem.builder()
-                                    .id(id)
-                                    .name(name)
-                                    .image(image)
-                                    .build());
-                        }
+                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.fields();
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> entry = fields.next();
+                    JsonNode node = entry.getValue();
+                    
+                    String id = node.path("id").asText();
+                    String name = node.path("name").asText();
+                    String image = node.path("image").asText();
+                    
+                    // We only care about items that have a name and image, e.g., skins, stickers, agents
+                    if (id != null && !id.isEmpty() && name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
+                         csItems.add(CsItem.builder()
+                                .id(id)
+                                .name(name)
+                                .image(image)
+                                .build());
                     }
                 }
                 
