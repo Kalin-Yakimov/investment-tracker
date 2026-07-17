@@ -34,6 +34,21 @@ public class Item {
     @JsonBackReference
     private User user;
 
+    // Steam Community Market specific fields
+    private String marketHashName;
+
+    @Column(precision = 18, scale = 2)
+    private BigDecimal boughtPrice;
+
+    private LocalDate boughtDate;
+
+    private Boolean showInDashboard = false;
+
+    @Column(precision = 18, scale = 2)
+    private BigDecimal priceNotification;
+
+    private Boolean steamFoundCheck = false;
+
     // Getters and Setters
 
     public Long getId() {
@@ -98,5 +113,53 @@ public class Item {
 
     public void setUser(User user) {
         this.user = user;
+    }
+
+    public String getMarketHashName() {
+        return marketHashName;
+    }
+
+    public void setMarketHashName(String marketHashName) {
+        this.marketHashName = marketHashName;
+    }
+
+    public BigDecimal getBoughtPrice() {
+        return boughtPrice;
+    }
+
+    public void setBoughtPrice(BigDecimal boughtPrice) {
+        this.boughtPrice = boughtPrice;
+    }
+
+    public LocalDate getBoughtDate() {
+        return boughtDate;
+    }
+
+    public void setBoughtDate(LocalDate boughtDate) {
+        this.boughtDate = boughtDate;
+    }
+
+    public Boolean getShowInDashboard() {
+        return showInDashboard;
+    }
+
+    public void setShowInDashboard(Boolean showInDashboard) {
+        this.showInDashboard = showInDashboard;
+    }
+
+    public BigDecimal getPriceNotification() {
+        return priceNotification;
+    }
+
+    public void setPriceNotification(BigDecimal priceNotification) {
+        this.priceNotification = priceNotification;
+    }
+
+    public Boolean getSteamFoundCheck() {
+        return steamFoundCheck;
+    }
+
+    public void setSteamFoundCheck(Boolean steamFoundCheck) {
+        this.steamFoundCheck = steamFoundCheck;
     }
 }

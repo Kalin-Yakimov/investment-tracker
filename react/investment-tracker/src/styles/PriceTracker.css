@@ -1,0 +1,73 @@
+.tracker-page {
+  min-height: 100vh;
+}
+
+.tracker-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.tracker-title {
+  margin-bottom: 0.25rem;
+  font-weight: 700;
+}
+
+.tracker-copy {
+  margin-bottom: 1.5rem;
+  color: #555;
+}
+
+.tracker-search {
+  min-width: 0;
+}
+
+.tracker-table img {
+  width: 60px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.tracker-image-cell {
+  width: 90px;
+}
+
+.tracker-chart-cell {
+  width: 180px;
+  vertical-align: middle;
+}
+
+.tracker-chart-empty {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.tracker-sparkline {
+  width: 100%;
+  height: 40px;
+}
+
+.selected-row {
+  background-color: rgba(56, 132, 255, 0.08);
+}
+
+.history-panel {
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.04);
+}
+
+.history-labels {
+  display: flex;
+  justify-content: space-between;
+  color: #444;
+  font-size: 0.95rem;
+}
+
+.tracker-image-placeholder {
+  width: 60px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #777;
+  font-size: 0.8rem;
+  border: 1px dashed #ccc;
+}
