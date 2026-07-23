@@ -24,4 +24,7 @@ public class CsItem {
 
     @Column(length = 1000)
     private String image;
+
+    @Column(length = 500)
+    private String marketHashName;
 }

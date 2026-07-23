@@ -145,7 +145,7 @@ export default function Home() {
                     </td>
                     <td>{item.date}</td>
                     <td>{item.quantity}</td>
-                    <td>${Number(item.price).toFixed(2)}</td>
+                    <td>€{Number(item.price).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

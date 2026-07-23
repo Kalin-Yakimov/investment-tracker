@@ -1,73 +1,462 @@
-.tracker-page {
-  min-height: 100vh;
+/* Modern Dark Theme styling for Price Tracker */
+:root {
+  --tracker-bg: #0c1017;
+  --tracker-card-bg: #121620;
+  --tracker-card-hover-bg: #181d2a;
+  --tracker-border: rgba(255, 255, 255, 0.08);
+  --tracker-border-focus: #58a6ff;
+  --tracker-text: #e6edf3;
+  --tracker-text-muted: #8b949e;
+  --tracker-green: #10b981;
+  --tracker-green-area: rgba(16, 185, 129, 0.15);
+  --tracker-red: #ef4444;
+  --tracker-red-area: rgba(239, 68, 68, 0.15);
+  --tracker-btn-danger: #da3633;
 }
 
+/* Entire Page Container */
+.tracker-page-wrapper {
+  background-color: var(--tracker-bg);
+  min-height: 100vh;
+  color: var(--tracker-text);
+  font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+  padding-bottom: 3rem;
+}
+
+/* Main Dashboard Card */
 .tracker-card {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--tracker-card-bg);
+  border: 1px solid var(--tracker-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  backdrop-filter: blur(8px);
 }
 
 .tracker-title {
-  margin-bottom: 0.25rem;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .tracker-copy {
-  margin-bottom: 1.5rem;
-  color: #555;
-}
-
-.tracker-search {
-  min-width: 0;
-}
-
-.tracker-table img {
-  width: 60px;
-  height: 40px;
-  object-fit: contain;
-}
-
-.tracker-image-cell {
-  width: 90px;
-}
-
-.tracker-chart-cell {
-  width: 180px;
-  vertical-align: middle;
-}
-
-.tracker-chart-empty {
-  color: #888;
-  font-size: 0.85rem;
-}
-
-.tracker-sparkline {
-  width: 100%;
-  height: 40px;
-}
-
-.selected-row {
-  background-color: rgba(56, 132, 255, 0.08);
-}
-
-.history-panel {
-  box-shadow: 0 0 18px rgba(0, 0, 0, 0.04);
-}
-
-.history-labels {
-  display: flex;
-  justify-content: space-between;
-  color: #444;
+  color: var(--tracker-text-muted);
   font-size: 0.95rem;
 }
 
-.tracker-image-placeholder {
-  width: 60px;
-  height: 40px;
+/* Custom Search Box styling */
+.tracker-search-container {
+  position: relative;
+}
+
+.tracker-search {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--tracker-border) !important;
+  color: var(--tracker-text) !important;
+  border-radius: 10px !important;
+  padding: 0.75rem 1rem !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.tracker-search:focus {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: var(--tracker-border-focus) !important;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15) !important;
+  outline: none;
+}
+
+.tracker-search::placeholder {
+  color: #5d6874;
+}
+
+/* Search Dropdown / Suggestion overlay */
+.tracker-suggestions {
+  z-index: 1000;
+  background: #161b26 !important;
+  border: 1px solid var(--tracker-border) !important;
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.tracker-suggestions button.list-group-item {
+  background: transparent !important;
+  border: none !important;
+  color: var(--tracker-text) !important;
+  padding: 0.85rem 1.25rem !important;
+  transition: background 0.15s ease !important;
+  font-size: 0.95rem;
+}
+
+.tracker-suggestions button.list-group-item:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.tracker-suggestion-image {
+  width: 48px;
+  height: 32px;
+  object-fit: contain;
+  margin-right: 12px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+/* Buttons */
+.tracker-btn-primary {
+  background: linear-gradient(135deg, #3884ff 0%, #1f4e78 100%);
+  border: none;
+  color: white;
+  border-radius: 10px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.tracker-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 132, 255, 0.25);
+}
+
+.tracker-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Premium Layout for Tracked Items */
+.tracker-table-container {
+  margin-top: 1.5rem;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--tracker-border);
+}
+
+.tracker-table {
+  width: 100%;
+  margin-bottom: 0 !important;
+  border-collapse: collapse;
+  background-color: var(--tracker-card-bg);
+}
+
+.tracker-table th {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  color: var(--tracker-text-muted) !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 1rem 1.25rem !important;
+  border-bottom: 1px solid var(--tracker-border) !important;
+}
+
+.tracker-table td {
+  padding: 1rem 1.25rem !important;
+  border-bottom: 1px solid var(--tracker-border) !important;
+  vertical-align: middle !important;
+  color: var(--tracker-text);
+  font-size: 0.95rem;
+}
+
+.tracker-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.tracker-row:hover {
+  background-color: var(--tracker-card-hover-bg) !important;
+}
+
+.tracker-row.selected-row {
+  background-color: rgba(56, 132, 255, 0.05) !important;
+  border-left: 3px solid var(--tracker-border-focus);
+}
+
+/* Grid Cell specifics */
+.tracker-img-wrapper {
+  width: 70px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #777;
-  font-size: 0.8rem;
-  border: 1px dashed #ccc;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.tracker-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+  transition: transform 0.2s ease;
+}
+
+.tracker-row:hover .tracker-img {
+  transform: scale(1.1);
+}
+
+.tracker-name-cell {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.tracker-price-cell {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* Up / Down Badge Indicators */
+.change-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.change-badge.positive {
+  color: var(--tracker-green);
+}
+
+.change-badge.negative {
+  color: var(--tracker-red);
+}
+
+.change-badge.neutral {
+  color: var(--tracker-text-muted);
+}
+
+/* Sparkline columns */
+.tracker-sparkline-cell {
+  width: 180px;
+}
+
+.tracker-sparkline-svg {
+  width: 100%;
+  height: 42px;
+  overflow: visible;
+}
+
+.tracker-sparkline-path {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke-dashoffset 0.8s ease-in-out;
+}
+
+.tracker-sparkline-dot {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    r: 3;
+    opacity: 1;
+  }
+  50% {
+    r: 5;
+    opacity: 0.6;
+  }
+  100% {
+    r: 3;
+    opacity: 1;
+  }
+}
+
+/* Delete / Trash action button */
+.btn-delete-track {
+  background: transparent;
+  border: none;
+  color: var(--tracker-text-muted);
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-delete-track:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: var(--tracker-red);
+}
+
+/* Floating status & error alerts */
+.tracker-alert {
+  border-radius: 10px;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.tracker-alert-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+  color: var(--tracker-green);
+}
+
+.tracker-alert-danger {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--tracker-red);
+}
+
+/* History panel at the bottom */
+.history-panel-card {
+  background: #11151e;
+  border: 1px solid var(--tracker-border);
+  border-radius: 16px;
+  margin-top: 2rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.history-panel-title {
+  color: #ffffff;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.history-details-table {
+  background-color: transparent !important;
+}
+
+.history-details-table th {
+  background-color: rgba(255, 255, 255, 0.01) !important;
+  color: var(--tracker-text-muted) !important;
+  border-bottom: 1px solid var(--tracker-border) !important;
+  padding: 0.75rem 1rem !important;
+}
+
+.history-details-table td {
+  padding: 0.75rem 1rem !important;
+  border-bottom: 1px solid var(--tracker-border) !important;
+  color: var(--tracker-text) !important;
+}
+
+.history-details-table tr:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Loading Spinners */
+.tracker-spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  border-top-color: var(--tracker-border-focus);
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Global Timeframe Control Bar */
+.timeframe-bar-card {
+  background: var(--tracker-card-bg);
+  border: 1px solid var(--tracker-border);
+  border-radius: 14px;
+}
+
+.timeframe-bar-title {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.timeframe-toggle-group {
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--tracker-border);
+}
+
+.timeframe-toggle-btn {
+  background: transparent;
+  border: none !important;
+  color: var(--tracker-text-muted) !important;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 6px 14px;
+  border-radius: 8px !important;
+  transition: all 0.2s ease;
+}
+
+.timeframe-toggle-btn.active {
+  background: linear-gradient(135deg, #3884ff 0%, #1f4e78 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(56, 132, 255, 0.3);
+}
+
+.timeframe-toggle-btn:hover:not(.active) {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Sparkline Interactive Wrapper & Hover Tooltip */
+.sparkline-interactive-wrapper {
+  position: relative;
+  width: 180px;
+  cursor: crosshair;
+}
+
+.sparkline-tooltip-box {
+  position: absolute;
+  top: -38px;
+  transform: translateX(-50%);
+  background: #1a2232;
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 20;
+}
+
+.sparkline-tooltip-box .tooltip-label {
+  color: var(--tracker-text-muted);
+  font-size: 0.68rem;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.sparkline-tooltip-box .tooltip-price {
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+}
+
+/* Detailed Chart Styles */
+.detailed-chart-wrapper {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--tracker-border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.detailed-chart-container {
+  width: 100%;
+  position: relative;
+  cursor: crosshair;
+}
+
+.detailed-chart-svg {
+  width: 100%;
+  height: 200px;
+  overflow: visible;
+}
+
+.active-point-badge {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--tracker-border);
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
 }

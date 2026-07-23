@@ -24,7 +24,7 @@ class UserService {
     try {
       const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/authenticate`,
-        { email, password }
+        { email, password },
       );
       const { token } = response.data;
       UserService.saveToken(token);
@@ -38,7 +38,7 @@ class UserService {
     try {
       const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/register`,
-        userData
+        userData,
       );
       return response.data;
     } catch (error) {
@@ -50,7 +50,7 @@ class UserService {
     try {
       const response = await axios.get(
         `${UserService.BASE_URL}/api/v1/auth/activate-account`,
-        { params: { token } }
+        { params: { token } },
       );
       return response.data;
     } catch (error) {
@@ -71,7 +71,7 @@ class UserService {
             page,
             size,
           },
-        }
+        },
       );
       return response.data;
     } catch (error) {
@@ -95,6 +95,111 @@ class UserService {
       return response.data;
     } catch (error) {
       throw error.response.data;
+    }
+  }
+
+  static async searchCsItems(query, config = {}) {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.get(
+        `${UserService.BASE_URL}/cs-items/search`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          params: {
+            query,
+          },
+          ...config,
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async getTrackedItems() {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.get(`${UserService.BASE_URL}/api/items`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async validateSteamItem(marketHashName) {
+    try {
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/prices/validate`,
+        { marketHashName },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async addSteamTrackerItem(itemData) {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/items`,
+        itemData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async getPriceHistoryByItem(itemId) {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.get(
+        `${UserService.BASE_URL}/api/price-history/${itemId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async deleteTrackedItem(itemId) {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.delete(
+        `${UserService.BASE_URL}/api/items/${itemId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
     }
   }
 }

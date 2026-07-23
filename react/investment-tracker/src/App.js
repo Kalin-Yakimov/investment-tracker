@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate } from "react-router-dom";
 import "../node_modules/bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./layout/Navbar";
 import Home from "./pages/Home";
+import PriceTracker from "./pages/PriceTracker";
 import AddItem from "./item/AddItem";
 import EditItem from "./item/EditItem";
 import ViewItem from "./item/ViewItem";
@@ -65,6 +66,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <ViewItem />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            exact
+            path="/tracker"
+            element={
+              <ProtectedRoute>
+                <PriceTracker />
               </ProtectedRoute>
             }
           />

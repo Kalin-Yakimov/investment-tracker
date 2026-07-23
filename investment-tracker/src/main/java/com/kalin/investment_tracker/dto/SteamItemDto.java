@@ -24,4 +24,9 @@ public class SteamItemDto {
     private Boolean showInDashboard;
     private BigDecimal priceNotification;
     private Boolean steamFoundCheck;
+    private String image;
+    private BigDecimal price24h;
+    private BigDecimal price7d;
+    private BigDecimal price30d;
+    private BigDecimal price90d;
 }

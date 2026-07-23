@@ -351,7 +351,7 @@ export default function ViewItem() {
                         <td
                           style={{ textAlign: "right", paddingRight: "20px" }}
                         >
-                          ${Number(historyItem.price).toFixed(2)}
+                          €{Number(historyItem.price).toFixed(2)}
                         </td>
                       </tr>
                     ))}

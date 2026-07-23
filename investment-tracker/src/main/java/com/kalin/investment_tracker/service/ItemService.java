@@ -46,6 +46,7 @@ public class ItemService {
             CsItem csItem = csItemRepository.findById(newItem.getCsItemId())
                     .orElseThrow(() -> new RuntimeException("CS Item not found"));
             newItem.setItemName(csItem.getName());
+            newItem.setMarketHashName(csItem.getMarketHashName());
         } else {
             newItem.setItemName(normalizeString(newItem.getItemName()));
         }
@@ -67,6 +68,7 @@ public class ItemService {
                                 .orElseThrow(() -> new RuntimeException("CS Item not found"));
                         item.setItemName(csItem.getName());
                         item.setCsItemId(newItem.getCsItemId());
+                        item.setMarketHashName(csItem.getMarketHashName());
                     } else {
                         item.setItemName(normalizeString(newItem.getItemName()));
                     }

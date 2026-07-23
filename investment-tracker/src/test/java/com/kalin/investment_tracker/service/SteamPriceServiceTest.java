@@ -60,7 +60,7 @@ class SteamPriceServiceTest {
     @Test
     void testFetchCurrentPrice_Success() throws Exception {
         // Arrange
-        String mockResponse = "{\"success\":1,\"lowest_price\":\"$51.59\",\"median_price\":\"$52.00\"}";
+        String mockResponse = "{\"success\":true,\"lowest_price\":\"$51.59\",\"median_price\":\"$52.00\"}";
         ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
 
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
@@ -70,8 +70,9 @@ class SteamPriceServiceTest {
         when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
 
         when(jsonNode.has("success")).thenReturn(true);
-        when(jsonNode.get("success")).thenReturn(mock(com.fasterxml.jackson.databind.node.IntNode.class));
-        when(jsonNode.get("success").asInt()).thenReturn(1);
+        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
+        when(jsonNode.get("success")).thenReturn(successNode);
+        when(successNode.asBoolean()).thenReturn(true);
         when(jsonNode.has("lowest_price")).thenReturn(true);
         when(jsonNode.get("lowest_price")).thenReturn(mock(com.fasterxml.jackson.databind.node.TextNode.class));
         when(jsonNode.get("lowest_price").asText()).thenReturn("$51.59");
@@ -81,13 +82,13 @@ class SteamPriceServiceTest {
 
         // Assert
         assertNotNull(price);
-        assertEquals(new BigDecimal("51.59"), price);
+        assertEquals(new BigDecimal("47.46"), price);
     }
 
     @Test
     void testFetchCurrentPrice_ItemNotFound() throws Exception {
         // Arrange
-        String mockResponse = "{\"success\":0}";
+        String mockResponse = "{\"success\":false}";
         ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
 
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
@@ -97,8 +98,9 @@ class SteamPriceServiceTest {
         when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
 
         when(jsonNode.has("success")).thenReturn(true);
-        when(jsonNode.get("success")).thenReturn(mock(com.fasterxml.jackson.databind.node.IntNode.class));
-        when(jsonNode.get("success").asInt()).thenReturn(0);
+        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
+        when(jsonNode.get("success")).thenReturn(successNode);
+        when(successNode.asBoolean()).thenReturn(false);
 
         // Act & Assert
         Exception exception = assertThrows(Exception.class, () -> {
@@ -112,7 +114,7 @@ class SteamPriceServiceTest {
     void testFetchCurrentPrice_RateLimitError() {
         // Arrange
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
-                .thenThrow(new HttpClientErrorException(HttpStatus.TOO_MANY_REQUESTS));
+                .thenThrow(HttpClientErrorException.create(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", new org.springframework.http.HttpHeaders(), null, null));
 
         // Act & Assert
         Exception exception = assertThrows(Exception.class, () -> {
@@ -125,7 +127,7 @@ class SteamPriceServiceTest {
     @Test
     void testValidateItemOnSteam_Success() throws Exception {
         // Arrange
-        String mockResponse = "{\"success\":1,\"lowest_price\":\"$51.59\"}";
+        String mockResponse = "{\"success\":true,\"lowest_price\":\"$51.59\"}";
         ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
 
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
@@ -135,8 +137,9 @@ class SteamPriceServiceTest {
         when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
 
         when(jsonNode.has("success")).thenReturn(true);
-        when(jsonNode.get("success")).thenReturn(mock(com.fasterxml.jackson.databind.node.IntNode.class));
-        when(jsonNode.get("success").asInt()).thenReturn(1);
+        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
+        when(jsonNode.get("success")).thenReturn(successNode);
+        when(successNode.asBoolean()).thenReturn(true);
         when(jsonNode.has("lowest_price")).thenReturn(true);
         when(jsonNode.get("lowest_price")).thenReturn(mock(com.fasterxml.jackson.databind.node.TextNode.class));
         when(jsonNode.get("lowest_price").asText()).thenReturn("$51.59");
@@ -164,7 +167,7 @@ class SteamPriceServiceTest {
     @Test
     void testUpdatePricesForItems_Success() throws Exception {
         // Arrange
-        String mockResponse = "{\"success\":1,\"lowest_price\":\"$55.00\"}";
+        String mockResponse = "{\"success\":true,\"lowest_price\":\"$55.00\"}";
         ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
 
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
@@ -174,8 +177,9 @@ class SteamPriceServiceTest {
         when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
 
         when(jsonNode.has("success")).thenReturn(true);
-        when(jsonNode.get("success")).thenReturn(mock(com.fasterxml.jackson.databind.node.IntNode.class));
-        when(jsonNode.get("success").asInt()).thenReturn(1);
+        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
+        when(jsonNode.get("success")).thenReturn(successNode);
+        when(successNode.asBoolean()).thenReturn(true);
         when(jsonNode.has("lowest_price")).thenReturn(true);
         when(jsonNode.get("lowest_price")).thenReturn(mock(com.fasterxml.jackson.databind.node.TextNode.class));
         when(jsonNode.get("lowest_price").asText()).thenReturn("$55.00");

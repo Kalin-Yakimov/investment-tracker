@@ -2,20 +2,15 @@
   background-color: #0b1e2e;
 }
 
-.custom-navbar .logo {
-  color: #ccc;
-  text-decoration: none;
-}
-
-.custom-navbar .logo:hover {
-  color: #fff;
-}
-
+.custom-navbar .logo,
+.custom-navbar .nav-link,
 .custom-navbar .dropdown-customization {
-  color: #ccc;
+  color: #fff;
   text-decoration: none;
 }
 
+.custom-navbar .logo:hover,
+.custom-navbar .nav-link:hover,
 .custom-navbar .dropdown-customization:hover {
   color: #fff;
 }

@@ -32,6 +32,34 @@ public class CsItemService {
     public void init() {
         log.info("Starting CS items database synchronization...");
         fetchAndSaveItems();
+        updateExistingItemsWithMarketHashNames();
+    }
+
+    /**
+     * Updates existing CS items that don't have marketHashName set
+     * This is a one-time migration for existing data
+     */
+    private void updateExistingItemsWithMarketHashNames() {
+        try {
+            List<CsItem> itemsWithoutMarketHash = csItemRepository.findAll().stream()
+                    .filter(item -> item.getMarketHashName() == null || item.getMarketHashName().isEmpty())
+                    .toList();
+
+            if (!itemsWithoutMarketHash.isEmpty()) {
+                log.info("Found {} CS items without marketHashName, updating them...", itemsWithoutMarketHash.size());
+                
+                for (CsItem item : itemsWithoutMarketHash) {
+                    item.setMarketHashName(convertToMarketHashName(item.getName()));
+                }
+                
+                csItemRepository.saveAll(itemsWithoutMarketHash);
+                log.info("Successfully updated {} CS items with marketHashName", itemsWithoutMarketHash.size());
+            } else {
+                log.info("All CS items already have marketHashName set");
+            }
+        } catch (Exception e) {
+            log.error("Error updating existing CS items with marketHashName: {}", e.getMessage());
+        }
     }
 
     public void fetchAndSaveItems() {
@@ -60,10 +88,12 @@ public class CsItemService {
                     
                     // We only care about items that have a name and image, e.g., skins, stickers, agents
                     if (id != null && !id.isEmpty() && name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
+                        String marketHashName = convertToMarketHashName(name);
                          csItems.add(CsItem.builder()
                                 .id(id)
                                 .name(name)
                                 .image(image)
+                                .marketHashName(marketHashName)
                                 .build());
                     }
                 }
@@ -78,6 +108,23 @@ public class CsItemService {
             log.error("Failed to fetch and save items", e);
             throw new RuntimeException("Failed to parse and save items", e);
         }
+    }
+
+    /**
+     * Converts CS API item name to Steam Community Market hash name format
+     * This handles the conversion between different naming conventions
+     */
+    private String convertToMarketHashName(String csApiName) {
+        // The CS API names should already match Steam market hash names for most items
+        // But we can add specific conversions if needed
+        
+        // Example conversions (uncomment if needed):
+        // if (csApiName.contains("★")) {
+        //     return csApiName.replace("★", "★ ");
+        // }
+        
+        // For now, return as-is since the ByMykel API uses Steam-compatible names
+        return csApiName;
     }
 
     public List<CsItem> searchItems(String query) {

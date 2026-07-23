@@ -16,14 +16,14 @@ public class ScheduledPriceUpdateConfig {
     private final SteamPriceService steamPriceService;
 
     /**
-     * Scheduled task to update prices for all dashboard items every 30 minutes
+     * Scheduled task to update prices for all tracked items every 30 minutes
      * Runs every 30 minutes (1800000 ms)
      */
     @Scheduled(fixedRate = 1800000, initialDelay = 60000)
     public void scheduledPriceUpdate() {
-        log.info("Starting scheduled price update for dashboard items");
+        log.info("Starting scheduled price update for all tracked items");
         try {
-            steamPriceService.updateAllDashboardItems();
+            steamPriceService.updateAllTrackedItems();
             log.info("Scheduled price update completed successfully");
         } catch (Exception e) {
             log.error("Error during scheduled price update: {}", e.getMessage(), e);

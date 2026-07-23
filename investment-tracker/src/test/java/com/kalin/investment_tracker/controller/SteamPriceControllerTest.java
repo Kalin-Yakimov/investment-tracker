@@ -9,6 +9,9 @@ import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
 import com.kalin.investment_tracker.security.JwtService;
 import com.kalin.investment_tracker.service.SteamPriceService;
+import com.kalin.investment_tracker.user.User;
+import com.kalin.investment_tracker.user.UserRepository;
+import com.kalin.investment_tracker.repository.CsItemRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,14 +47,24 @@ class SteamPriceControllerTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private CsItemRepository csItemRepository;
+
     @InjectMocks
     private SteamPriceController steamPriceController;
 
     private Item testItem;
     private PriceHistory testPriceHistory;
+    private User testUser;
 
     @BeforeEach
     void setUp() {
+        testUser = new User();
+        testUser.setId(1);
+
         testItem = new Item();
         testItem.setId(1L);
         testItem.setItemName("AK-47 | Redline (Field-Tested)");
@@ -61,6 +74,7 @@ class SteamPriceControllerTest {
         testItem.setBoughtPrice(new BigDecimal("45.00"));
         testItem.setShowInDashboard(true);
         testItem.setSteamFoundCheck(true);
+        testItem.setUser(testUser);
 
         testPriceHistory = new PriceHistory();
         testPriceHistory.setId(1L);
@@ -78,7 +92,7 @@ class SteamPriceControllerTest {
         when(itemRepository.findAll()).thenReturn(Arrays.asList(testItem));
 
         // Act
-        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems(null);
+        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems(null, false);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -94,7 +108,7 @@ class SteamPriceControllerTest {
         when(itemRepository.findAll()).thenReturn(Arrays.asList(testItem));
 
         // Act
-        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems("Bearer token");
+        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems("Bearer token", false);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -113,7 +127,8 @@ class SteamPriceControllerTest {
                 .showInDashboard(true)
                 .build();
 
-        when(steamPriceService.validateItemOnSteam(anyString())).thenReturn(true);
+        when(steamPriceService.tryFetchPrice(anyString())).thenReturn(Optional.of(new BigDecimal("50.00")));
+        when(userRepository.findById(1)).thenReturn(Optional.of(testUser));
         when(itemRepository.save(any(Item.class))).thenReturn(testItem);
         when(jwtService.extractUserId(anyString())).thenReturn("1");
         when(priceHistoryRepository.save(any(PriceHistory.class))).thenReturn(testPriceHistory);
@@ -127,14 +142,12 @@ class SteamPriceControllerTest {
     }
 
     @Test
-    void testAddItem_InvalidSteamItem() {
+    void testAddItem_MissingMarketHashName() {
         // Arrange
         SteamItemDto itemDto = SteamItemDto.builder()
                 .itemName("Invalid Item")
-                .marketHashName("Invalid Item")
+                .marketHashName(null)
                 .build();
-
-        when(steamPriceService.validateItemOnSteam(anyString())).thenReturn(false);
 
         // Act
         ResponseEntity<?> response = steamPriceController.addItem(itemDto, "Bearer token");
@@ -238,7 +251,6 @@ class SteamPriceControllerTest {
     @Test
     void testDeleteItem_Success() {
         // Arrange
-        when(itemRepository.existsById(1L)).thenReturn(true);
         doNothing().when(priceHistoryRepository).deleteByItemId(1L);
         doNothing().when(itemRepository).deleteById(1L);
 

@@ -35,11 +35,8 @@ export default function Navbar() {
           </Link>
 
           <div className="d-flex justify-content-center align-items-center flex-grow-1">
-            <Link
-              className="dropdown-customization"
-              to="/dropdownCustomization"
-            >
-              Dropdown Customization
+            <Link className="nav-link me-3" to="/tracker">
+              Price Tracker
             </Link>
           </div>
           {isLoggedIn && (

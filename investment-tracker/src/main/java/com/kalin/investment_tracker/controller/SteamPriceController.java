@@ -4,6 +4,7 @@ import com.kalin.investment_tracker.dto.PriceHistoryDto;
 import com.kalin.investment_tracker.dto.SteamItemDto;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.model.PriceHistory;
+import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
 import com.kalin.investment_tracker.security.JwtService;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -31,13 +33,16 @@ public class SteamPriceController {
     private final ItemRepository itemRepository;
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final CsItemRepository csItemRepository;
 
     /**
      * GET /api/items - Get all items with Steam market data
+     * Query param: dashboard=true to get only bookmarked items
      */
     @GetMapping("/items")
     public ResponseEntity<List<SteamItemDto>> getAllItems(
-            @RequestHeader(value = "Authorization", required = false) String token) {
+            @RequestHeader(value = "Authorization", required = false) String token,
+            @RequestParam(value = "dashboard", required = false, defaultValue = "false") boolean dashboard) {
         try {
             List<Item> items;
             
@@ -47,9 +52,19 @@ public class SteamPriceController {
                 String userIdStr = jwtService.extractUserId(jwt);
                 items = itemRepository.findAll().stream()
                         .filter(item -> item.getUser() != null && item.getUser().getId().equals(Integer.parseInt(userIdStr)))
+                        .filter(item -> Boolean.TRUE.equals(item.getSteamFoundCheck()))
                         .toList();
             } else {
-                items = itemRepository.findAll();
+                items = itemRepository.findAll().stream()
+                        .filter(item -> Boolean.TRUE.equals(item.getSteamFoundCheck()))
+                        .toList();
+            }
+
+            // Filter by dashboard status if requested
+            if (dashboard) {
+                items = items.stream()
+                        .filter(item -> Boolean.TRUE.equals(item.getShowInDashboard()))
+                        .toList();
             }
 
             List<SteamItemDto> dtos = items.stream()
@@ -70,38 +85,64 @@ public class SteamPriceController {
     public ResponseEntity<?> addItem(@RequestBody SteamItemDto itemDto,
                                       @RequestHeader("Authorization") String token) {
         try {
-            // Validate item exists on Steam market
-            if (itemDto.getMarketHashName() != null && !itemDto.getMarketHashName().isEmpty()) {
-                boolean existsOnSteam = steamPriceService.validateItemOnSteam(itemDto.getMarketHashName());
-                if (!existsOnSteam) {
-                    return ResponseEntity.badRequest()
-                            .body(Map.of("error", "Item not found on Steam Community Market"));
+            // If csItemId is provided, pull marketHashName and name directly from our DB
+            if (itemDto.getCsItemId() != null && !itemDto.getCsItemId().isEmpty()) {
+                com.kalin.investment_tracker.model.CsItem csItem = csItemRepository.findById(itemDto.getCsItemId())
+                        .orElse(null);
+                if (csItem != null) {
+                    // DB record is authoritative - always override with DB market hash name
+                    itemDto.setMarketHashName(csItem.getMarketHashName());
+                    if (itemDto.getItemName() == null || itemDto.getItemName().isEmpty()) {
+                        itemDto.setItemName(csItem.getName());
+                    }
                 }
             }
 
-            // Create new item
-            Item item = new Item();
-            item.setItemName(itemDto.getItemName());
-            item.setMarketHashName(itemDto.getMarketHashName());
-            item.setCsItemId(itemDto.getCsItemId());
-            item.setQuantity(itemDto.getQuantity());
-            item.setPrice(itemDto.getPrice());
-            item.setBoughtPrice(itemDto.getBoughtPrice());
-            item.setBoughtDate(itemDto.getBoughtDate());
-            item.setShowInDashboard(itemDto.getShowInDashboard() != null ? itemDto.getShowInDashboard() : false);
-            item.setPriceNotification(itemDto.getPriceNotification());
-            item.setSteamFoundCheck(true);
+            if (itemDto.getMarketHashName() == null || itemDto.getMarketHashName().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "marketHashName is required"));
+            }
 
             // Set user from token
             String jwt = token.substring(7);
             String userIdStr = jwtService.extractUserId(jwt);
             User user = userRepository.findById(Integer.parseInt(userIdStr))
                     .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Check if this exact item is already being tracked by this user
+            boolean alreadyTracked = itemRepository.findAll().stream()
+                    .anyMatch(i -> i.getUser() != null
+                            && i.getUser().getId().equals(user.getId())
+                            && itemDto.getMarketHashName().equals(i.getMarketHashName())
+                            && Boolean.TRUE.equals(i.getSteamFoundCheck()));
+            if (alreadyTracked) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "You are already tracking this item"));
+            }
+
+            // Create new tracking item — no blocking Steam validation
+            Item item = new Item();
+            item.setItemName(itemDto.getItemName());
+            item.setMarketHashName(itemDto.getMarketHashName());
+            item.setCsItemId(itemDto.getCsItemId());
+            item.setQuantity(itemDto.getQuantity() > 0 ? itemDto.getQuantity() : 1);
+            item.setShowInDashboard(itemDto.getShowInDashboard() != null ? itemDto.getShowInDashboard() : false);
+            item.setPriceNotification(itemDto.getPriceNotification());
+            // Mark as steam-tracked immediately — the item exists in our DB from the official CSGO API
+            item.setSteamFoundCheck(true);
             item.setUser(user);
 
-            Item savedItem = itemRepository.save(item);
+            // Best-effort: try to fetch current price from Steam
+            // If Steam is rate-limiting or unavailable, save anyway — scheduler will retry in 30min
+            java.util.Optional<java.math.BigDecimal> maybePriceOpt = steamPriceService.tryFetchPrice(item.getMarketHashName());
+            maybePriceOpt.ifPresent(item::setPrice);
 
-            // Create initial price history entry
+            Item savedItem = itemRepository.save(item);
+            log.info("Item '{}' saved for user {} (price={})",
+                    savedItem.getMarketHashName(), user.getId(),
+                    savedItem.getPrice() != null ? savedItem.getPrice() : "pending scheduler");
+
+            // Save initial price history entry if we got a price
             if (savedItem.getPrice() != null) {
                 PriceHistory priceHistory = new PriceHistory(
                         savedItem,
@@ -113,6 +154,7 @@ public class SteamPriceController {
                 priceHistoryRepository.save(priceHistory);
             }
 
+            // Build response DTO and attach image from cs_items if available
             return ResponseEntity.ok(mapToSteamItemDto(savedItem));
 
         } catch (Exception e) {
@@ -189,7 +231,7 @@ public class SteamPriceController {
     }
 
     /**
-     * PUT /api/items/{id} - Update an existing item
+     * PUT /api/items/{id} - Update an existing item (mainly for bookmark toggle)
      */
     @PutMapping("/items/{id}")
     public ResponseEntity<?> updateItem(@PathVariable Long id,
@@ -198,25 +240,7 @@ public class SteamPriceController {
             Item item = itemRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Item not found"));
 
-            // Update fields
-            if (itemDto.getItemName() != null) {
-                item.setItemName(itemDto.getItemName());
-            }
-            if (itemDto.getMarketHashName() != null) {
-                item.setMarketHashName(itemDto.getMarketHashName());
-            }
-            if (itemDto.getQuantity() > 0) {
-                item.setQuantity(itemDto.getQuantity());
-            }
-            if (itemDto.getPrice() != null) {
-                item.setPrice(itemDto.getPrice());
-            }
-            if (itemDto.getBoughtPrice() != null) {
-                item.setBoughtPrice(itemDto.getBoughtPrice());
-            }
-            if (itemDto.getBoughtDate() != null) {
-                item.setBoughtDate(itemDto.getBoughtDate());
-            }
+            // Only update bookmark status and price notification for tracking
             if (itemDto.getShowInDashboard() != null) {
                 item.setShowInDashboard(itemDto.getShowInDashboard());
             }
@@ -235,9 +259,44 @@ public class SteamPriceController {
     }
 
     /**
+     * PATCH /api/items/{id}/bookmark - Toggle bookmark status
+     */
+    @PatchMapping("/items/{id}/bookmark")
+    public ResponseEntity<?> toggleBookmark(@PathVariable Long id,
+                                           @RequestHeader("Authorization") String token) {
+        try {
+            Item item = itemRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Item not found"));
+
+            // Verify ownership
+            String jwt = token.substring(7);
+            String userIdStr = jwtService.extractUserId(jwt);
+            if (!item.getUser().getId().equals(Integer.parseInt(userIdStr))) {
+                return ResponseEntity.status(403)
+                        .body(Map.of("error", "You are not authorized to modify this item"));
+            }
+
+            // Toggle bookmark status
+            item.setShowInDashboard(!item.getShowInDashboard());
+            Item updatedItem = itemRepository.save(item);
+
+            return ResponseEntity.ok(Map.of(
+                    "bookmarked", updatedItem.getShowInDashboard(),
+                    "item", mapToSteamItemDto(updatedItem)
+            ));
+
+        } catch (Exception e) {
+            log.error("Error toggling bookmark for item {}: {}", id, e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to toggle bookmark: " + e.getMessage()));
+        }
+    }
+
+    /**
      * DELETE /api/items/{id} - Delete an item
      */
     @DeleteMapping("/items/{id}")
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<?> deleteItem(@PathVariable Long id) {
         try {
             // Delete price history first
@@ -283,7 +342,7 @@ public class SteamPriceController {
     }
 
     private SteamItemDto mapToSteamItemDto(Item item) {
-        return SteamItemDto.builder()
+        SteamItemDto.SteamItemDtoBuilder builder = SteamItemDto.builder()
                 .id(item.getId())
                 .itemName(item.getItemName())
                 .marketHashName(item.getMarketHashName())
@@ -294,7 +353,92 @@ public class SteamPriceController {
                 .boughtDate(item.getBoughtDate())
                 .showInDashboard(item.getShowInDashboard())
                 .priceNotification(item.getPriceNotification())
-                .steamFoundCheck(item.getSteamFoundCheck())
-                .build();
+                .steamFoundCheck(item.getSteamFoundCheck());
+
+        // Add image URL if csItemId is available
+        if (item.getCsItemId() != null) {
+            csItemRepository.findById(item.getCsItemId()).ifPresent(csItem -> {
+                builder.image(csItem.getImage());
+            });
+        }
+
+        // Add historical trend data if available
+        if (item.getMarketHashName() != null) {
+            SteamPriceService.ItemPriceData priceData = steamPriceService.getItemPriceData(item.getMarketHashName());
+            if (priceData != null) {
+                builder.price24h(priceData.price24h);
+                builder.price7d(priceData.price7d);
+                builder.price30d(priceData.price30d);
+                builder.price90d(priceData.price90d);
+            }
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * GET /api/items/{id}/details - Get item details with image
+     */
+    @GetMapping("/items/{id}/details")
+    public ResponseEntity<Map<String, Object>> getItemDetails(@PathVariable Long id) {
+        try {
+            Item item = itemRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Item not found"));
+
+            java.util.Map<String, Object> details = new java.util.HashMap<>();
+            details.put("id", item.getId());
+            details.put("itemName", item.getItemName());
+            details.put("marketHashName", item.getMarketHashName());
+            details.put("csItemId", item.getCsItemId());
+            details.put("quantity", item.getQuantity());
+            details.put("price", item.getPrice());
+            details.put("showInDashboard", item.getShowInDashboard());
+            details.put("priceNotification", item.getPriceNotification());
+            details.put("steamFoundCheck", item.getSteamFoundCheck());
+
+            // Add image if available
+            if (item.getCsItemId() != null) {
+                csItemRepository.findById(item.getCsItemId()).ifPresent(csItem -> {
+                    details.put("image", csItem.getImage());
+                });
+            }
+
+            return ResponseEntity.ok(details);
+
+        } catch (Exception e) {
+            log.error("Error fetching item details for {}: {}", id, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * GET /api/cs-items/search - Search CS items by name
+     * Returns items with their market hash names for Steam integration
+     */
+    @GetMapping("/cs-items/search")
+    public ResponseEntity<List<Map<String, Object>>> searchCsItems(@RequestParam String query) {
+        try {
+            List<com.kalin.investment_tracker.model.CsItem> csItems = csItemRepository
+                    .findAll(com.kalin.investment_tracker.repository.CsItemSpecification.containsTextInName(query),
+                            org.springframework.data.domain.PageRequest.of(0, 10))
+                    .getContent();
+
+            List<Map<String, Object>> result = csItems.stream()
+                    .map(csItem -> {
+                        Map<String, Object> itemMap = new java.util.HashMap<>();
+                        itemMap.put("id", csItem.getId());
+                        itemMap.put("name", csItem.getName());
+                        itemMap.put("marketHashName", csItem.getMarketHashName());
+                        itemMap.put("image", csItem.getImage());
+                        return itemMap;
+                    })
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            log.error("Error searching CS items: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
