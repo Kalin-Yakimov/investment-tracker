@@ -33,46 +33,60 @@ function LoginPage() {
   };
 
   return (
-    <div className="auth-container container mt-5">
-      <div className="row justify-content-center">
-        <div className="col-12 col-sm-10 col-md-8 col-lg-6">
-          <h2 className="login-header text-center mb-4">Login</h2>
-          {error && <p className="error-message alert alert-danger">{error}</p>}
-          <form className="login-form" onSubmit={handleSubmit}>
-            <div className="form-group mb-3">
-              <label htmlFor="email">Email:</label>
-              <input
-                type="email"
-                id="email"
-                className="form-control"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="form-group mb-3">
-              <label htmlFor="password">Password:</label>
-              <input
-                type="password"
-                id="password"
-                className="form-control"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="d-grid gap-2">
-              <button className="login-button btn btn-primary" type="submit">
-                Login
-              </button>
-              <button
-                className="register-button btn btn-secondary"
-                type="button"
-                onClick={handleRegister}
-              >
-                Register
-              </button>
-            </div>
-          </form>
+    <div className="auth-container container">
+      <div className="card auth-card text-center">
+        <div className="mb-3">
+          <span style={{ fontSize: "2.5rem" }}>📈</span>
         </div>
+        <h2 className="auth-header">Sign In</h2>
+        <p className="auth-subtitle text-white-50">Welcome back to Investment Tracker</p>
+
+        {error && <p className="error-message alert alert-danger py-2">{error}</p>}
+
+        <form className="login-form text-start" onSubmit={handleSubmit}>
+          <div className="mb-3">
+            <label htmlFor="email" className="form-label text-white small fw-semibold">
+              Email Address
+            </label>
+            <input
+              type="email"
+              id="email"
+              className="form-control"
+              placeholder="name@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label htmlFor="password" className="form-label text-white small fw-semibold">
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              className="form-control"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="d-grid gap-2">
+            <button className="login-button btn btn-primary" type="submit">
+              Sign In
+            </button>
+            <button
+              className="register-button btn btn-secondary"
+              type="button"
+              onClick={handleRegister}
+            >
+              Create Account
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

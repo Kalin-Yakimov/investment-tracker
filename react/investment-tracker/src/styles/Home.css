@@ -1,18 +1,108 @@
-.table .table-row-link {
+.portfolio-stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.2s ease;
+}
+
+.portfolio-stat-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.portfolio-table-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+}
+
+.portfolio-table-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.portfolio-table {
+  color: var(--text-primary) !important;
+}
+
+.portfolio-table th {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  font-weight: 700 !important;
+  border-bottom: 1px solid var(--card-border) !important;
+}
+
+.portfolio-row-clickable {
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.2s ease;
 }
 
-.table .table-row-link:hover {
-  background-color: #681a1a;
+.portfolio-row-clickable:hover td {
+  background-color: rgba(56, 132, 255, 0.08) !important;
 }
 
-.table .table-row-link td {
-  padding: 8px;
+.portfolio-item-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.actions {
+.portfolio-item-thumb-placeholder {
+  width: 48px;
+  height: 48px;
   display: flex;
-  justify-content: flex-start;
   align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  font-size: 1.2rem;
+}
+
+.badge-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-bought {
+  background: var(--accent-green-bg);
+  color: var(--accent-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-sold {
+  background: var(--accent-red-bg);
+  color: var(--accent-red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
 }

@@ -14,6 +14,7 @@ export default function ViewItem() {
     price: "",
     image: null,
   });
+  const [activeItem, setActiveItem] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,9 +32,8 @@ export default function ViewItem() {
           Authorization: `Bearer ${token}`,
         },
       });
-      console.log("Item data received:", result.data);
-      console.log("Item image field:", result.data.image);
       setItem(result.data);
+      setActiveItem(result.data);
     } catch (error) {
       console.error("Error fetching item:", error);
       setError("Item not found");
@@ -51,16 +51,8 @@ export default function ViewItem() {
           page,
           itemsPerPage,
         );
-        console.log("Item history data received:", result.content);
-        console.log(
-          "History items with images:",
-          result.content.map((item) => ({
-            name: item.itemName,
-            image: item.image,
-          })),
-        );
-        setHistory(result.content);
-        setHistoryTotalPages(result.totalPages);
+        setHistory(result.content || []);
+        setHistoryTotalPages(result.totalPages || 0);
         setCurrentPage(page);
       } catch (error) {
         console.error("Error fetching item history:", error);
@@ -84,7 +76,8 @@ export default function ViewItem() {
   const deleteItem = async () => {
     try {
       const token = UserService.getToken();
-      await axios.delete(`http://localhost:8080/item/${id}`, {
+      const targetId = activeItem?.id || id;
+      await axios.delete(`http://localhost:8080/item/${targetId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -101,268 +94,224 @@ export default function ViewItem() {
   };
 
   const renderPagination = () => (
-    <nav
-      aria-label="Page navigation example"
-      className="d-flex justify-content-end"
-    >
-      <ul className="pagination">
-        <li className={`page-item ${currentPage === 0 ? "disabled" : ""}`}>
-          <button
-            className="page-link"
-            onClick={() => handleHistoryPageChange(currentPage - 1)}
-            disabled={currentPage === 0}
-          >
-            Previous
-          </button>
-        </li>
-        {Array.from({ length: historyTotalPages }, (_, index) => (
+    <div className="d-flex align-items-center justify-content-between pt-3 px-2">
+      <span className="text-white-50 small">
+        Page {currentPage + 1} of {historyTotalPages || 1}
+      </span>
+      <nav aria-label="History pagination">
+        <ul className="pagination pagination-sm mb-0">
+          <li className={`page-item ${currentPage === 0 ? "disabled" : ""}`}>
+            <button
+              className="page-link"
+              onClick={() => handleHistoryPageChange(currentPage - 1)}
+              disabled={currentPage === 0}
+            >
+              Previous
+            </button>
+          </li>
+          {Array.from({ length: historyTotalPages }, (_, index) => (
+            <li
+              key={index}
+              className={`page-item ${index === currentPage ? "active" : ""}`}
+            >
+              <button
+                className="page-link"
+                onClick={() => handleHistoryPageChange(index)}
+              >
+                {index + 1}
+              </button>
+            </li>
+          ))}
           <li
-            key={index}
-            className={`page-item ${index === currentPage ? "active" : ""}`}
+            className={`page-item ${
+              currentPage >= historyTotalPages - 1 ? "disabled" : ""
+            }`}
           >
             <button
               className="page-link"
-              onClick={() => handleHistoryPageChange(index)}
+              onClick={() => handleHistoryPageChange(currentPage + 1)}
+              disabled={currentPage >= historyTotalPages - 1}
             >
-              {index + 1}
+              Next
             </button>
           </li>
-        ))}
-        <li
-          className={`page-item ${
-            currentPage === historyTotalPages - 1 ? "disabled" : ""
-          }`}
-        >
-          <button
-            className="page-link"
-            onClick={() => handleHistoryPageChange(currentPage + 1)}
-            disabled={currentPage === historyTotalPages - 1}
-          >
-            Next
-          </button>
-        </li>
-      </ul>
-    </nav>
+        </ul>
+      </nav>
+    </div>
   );
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <div className="container mt-5 text-center">
+        <div className="alert alert-info py-3">⚡ Loading item details...</div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
-      <div className="container mt-4">
-        <div className="alert alert-danger" role="alert">
+      <div className="container mt-5 text-center">
+        <div className="alert alert-danger mb-3" role="alert">
           {error}
         </div>
-        <Link className="btn btn-primary my-2" to={"/"}>
-          Back to Home
+        <Link className="btn btn-primary" to={"/"}>
+          Back to Portfolio
         </Link>
       </div>
     );
   }
 
-  return (
-    <div className="container mt-4 mb-4">
-      <div className="row justify-content-center">
-        <div className="col-md-12 border rounded p-4 shadow bg-light">
-          <h2
-            className="text-center mb-4"
-            style={{ color: "#333", fontWeight: "bold" }}
-          >
-            Item Details
-          </h2>
+  const currentItem = activeItem || item;
+  const isBought = currentItem.itemStatus === "BOUGHT";
+  const totalPrice = Number(currentItem.price || 0) * Number(currentItem.quantity || 1);
 
-          {/* Image Section - Refactored Design */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              marginBottom: "2rem",
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: "#fff",
-                border: "2px solid #ddd",
-                borderRadius: "8px",
-                padding: "20px",
-                textAlign: "center",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                maxWidth: "280px",
-                width: "100%",
-              }}
-            >
-              <div
-                style={{
-                  width: "240px",
-                  height: "240px",
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  backgroundColor: "#f9f9f9",
-                  borderRadius: "6px",
-                  marginBottom: "1rem",
-                  overflow: "hidden",
-                }}
-              >
-                {item.image ? (
-                  <img
-                    src={item.image}
-                    alt={item.itemName}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                    }}
-                    onError={(e) => {
-                      console.error("Image failed to load:", item.image);
-                      e.target.style.display = "none";
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      color: "#999",
-                      fontSize: "14px",
-                    }}
-                  >
-                    <p>No image available</p>
-                  </div>
-                )}
-              </div>
-              <h4
-                style={{
-                  fontSize: "1.4rem",
-                  fontWeight: "bold",
-                  color: "#333",
-                  marginBottom: "0",
-                  wordBreak: "break-word",
-                }}
-              >
-                {item.itemName}
-              </h4>
+  return (
+    <div className="container mt-4 mb-5">
+      <div className="card shadow-lg p-4">
+        {/* Header Title */}
+        <div className="d-flex align-items-center justify-content-between mb-4">
+          <h2 className="text-white mb-0">🔍 Item Details</h2>
+          <span className={`badge-status ${isBought ? "badge-bought" : "badge-sold"}`}>
+            {isBought ? "Bought Record" : "Sold Record"}
+          </span>
+        </div>
+
+        {/* Thumbnail & Key Metrics Row */}
+        <div className="row g-4 mb-4 align-items-center">
+          <div className="col-12 col-md-4 text-center">
+            <div className="p-4 rounded-3 d-inline-block shadow-sm" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", minWidth: "220px" }}>
+              {currentItem.image ? (
+                <img
+                  src={currentItem.image}
+                  alt={currentItem.itemName}
+                  style={{ width: "180px", height: "180px", objectFit: "contain" }}
+                />
+              ) : (
+                <div className="text-muted py-5">📷 No Image</div>
+              )}
+              <h5 className="text-white mt-3 mb-0 fw-bold">{currentItem.itemName}</h5>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: "10px",
-              marginBottom: "2rem",
-              flexWrap: "wrap",
-            }}
-          >
-            <Link className="btn btn-primary" to={`/editItem/${id}`}>
-              Edit
-            </Link>
-            <Link className="btn btn-secondary" to={"/"}>
-              Back to Home
-            </Link>
-            <button className="btn btn-danger" onClick={deleteItem}>
-              Delete
-            </button>
+          <div className="col-12 col-md-8">
+            <div className="row g-3">
+              <div className="col-6 col-sm-4">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Quantity</span>
+                  <div className="stat-value text-white">{currentItem.quantity}</div>
+                </div>
+              </div>
+              <div className="col-6 col-sm-4">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Unit Price</span>
+                  <div className="stat-value text-info">€{Number(currentItem.price).toFixed(2)}</div>
+                </div>
+              </div>
+              <div className="col-12 col-sm-4">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Total Value</span>
+                  <div className="stat-value text-success">€{totalPrice.toFixed(2)}</div>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Record Date</span>
+                  <div className="stat-value text-white fs-5">{currentItem.date}</div>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Status</span>
+                  <div className={`stat-value fs-5 ${isBought ? "text-success" : "text-danger"}`}>
+                    {isBought ? "Bought" : "Sold"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="d-flex gap-2 mt-4">
+              <Link className="btn btn-primary px-4" to={`/editItem/${currentItem.id || id}`}>
+                ✏️ Edit Item
+              </Link>
+              <Link className="btn btn-secondary px-4" to={"/"}>
+                ⬅️ Back to Portfolio
+              </Link>
+              <button className="btn btn-danger px-4 ms-auto" onClick={deleteItem}>
+                🗑️ Delete Item
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Transaction History Section */}
+        <div className="border-top pt-4 mt-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <h4 className="text-white mb-0">📜 Transaction History for {item.itemName}</h4>
+            <span className="text-white-50 small">Click any transaction row below to update the top details card</span>
           </div>
 
-          {/* Item History Section */}
-          <h3
-            className="text-center mt-5 mb-4"
-            style={{ color: "#333", fontWeight: "bold" }}
-          >
-            Item History
-          </h3>
           {historyLoading ? (
-            <div className="alert alert-info">Loading history...</div>
+            <div className="alert alert-info py-2">Loading transaction logs...</div>
           ) : history.length > 0 ? (
-            <>
-              <Card>
-                <Table bordered hover responsive size="md">
-                  <thead style={{ backgroundColor: "#f8f9fa" }}>
-                    <tr>
-                      <th scope="col" style={{ textAlign: "center" }}>
-                        Image
-                      </th>
-                      <th scope="col">Name</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Date</th>
-                      <th scope="col" style={{ textAlign: "center" }}>
-                        Quantity
-                      </th>
-                      <th
-                        scope="col"
-                        style={{ textAlign: "right", paddingRight: "20px" }}
+            <Card>
+              <Table hover responsive className="portfolio-table align-middle">
+                <thead>
+                  <tr>
+                    <th scope="col" style={{ width: "60px" }}>Item</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Date</th>
+                    <th scope="col" className="text-center">Quantity</th>
+                    <th scope="col" className="text-end">Unit Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((historyItem, index) => {
+                    const hBought = historyItem.itemStatus === "BOUGHT";
+                    const isSelected = (activeItem?.id && historyItem.id === activeItem.id) || (!activeItem?.id && index === 0);
+                    return (
+                      <tr
+                        key={historyItem.id || index}
+                        onClick={() => setActiveItem(historyItem)}
+                        className="portfolio-row-clickable"
+                        style={{
+                          cursor: "pointer",
+                          backgroundColor: isSelected ? "rgba(56, 132, 255, 0.15)" : undefined,
+                        }}
                       >
-                        Price
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((historyItem, index) => (
-                      <tr key={index}>
-                        <td
-                          style={{
-                            textAlign: "center",
-                            verticalAlign: "middle",
-                          }}
-                        >
+                        <td>
                           {historyItem.image ? (
                             <img
                               src={historyItem.image}
                               alt={historyItem.itemName}
-                              style={{
-                                width: "60px",
-                                height: "60px",
-                                objectFit: "contain",
-                              }}
-                              onError={(e) => {
-                                console.error(
-                                  "History image failed to load:",
-                                  historyItem.image,
-                                );
-                                e.target.style.display = "none";
-                              }}
+                              className="portfolio-item-thumb"
                             />
                           ) : (
-                            <span style={{ color: "#999", fontSize: "12px" }}>
-                              No image
-                            </span>
+                            <div className="portfolio-item-thumb-placeholder">📷</div>
                           )}
                         </td>
-                        <td>{historyItem.itemName}</td>
+                        <td className="fw-semibold">{historyItem.itemName}</td>
                         <td>
-                          <span
-                            className={`badge ${
-                              historyItem.itemStatus === "BOUGHT"
-                                ? "bg-success"
-                                : "bg-danger"
-                            }`}
-                          >
-                            {historyItem.itemStatus === "BOUGHT"
-                              ? "Bought"
-                              : "Sold"}
+                          <span className={`badge-status ${hBought ? "badge-bought" : "badge-sold"}`}>
+                            {hBought ? "Bought" : "Sold"}
                           </span>
                         </td>
-                        <td>{historyItem.date}</td>
-                        <td style={{ textAlign: "center" }}>
-                          {historyItem.quantity}
-                        </td>
-                        <td
-                          style={{ textAlign: "right", paddingRight: "20px" }}
-                        >
+                        <td className="text-muted small">{historyItem.date}</td>
+                        <td className="text-center font-mono">{historyItem.quantity}</td>
+                        <td className="text-end font-mono fw-bold">
                           €{Number(historyItem.price).toFixed(2)}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
-                {renderPagination()}
-              </Card>
-            </>
+                    );
+                  })}
+                </tbody>
+              </Table>
+              {renderPagination()}
+            </Card>
           ) : (
-            <div className="alert alert-warning" role="alert">
-              There is no history to show.
+            <div className="alert alert-warning py-3" role="alert">
+              No previous transaction history records found for this item.
             </div>
           )}
         </div>

@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import checkTokenExpiration from "../utils/checkTokenExpiration";
 import "react-datepicker/dist/react-datepicker.module.css";
-//import "../styles/AddItem.css";
+import "../styles/AddItem.css";
 
 export default function AddItem({ onItemAdded }) {
   const [item, setItem] = useState({
@@ -23,9 +23,16 @@ export default function AddItem({ onItemAdded }) {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const { itemName, itemStatus, date, quantity, price } = item;
+  const { itemName, csItemId, itemStatus, date, quantity, price } = item;
 
   useEffect(() => {
+    // If an item is already selected, don't trigger auto-complete search again
+    if (csItemId) {
+      setShowDropdown(false);
+      setCsItems([]);
+      return;
+    }
+
     const delayDebounceFn = setTimeout(() => {
       if (itemName && itemName.length > 1) {
         fetchCsItems(itemName);
@@ -36,7 +43,7 @@ export default function AddItem({ onItemAdded }) {
     }, 300);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [itemName]);
+  }, [itemName, csItemId]);
 
   const fetchCsItems = async (query) => {
     try {
@@ -64,7 +71,6 @@ export default function AddItem({ onItemAdded }) {
     setItem((prevItem) => ({
       ...prevItem,
       [name]: value,
-      // If user types in name manually, clear the ID to ensure we don't link to wrong item unless they select it
       ...(name === "itemName" ? { csItemId: null } : {}),
     }));
     setError("");
@@ -77,6 +83,7 @@ export default function AddItem({ onItemAdded }) {
       csItemId: selectedItem.id,
     }));
     setShowDropdown(false);
+    setCsItems([]);
   };
 
   const handleDateChange = (date) => {
@@ -106,6 +113,11 @@ export default function AddItem({ onItemAdded }) {
 
     checkTokenExpiration(navigate);
 
+    if (!item.csItemId) {
+      setError("Please select a valid CS item from the search dropdown menu.");
+      return;
+    }
+
     if (itemStatus === "PICK" || !itemName || !date || !quantity || !price) {
       setError("Please fill out all fields.");
       return;
@@ -125,129 +137,124 @@ export default function AddItem({ onItemAdded }) {
         },
       );
       clearForm();
-      onItemAdded();
+      if (onItemAdded) onItemAdded();
     } catch (error) {
       console.error("There was an error submitting the form!", error);
     }
   };
 
   return (
-    <div className="container mt-4">
-      <div className="row justify-content-center">
-        <div className="col-12 border rounded p-4 shadow">
-          <h2 className="text-center mb-4">Register Item</h2>
-          {error && <div className="alert alert-danger">{error}</div>}
-          <form
-            onSubmit={onSubmit}
-            className="d-flex flex-wrap gap-2 align-items-center"
-          >
-            <div className="flex-grow-1 me-2 position-relative">
-              <label htmlFor="itemName" className="form-label">
-                Name
+    <div className="container mt-4 mb-4">
+      <div className="card add-item-card shadow-lg p-4">
+        <div className="d-flex align-items-center justify-content-between mb-3">
+          <h3 className="add-item-title mb-0">📝 Register Portfolio Item</h3>
+          <span className="text-white-50 small">Record CS items you bought or sold to track your portfolio</span>
+        </div>
+
+        {error && <div className="alert alert-danger py-2">{error}</div>}
+
+        <form onSubmit={onSubmit}>
+          <div className="row g-3 align-items-end">
+            {/* Item Name Input with Auto-complete Dropdown */}
+            <div className="col-12 col-md-4 position-relative">
+              <label htmlFor="itemName" className="form-label text-white small fw-semibold">
+                Item Name
               </label>
-              <div className="input-group">
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Enter or search item"
-                  name="itemName"
-                  value={itemName}
-                  onChange={onInputChange}
-                  id="itemName"
-                  style={{ borderRadius: "0.25rem" }}
-                  required
-                  autoComplete="off"
-                />
-                {showDropdown && csItems.length > 0 && (
-                  <ul
-                    className="list-group position-absolute w-100"
-                    style={{
-                      top: "100%",
-                      zIndex: 1000,
-                      maxHeight: "300px",
-                      overflowY: "auto",
-                    }}
-                  >
-                    {csItems.map((csItem) => (
-                      <li
-                        key={csItem.id}
-                        className="list-group-item list-group-item-action d-flex align-items-center"
-                        onClick={() => selectCsItem(csItem)}
-                        style={{ cursor: "pointer" }}
-                      >
-                        {csItem.image && (
-                          <img
-                            src={csItem.image}
-                            alt={csItem.name}
-                            style={{
-                              width: "50px",
-                              height: "auto",
-                              marginRight: "10px",
-                              objectFit: "contain",
-                            }}
-                          />
-                        )}
-                        <span>{csItem.name}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search CS skin name..."
+                name="itemName"
+                value={itemName}
+                onChange={onInputChange}
+                id="itemName"
+                required
+                autoComplete="off"
+              />
+              {showDropdown && csItems.length > 0 && (
+                <ul className="list-group position-absolute w-100 dark-dropdown-menu shadow-lg">
+                  {csItems.map((csItem) => (
+                    <li
+                      key={csItem.id}
+                      className="list-group-item dark-dropdown-item d-flex align-items-center gap-2"
+                      onClick={() => selectCsItem(csItem)}
+                    >
+                      {csItem.image ? (
+                        <img
+                          src={csItem.image}
+                          alt={csItem.name}
+                          className="dark-dropdown-thumb"
+                        />
+                      ) : (
+                        <div className="dark-dropdown-thumb-placeholder">📷</div>
+                      )}
+                      <span className="text-truncate small">{csItem.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <div className="flex-grow-1 me-2">
-              <label htmlFor="itemStatus" className="form-label">
+
+            {/* Status Select */}
+            <div className="col-6 col-md-2">
+              <label htmlFor="itemStatus" className="form-label text-white small fw-semibold">
                 Status
               </label>
               <select
-                className="form-control"
+                className="form-select"
                 name="itemStatus"
                 value={itemStatus}
                 onChange={onInputChange}
                 id="itemStatus"
                 required
               >
-                <option value="PICK">Pick</option>
+                <option value="PICK">-- Select --</option>
                 <option value="BOUGHT">Bought</option>
                 <option value="SOLD">Sold</option>
               </select>
             </div>
-            <div className="flex-grow-1 me-2">
-              <label htmlFor="date" className="form-label">
+
+            {/* Date Picker */}
+            <div className="col-6 col-md-2">
+              <label htmlFor="date" className="form-label text-white small fw-semibold">
                 Date
               </label>
-              <div className="input-group">
-                <DatePicker
-                  selected={date}
-                  onChange={handleDateChange}
-                  dateFormat={"dd.MM.yyyy"}
-                  className="form-control"
-                  required
-                />
-              </div>
+              <DatePicker
+                selected={date}
+                onChange={handleDateChange}
+                dateFormat={"dd.MM.yyyy"}
+                className="form-control"
+                required
+              />
             </div>
-            <div className="flex-grow-1 me-2">
-              <label htmlFor="quantity" className="form-label">
+
+            {/* Quantity Input */}
+            <div className="col-6 col-md-2">
+              <label htmlFor="quantity" className="form-label text-white small fw-semibold">
                 Quantity
               </label>
               <input
                 type="number"
                 className="form-control"
-                placeholder="Enter quantity"
+                placeholder="Qty"
                 name="quantity"
                 value={quantity}
                 onChange={onInputChange}
                 id="quantity"
+                min="1"
                 required
               />
             </div>
-            <div className="flex-grow-1 me-2">
-              <label htmlFor="price" className="form-label">
-                Price
+
+            {/* Price Input */}
+            <div className="col-6 col-md-2">
+              <label htmlFor="price" className="form-label text-white small fw-semibold">
+                Price (€)
               </label>
               <input
                 type="number"
                 className="form-control"
-                placeholder="Enter price"
+                placeholder="Price"
                 name="price"
                 value={price}
                 onChange={onInputChange}
@@ -257,20 +264,18 @@ export default function AddItem({ onItemAdded }) {
                 required
               />
             </div>
-            <div className="d-flex align-items-end">
-              <button type="submit" className="btn btn-primary me-2">
-                Add
+
+            {/* Form Actions */}
+            <div className="col-12 d-flex justify-content-end gap-2 mt-3">
+              <button type="button" className="btn btn-secondary px-4" onClick={clearForm}>
+                Clear
               </button>
-              <button
-                type="button"
-                className="btn btn-outline-danger"
-                onClick={clearForm}
-              >
-                Cancel
+              <button type="submit" className="btn btn-primary px-4">
+                + Register Item
               </button>
             </div>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
     </div>
   );

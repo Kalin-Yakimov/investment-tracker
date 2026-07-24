@@ -1,0 +1,260 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-main: #0c1017;
+  --card-bg: #121620;
+  --card-hover: #171d2b;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-border: rgba(255, 255, 255, 0.12);
+  --accent-blue: #3884ff;
+  --accent-glow: rgba(56, 132, 255, 0.25);
+  --accent-green: #10b981;
+  --accent-green-bg: rgba(16, 185, 129, 0.15);
+  --accent-red: #ef4444;
+  --accent-red-bg: rgba(239, 68, 68, 0.15);
+  --text-primary: #f0f6fc;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body, html, #root, .App {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--bg-main) !important;
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Bootstrap Overrides for Dark Theme */
+.card {
+  background-color: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(12px);
+  color: var(--text-primary) !important;
+}
+
+.card-body {
+  padding: 1.5rem;
+}
+
+/* Form Controls */
+label, .form-label {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.text-muted {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.form-control, .form-select {
+  background-color: var(--input-bg) !important;
+  border: 1px solid var(--input-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.form-control:focus, .form-select:focus {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 3px var(--accent-glow) !important;
+  outline: none;
+  color: #fff !important;
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+select.form-control option, select.form-select option {
+  background-color: #161b26;
+  color: var(--text-primary);
+}
+
+/* Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, #3884ff 0%, #1f4e78 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  border-radius: 8px !important;
+  padding: 0.6rem 1.2rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(56, 132, 255, 0.2);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(56, 132, 255, 0.35);
+  opacity: 0.95;
+}
+
+.btn-secondary {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+  font-weight: 500;
+  border-radius: 8px !important;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+  color: #fff !important;
+}
+
+.btn-danger, .btn-outline-danger {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border: 1px solid rgba(239, 68, 68, 0.4) !important;
+  color: #f87171 !important;
+  font-weight: 600;
+  border-radius: 8px !important;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover, .btn-outline-danger:hover {
+  background: rgba(239, 68, 68, 0.3) !important;
+  color: #ffffff !important;
+  border-color: #ef4444 !important;
+}
+
+/* Tables */
+.table {
+  color: var(--text-primary) !important;
+  border-color: var(--card-border) !important;
+  margin-bottom: 0;
+}
+
+.table th, .portfolio-table th {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid var(--card-border) !important;
+  padding: 1rem 0.9rem;
+}
+
+.table td {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--card-border) !important;
+  padding: 0.9rem;
+  vertical-align: middle;
+}
+
+.table-hover tbody tr:hover td {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Alerts */
+.alert-info {
+  background-color: rgba(56, 132, 255, 0.15) !important;
+  border: 1px solid rgba(56, 132, 255, 0.3) !important;
+  color: #7dd3fc !important;
+  border-radius: 10px !important;
+}
+
+.alert-warning {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+  color: #fcd34d !important;
+  border-radius: 10px !important;
+}
+
+.alert-danger {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  color: #fca5a5 !important;
+  border-radius: 10px !important;
+}
+
+/* Pagination Overrides */
+.pagination {
+  margin-bottom: 0;
+  gap: 4px;
+}
+
+.pagination .page-item .page-link {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-secondary) !important;
+  border-radius: 6px !important;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.88rem;
+  transition: all 0.2s ease;
+}
+
+.pagination .page-item.active .page-link {
+  background: var(--accent-blue) !important;
+  color: #ffffff !important;
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.pagination .page-item.disabled .page-link {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.pagination .page-item:not(.active):not(.disabled) .page-link:hover {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+}
+
+/* DatePicker Overrides */
+.react-datepicker-wrapper {
+  width: 100%;
+}
+
+.react-datepicker {
+  background-color: #161b26 !important;
+  border: 1px solid var(--card-border) !important;
+  font-family: inherit !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+.react-datepicker__header {
+  background-color: #121620 !important;
+  border-bottom: 1px solid var(--card-border) !important;
+}
+
+.react-datepicker__current-month, .react-datepicker-time__header, .react-datepicker-year-header, .react-datepicker__day-name {
+  color: var(--text-primary) !important;
+}
+
+.react-datepicker__day {
+  color: var(--text-primary) !important;
+  border-radius: 6px !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: rgba(56, 132, 255, 0.2) !important;
+}
+
+.react-datepicker__day--selected, .react-datepicker__day--keyboard-selected {
+  background-color: var(--accent-blue) !important;
+  color: #fff !important;
+}
