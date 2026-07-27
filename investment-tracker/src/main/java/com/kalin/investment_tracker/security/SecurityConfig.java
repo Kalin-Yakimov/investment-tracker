@@ -28,14 +28,19 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(req ->
                                 req.requestMatchers(
-                                        "api/v1/auth/**",
-                                                "/item",
-                                                "/items",
-                                                "/item/{id}",
-                                                "/dropdownItem",
-                                                "/dropdownItems",
-                                                "/dropdownItems/{id}",
-                                                "/dropdownItems/search/{itemName}"
+                                        "/api/v1/auth/register",
+                                        "/api/v1/auth/authenticate",
+                                        "/api/v1/auth/activate-account",
+                                        "/api/v1/auth/forgot-password",
+                                        "/api/v1/auth/reset-password",
+                                        "/api/v1/auth/validate-token",
+                                        "/item",
+                                        "/items",
+                                        "/item/{id}",
+                                        "/dropdownItem",
+                                        "/dropdownItems",
+                                        "/dropdownItems/{id}",
+                                        "/dropdownItems/search/{itemName}"
                                 ).permitAll()
                                         .anyRequest()
                                             .authenticated()

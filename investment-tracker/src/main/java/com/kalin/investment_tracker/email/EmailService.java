@@ -3,6 +3,7 @@ package com.kalin.investment_tracker.email;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -10,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,6 +23,9 @@ public class EmailService {
     private final JavaMailSender mailSender;
     private final SpringTemplateEngine templateEngine;
 
+    @Value("${spring.mail.username:no-reply@investmenttracker.com}")
+    private String fromEmail;
+
     @Async
     public void sendEmail(
             String to,
@@ -34,9 +37,9 @@ public class EmailService {
     ) throws MessagingException {
         String templateName;
         if (emailTemplate == null) {
-            templateName ="confirm-email";
+            templateName = "confirm-email";
         } else {
-            templateName = emailTemplate.name();
+            templateName = emailTemplate.getName();
         }
 
         MimeMessage mimeMessage = mailSender.createMimeMessage();
@@ -53,11 +56,11 @@ public class EmailService {
         Context context = new Context();
         context.setVariables(properties);
 
-        helper.setFrom("icrosoft@abv.bg");
+        helper.setFrom(fromEmail);
         helper.setTo(to);
         helper.setSubject(subject);
 
-        String template = templateEngine.process(templateName,context);
+        String template = templateEngine.process(templateName, context);
 
         helper.setText(template, true);
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import UserService from "../service/UserService";
 import CookieService from "../service/CookieService";
 import "../styles/LoginPage.css";
@@ -60,9 +60,14 @@ function LoginPage() {
           </div>
 
           <div className="mb-4">
-            <label htmlFor="password" className="form-label text-white small fw-semibold">
-              Password
-            </label>
+            <div className="d-flex justify-content-between align-items-center mb-1">
+              <label htmlFor="password" className="form-label text-white small fw-semibold mb-0">
+                Password
+              </label>
+              <Link to="/forgot-password" className="small text-info text-decoration-none">
+                Forgot Password?
+              </Link>
+            </div>
             <input
               type="password"
               id="password"

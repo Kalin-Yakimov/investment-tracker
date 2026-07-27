@@ -29,6 +29,8 @@ public class User implements UserDetails, Principal {
     @Id
     @GeneratedValue
     private  Integer id;
+    @Column(unique = true)
+    private String username;
     private String firstName;
     private String lastName;
     @Column(unique = true)
@@ -95,7 +97,13 @@ public class User implements UserDetails, Principal {
     }
 
     public String fullName() {
-        return firstName + " " + lastName;
+        if (username != null && !username.trim().isEmpty()) {
+            return username;
+        }
+        if (firstName != null || lastName != null) {
+            return ((firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "")).trim();
+        }
+        return email;
     }
 
 }

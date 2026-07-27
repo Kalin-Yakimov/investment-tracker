@@ -7,8 +7,7 @@ function RegistrationPage() {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    firstname: "",
-    lastname: "",
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -24,6 +23,11 @@ function RegistrationPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (formData.username.trim().length < 3) {
+      setError("Username must be at least 3 characters long.");
+      return;
+    }
+
     if (formData.password.length < 6) {
       setError("Password must be at least 6 characters long.");
       return;
@@ -35,21 +39,27 @@ function RegistrationPage() {
     }
 
     try {
-      const token = localStorage.getItem("token");
-      await UserService.register(formData, token);
+      await UserService.register({
+        username: formData.username.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+      });
 
       setFormData({
-        firstname: "",
-        lastname: "",
+        username: "",
         email: "",
         password: "",
         confirmPassword: "",
       });
       setError("");
       navigate("/activate-account");
-    } catch (error) {
-      console.error("Error registering user:", error);
-      setError("An error occurred while registering. Please try again.");
+    } catch (err) {
+      console.error("Error registering user:", err);
+      setError(
+        typeof err === "string"
+          ? err
+          : err.message || "An error occurred while registering. Please try again."
+      );
     }
   };
 
@@ -62,38 +72,23 @@ function RegistrationPage() {
           <p className="text-white-50 small">Join Investment Tracker to start monitoring your portfolio</p>
         </div>
 
-        {error && <p className="alert alert-danger py-2 text-center">{error}</p>}
+        {error && <p className="alert alert-danger py-2 text-center small">{error}</p>}
 
         <form onSubmit={handleSubmit}>
-          <div className="row g-2 mb-3">
-            <div className="col-6">
-              <label htmlFor="firstname" className="form-label text-white small fw-semibold">
-                First Name
-              </label>
-              <input
-                type="text"
-                id="firstname"
-                name="firstname"
-                className="form-control"
-                value={formData.firstname}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="col-6">
-              <label htmlFor="lastname" className="form-label text-white small fw-semibold">
-                Last Name
-              </label>
-              <input
-                type="text"
-                id="lastname"
-                name="lastname"
-                className="form-control"
-                value={formData.lastname}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
+          <div className="mb-3">
+            <label htmlFor="username" className="form-label text-white small fw-semibold">
+              Username
+            </label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              className="form-control"
+              placeholder="e.g. Kalin99"
+              value={formData.username}
+              onChange={handleInputChange}
+              required
+            />
           </div>
 
           <div className="mb-3">
@@ -105,6 +100,7 @@ function RegistrationPage() {
               id="email"
               name="email"
               className="form-control"
+              placeholder="name@example.com"
               value={formData.email}
               onChange={handleInputChange}
               required
@@ -120,6 +116,7 @@ function RegistrationPage() {
               id="password"
               name="password"
               className="form-control"
+              placeholder="••••••••"
               value={formData.password}
               onChange={handleInputChange}
               required
@@ -135,6 +132,7 @@ function RegistrationPage() {
               id="confirmPassword"
               name="confirmPassword"
               className="form-control"
+              placeholder="••••••••"
               value={formData.confirmPassword}
               onChange={handleInputChange}
               required
@@ -142,7 +140,7 @@ function RegistrationPage() {
           </div>
 
           <div className="d-grid gap-2">
-            <button className="btn btn-primary py-2" type="submit">
+            <button className="btn btn-primary py-2 fw-semibold" type="submit">
               Register Account
             </button>
             <Link to="/login" className="btn btn-secondary py-2 text-center">

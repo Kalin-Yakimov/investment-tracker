@@ -15,9 +15,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -31,8 +33,41 @@ public class CsItemService {
     @PostConstruct
     public void init() {
         log.info("Starting CS items database synchronization...");
-        fetchAndSaveItems();
+        cleanExcludedItemsFromDatabase();
+
+        long count = csItemRepository.count();
+        if (count == 0) {
+            log.info("Database is empty. Performing initial full CS items sync...");
+            fetchAndSaveItems();
+        } else {
+            log.info("Database contains {} CS items. Checking for new missing items...", count);
+            syncMissingItems();
+        }
         updateExistingItemsWithMarketHashNames();
+    }
+
+    private boolean isExcludedCategory(String id) {
+        if (id == null || id.isEmpty()) return true;
+        String lowerId = id.toLowerCase();
+        return lowerId.startsWith("graffiti-") ||
+               lowerId.startsWith("key-") ||
+               lowerId.startsWith("collectible-") ||
+               lowerId.startsWith("collection-");
+    }
+
+    private void cleanExcludedItemsFromDatabase() {
+        try {
+            long count = csItemRepository.countExcludedCategories();
+            if (count > 0) {
+                log.info("Found {} excluded items in database (graffiti, keys, collectibles, collections). Cleaning up...", count);
+                int deleted = csItemRepository.deleteExcludedCategories();
+                log.info("Successfully purged {} excluded items from database", deleted);
+            } else {
+                log.info("No excluded items found in database");
+            }
+        } catch (Exception e) {
+            log.error("Error purging excluded items from database", e);
+        }
     }
 
     /**
@@ -83,13 +118,16 @@ public class CsItemService {
                     JsonNode node = entry.getValue();
                     
                     String id = node.path("id").asText();
+                    if (isExcludedCategory(id)) {
+                        continue;
+                    }
+
                     String name = node.path("name").asText();
                     String image = node.path("image").asText();
                     
-                    // We only care about items that have a name and image, e.g., skins, stickers, agents
                     if (id != null && !id.isEmpty() && name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
                         String marketHashName = convertToMarketHashName(name);
-                         csItems.add(CsItem.builder()
+                        csItems.add(CsItem.builder()
                                 .id(id)
                                 .name(name)
                                 .image(image)
@@ -110,20 +148,61 @@ public class CsItemService {
         }
     }
 
+    public void syncMissingItems() {
+        String url = "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/all.json";
+        try {
+            Set<String> existingIds = new HashSet<>(csItemRepository.findAllItemIds());
+            log.info("Loaded {} existing CS item IDs from database", existingIds.size());
+
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, null, String.class);
+            String jsonBody = response.getBody();
+            if (jsonBody != null) {
+                JsonNode rootNode = objectMapper.readTree(jsonBody);
+                List<CsItem> newItemsToSave = new ArrayList<>();
+
+                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.fields();
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> entry = fields.next();
+                    JsonNode node = entry.getValue();
+
+                    String id = node.path("id").asText();
+                    if (isExcludedCategory(id)) {
+                        continue;
+                    }
+
+                    if (id != null && !id.isEmpty() && !existingIds.contains(id)) {
+                        String name = node.path("name").asText();
+                        String image = node.path("image").asText();
+
+                        if (name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
+                            newItemsToSave.add(CsItem.builder()
+                                    .id(id)
+                                    .name(name)
+                                    .image(image)
+                                    .marketHashName(convertToMarketHashName(name))
+                                    .build());
+                        }
+                    }
+                }
+
+                if (!newItemsToSave.isEmpty()) {
+                    log.info("Found {} NEW CS items from API. Saving to database...", newItemsToSave.size());
+                    csItemRepository.saveAll(newItemsToSave);
+                    log.info("Successfully saved {} new CS items", newItemsToSave.size());
+                } else {
+                    log.info("Database is fully up to date with API! No new CS items found.");
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error performing incremental CS items sync", e);
+        }
+    }
+
     /**
      * Converts CS API item name to Steam Community Market hash name format
      * This handles the conversion between different naming conventions
      */
     private String convertToMarketHashName(String csApiName) {
-        // The CS API names should already match Steam market hash names for most items
-        // But we can add specific conversions if needed
-        
-        // Example conversions (uncomment if needed):
-        // if (csApiName.contains("★")) {
-        //     return csApiName.replace("★", "★ ");
-        // }
-        
-        // For now, return as-is since the ByMykel API uses Steam-compatible names
         return csApiName;
     }
 

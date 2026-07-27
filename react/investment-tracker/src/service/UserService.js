@@ -58,6 +58,69 @@ class UserService {
     }
   }
 
+  static async forgotPassword(email) {
+    try {
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/v1/auth/forgot-password`,
+        { email },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async resetPassword(email, code, newPassword) {
+    try {
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/v1/auth/reset-password`,
+        { email, code, newPassword },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async changePassword(passwordsData) {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.patch(
+        `${UserService.BASE_URL}/api/v1/auth/change-password`,
+        passwordsData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async changeUsername(newUsername) {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.patch(
+        `${UserService.BASE_URL}/api/v1/auth/change-username`,
+        { newUsername },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      if (response.data && response.data.token) {
+        UserService.saveToken(response.data.token);
+      }
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
   static async getUserItems(page = 0, size = 10) {
     try {
       const token = UserService.getToken();

@@ -36,11 +36,17 @@ public class AuthenticationService {
     private String activationUrl = "http://localhost:3000/activate-account";
 
     public void register(RegistrationRequest request) throws MessagingException {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new RuntimeException("Username is already taken. Please choose another.");
+        }
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Email is already registered. Please sign in.");
+        }
+
         var userRole = roleRepository.findByName("USER")
                 .orElseThrow(() -> new IllegalStateException("Role USER was not initialized"));
         var user = User.builder()
-                .firstName(request.getFirstname())
-                .lastName(request.getLastname())
+                .username(request.getUsername())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .accountLocked(false)
@@ -120,5 +126,105 @@ public class AuthenticationService {
 
     public boolean validateToken(String token, UserDetails userDetails) {
         return jwtService.isTokenValid(token, userDetails);
+    }
+
+    public void forgotPassword(ForgotPasswordRequest request) throws MessagingException {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("No account found with email: " + request.getEmail()));
+
+        String resetCode = generateAndSaveActivationToken(user);
+
+        emailService.sendEmail(
+                user.getEmail(),
+                user.fullName(),
+                EmailTemplateName.RESET_PASSWORD,
+                "http://localhost:3000/forgot-password",
+                resetCode,
+                "Password Reset Request"
+        );
+    }
+
+    public void resetPassword(ResetPasswordRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("No account found with email: " + request.getEmail()));
+
+        Token savedToken = tokenRepository.findByToken(request.getCode())
+                .orElseThrow(() -> new RuntimeException("Invalid or expired reset code"));
+
+        if (!savedToken.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Invalid reset code for this account");
+        }
+
+        if (LocalDateTime.now().isAfter(savedToken.getExpiresAt())) {
+            throw new RuntimeException("Reset code has expired. Please request a new code.");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        savedToken.setValidatedAt(LocalDateTime.now());
+        tokenRepository.save(savedToken);
+    }
+
+    private User getAuthenticatedUser(java.security.Principal connectedUser) {
+        if (connectedUser != null) {
+            if (connectedUser instanceof org.springframework.security.authentication.UsernamePasswordAuthenticationToken token) {
+                if (token.getPrincipal() instanceof User u) {
+                    return u;
+                }
+            }
+            return userRepository.findByEmail(connectedUser.getName())
+                    .orElseThrow(() -> new IllegalStateException("User not found"));
+        }
+
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof User u) {
+            return u;
+        }
+        if (auth != null && auth.getName() != null) {
+            return userRepository.findByEmail(auth.getName())
+                    .orElseThrow(() -> new IllegalStateException("User not found"));
+        }
+
+        throw new IllegalStateException("No authenticated user found");
+    }
+
+    public void changePassword(ChangePasswordRequest request, java.security.Principal connectedUser) {
+        var user = getAuthenticatedUser(connectedUser);
+
+        // Verify current password
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new IllegalStateException("Wrong current password");
+        }
+
+        // Verify confirmation password match
+        if (!request.getNewPassword().equals(request.getConfirmationPassword())) {
+            throw new IllegalStateException("New passwords do not match");
+        }
+
+        // Save encoded new password
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+    }
+
+    public AuthenticationResponse changeUsername(ChangeUsernameRequest request, java.security.Principal connectedUser) {
+        var user = getAuthenticatedUser(connectedUser);
+
+        String newUsername = request.getNewUsername().trim();
+        if (userRepository.existsByUsername(newUsername) && !newUsername.equalsIgnoreCase(user.getUsername())) {
+            throw new IllegalStateException("Username is already taken by another account");
+        }
+
+        user.setUsername(newUsername);
+        userRepository.save(user);
+
+        var claims = new HashMap<String, Object>();
+        claims.put("fullName", user.fullName());
+        claims.put("userId", user.getId());
+        var jwtToken = jwtService.generateToken(claims, user);
+
+        return AuthenticationResponse.builder()
+                .token(jwtToken)
+                .build();
     }
 }

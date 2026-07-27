@@ -53,4 +53,37 @@ public class AuthenticationController {
         }
     }
 
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(
+            @RequestBody @Valid ForgotPasswordRequest request
+    ) throws MessagingException {
+        service.forgotPassword(request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(
+            @RequestBody @Valid ResetPasswordRequest request
+    ) {
+        service.resetPassword(request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PatchMapping("/change-password")
+    public ResponseEntity<?> changePassword(
+            @RequestBody @Valid ChangePasswordRequest request,
+            java.security.Principal connectedUser
+    ) {
+        service.changePassword(request, connectedUser);
+        return ResponseEntity.ok().build();
+    }
+
+    @PatchMapping("/change-username")
+    public ResponseEntity<AuthenticationResponse> changeUsername(
+            @RequestBody @Valid ChangeUsernameRequest request,
+            java.security.Principal connectedUser
+    ) {
+        return ResponseEntity.ok(service.changeUsername(request, connectedUser));
+    }
+
 }

@@ -11,6 +11,7 @@ import NotFoundPage from "./pages/NotFoundPage";
 import LoginPage from "./auth/LoginPage";
 import RegistrationPage from "./auth/RegistrationPage";
 import ActivateAccountPage from "./auth/ActivateAccountPage";
+import ForgotPasswordPage from "./auth/ForgotPasswordPage";
 import ProtectedRoute from "./service/ProtectedRoutes";
 import checkTokenExpiration from "./utils/checkTokenExpiration";
 import { CookiesProvider } from "react-cookie";
@@ -38,6 +39,11 @@ function App() {
             exact
             path="/activate-account"
             element={<ActivateAccountPage />}
+          />
+          <Route
+            exact
+            path="/forgot-password"
+            element={<ForgotPasswordPage />}
           />
           <Route
             exact
