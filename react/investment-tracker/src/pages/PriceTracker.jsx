@@ -660,7 +660,6 @@ export default function PriceTracker() {
             <div className="timeframe-bar-card p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
               <div className="d-flex align-items-center gap-2">
                 <span className="timeframe-bar-title">📊 Trend Period:</span>
-                <span className="text-muted small">Select time range to update all sparkline graphs and change %</span>
               </div>
               <div className="btn-group timeframe-toggle-group" role="group">
                 {["24H", "7D", "1M", "3M"].map((tf) => (
