@@ -1,6 +1,29 @@
 import React, { useEffect, useMemo, useState } from "react";
 import UserService from "../service/UserService";
 import "../styles/PriceTracker.css";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
+import { Line } from "react-chartjs-2";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 const formatCurrency = (value) => {
   if (value == null || Number.isNaN(Number(value))) return "-";
@@ -8,10 +31,23 @@ const formatCurrency = (value) => {
 };
 
 /**
- * Helper to format a date nicely as a calendar date (e.g. "Jul 23, 2026")
+ * Formats timestamps cleanly:
+ * - 24H and 7D: Includes time ("Jul 28, 20:54")
+ * - 1M and 3M: Date only ("Jul 28, 2026")
  */
-const formatDateOnly = (dateObj) => {
+const formatDateTime = (dateObj, timeframe = "1M") => {
   if (!dateObj || Number.isNaN(dateObj.getTime())) return "";
+  
+  if (timeframe === "24H" || timeframe === "7D") {
+    return dateObj.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+
   return dateObj.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -20,10 +56,10 @@ const formatDateOnly = (dateObj) => {
 };
 
 /**
- * Builds chronological historical data points (30D, 7D, 24H, Current + DB history) for an item
+ * Builds chronological historical data points and performs smart date/time aggregation
  */
 const getItemPoints = (item, history = [], timeframe = "1M") => {
-  const points = [];
+  const rawPoints = [];
   const now = new Date();
 
   const priceNow = item?.price != null ? Number(item.price) : (history[0]?.price != null ? Number(history[0].price) : 0);
@@ -32,97 +68,76 @@ const getItemPoints = (item, history = [], timeframe = "1M") => {
   const p30d = item?.price30d != null ? Number(item.price30d) : null;
   const p90d = item?.price90d != null ? Number(item.price90d) : null;
 
-  // Add 90D baseline point if available and applicable (3M timeframe)
   if (p90d !== null && timeframe === "3M") {
     const d90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    points.push({
-      dateExtracted: d90.toISOString(),
-      label: formatDateOnly(d90),
-      price: p90d,
-    });
+    rawPoints.push({ dateObj: d90, price: p90d });
   }
 
-  // Add 30D baseline point if available and applicable (1M or 3M)
   if (p30d !== null && (timeframe === "1M" || timeframe === "3M")) {
     const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    points.push({
-      dateExtracted: d30.toISOString(),
-      label: formatDateOnly(d30),
-      price: p30d,
-    });
+    rawPoints.push({ dateObj: d30, price: p30d });
   }
 
-  // Add 7D baseline point if available and applicable (7D, 1M, 3M)
   if (p7d !== null && (timeframe === "7D" || timeframe === "1M" || timeframe === "3M")) {
     const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    points.push({
-      dateExtracted: d7.toISOString(),
-      label: formatDateOnly(d7),
-      price: p7d,
-    });
+    rawPoints.push({ dateObj: d7, price: p7d });
   }
 
-  // Add 24H baseline point if available
   if (p24h !== null) {
     const d24 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    points.push({
-      dateExtracted: d24.toISOString(),
-      label: formatDateOnly(d24),
-      price: p24h,
-    });
+    rawPoints.push({ dateObj: d24, price: p24h });
   }
 
-  // Add DB PriceHistory records if present
   if (Array.isArray(history) && history.length > 0) {
     history.forEach((h) => {
       if (h?.price != null && h?.dateExtracted) {
         const dt = new Date(h.dateExtracted);
-        points.push({
-          dateExtracted: dt.toISOString(),
-          label: formatDateOnly(dt),
-          price: Number(h.price),
-        });
+        if (!Number.isNaN(dt.getTime())) {
+          rawPoints.push({ dateObj: dt, price: Number(h.price) });
+        }
       }
     });
   }
 
-  // Add Current Price point
   if (priceNow > 0) {
-    points.push({
-      dateExtracted: now.toISOString(),
-      label: formatDateOnly(now),
-      price: priceNow,
-    });
+    rawPoints.push({ dateObj: now, price: priceNow });
   }
 
   // Sort chronologically (oldest to newest)
-  const sorted = points.sort((a, b) => new Date(a.dateExtracted) - new Date(b.dateExtracted));
+  rawPoints.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 
-  // Deduplicate points with identical date label and price
-  const uniquePoints = [];
-  const seenKeys = new Set();
-  sorted.forEach((p) => {
-    const key = `${p.label}-${p.price}`;
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      uniquePoints.push(p);
-    }
-  });
+  if (rawPoints.length === 0) return [];
 
-  // Filter based on selected timeframe window if needed
+  // Filter based on timeframe cutoff
   let cutoffMs = 0;
   if (timeframe === "24H") cutoffMs = 24 * 60 * 60 * 1000;
   else if (timeframe === "7D") cutoffMs = 7 * 24 * 60 * 60 * 1000;
   else if (timeframe === "1M") cutoffMs = 30 * 24 * 60 * 60 * 1000;
   else if (timeframe === "3M") cutoffMs = 90 * 24 * 60 * 60 * 1000;
 
-  if (cutoffMs > 0 && uniquePoints.length > 2) {
+  let filtered = rawPoints;
+  if (cutoffMs > 0 && rawPoints.length > 2) {
     const cutoffTime = now.getTime() - cutoffMs;
-    const filtered = uniquePoints.filter((p, idx) => idx === uniquePoints.length - 1 || new Date(p.dateExtracted).getTime() >= cutoffTime);
-    if (filtered.length >= 2) return filtered;
+    filtered = rawPoints.filter((p, idx) => idx === rawPoints.length - 1 || p.dateObj.getTime() >= cutoffTime);
+    if (filtered.length < 2) filtered = rawPoints;
   }
 
-  return uniquePoints;
+  // Aggregate daily points for 1M & 3M to prevent duplicate date labels
+  if (timeframe === "1M" || timeframe === "3M") {
+    const dailyMap = new Map();
+    filtered.forEach((p) => {
+      const dateKey = p.dateObj.toISOString().split("T")[0];
+      dailyMap.set(dateKey, p);
+    });
+    filtered = Array.from(dailyMap.values()).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+  }
+
+  return filtered.map((p) => ({
+    ...p,
+    dateExtracted: p.dateObj.toISOString(),
+    label: formatDateTime(p.dateObj, timeframe),
+    price: p.price,
+  }));
 };
 
 /**
@@ -146,245 +161,184 @@ const getPeriodChange = (points) => {
 };
 
 /**
- * Interactive SVG Sparkline Component with hover tooltips
+ * Chart.js Sparkline Component for Table Rows
  */
-function InteractiveSparkline({ itemId, points, strokeColor }) {
-  const [hoverIndex, setHoverIndex] = useState(null);
-  const [tooltipX, setTooltipX] = useState(0);
-
+function InteractiveSparkline({ points, strokeColor }) {
   if (!points || points.length === 0) {
     return <span className="tracker-chart-empty">No data</span>;
   }
 
   const prices = points.map((p) => p.price);
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice;
+  const padding = priceRange > 0 ? priceRange * 0.15 : (minPrice > 0 ? minPrice * 0.05 : 0.5);
 
-  const width = 180;
-  const height = 44;
-  const paddingY = 8;
-  const paddingX = 8;
-  const usableWidth = width - paddingX * 2;
-  const usableHeight = height - paddingY * 2;
+  const isPositive = prices[prices.length - 1] >= prices[0];
+  const mainColor = strokeColor || (isPositive ? "#10b981" : "#ef4444");
 
-  const pointCoords = points.map((point, idx) => {
-    const x = points.length === 1 ? width / 2 : paddingX + (idx / (points.length - 1)) * usableWidth;
-    const y = height - paddingY - ((point.price - min) / range) * usableHeight;
-    return { ...point, x, y };
-  });
+  const data = {
+    labels: points.map((p) => p.label),
+    datasets: [
+      {
+        data: prices,
+        borderColor: mainColor,
+        borderWidth: 2,
+        tension: 0.35,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: "#ffffff",
+        pointHoverBorderColor: mainColor,
+        pointHoverBorderWidth: 2,
+        fill: true,
+        backgroundColor: (context) => {
+          const chart = context.chart;
+          const { ctx, chartArea } = chart;
+          if (!chartArea) return null;
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, mainColor + "33");
+          gradient.addColorStop(1, mainColor + "00");
+          return gradient;
+        },
+      },
+    ],
+  };
 
-  const linePath = pointCoords
-    .map((p, idx) => `${idx === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(" ");
-
-  const fillPath = `${linePath} L${pointCoords[pointCoords.length - 1].x.toFixed(1)} ${height} L${pointCoords[0].x.toFixed(1)} ${height} Z`;
-
-  const gradId = `spark-grad-${itemId}`;
-  const hoverPoint = hoverIndex !== null ? pointCoords[hoverIndex] : null;
-
-  const handleMouseMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const relativeX = Math.max(0, Math.min(width, (mouseX / rect.width) * width));
-    let closestIdx = 0;
-    let minDistance = Infinity;
-
-    pointCoords.forEach((p, idx) => {
-      const dist = Math.abs(p.x - relativeX);
-      if (dist < minDistance) {
-        minDistance = dist;
-        closestIdx = idx;
-      }
-    });
-
-    setHoverIndex(closestIdx);
-    setTooltipX((pointCoords[closestIdx].x / width) * 100);
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        enabled: true,
+        mode: "index",
+        intersect: false,
+        backgroundColor: "rgba(15, 23, 42, 0.9)",
+        titleColor: "#94a3b8",
+        bodyColor: "#f8fafc",
+        titleFont: { size: 11, weight: "500" },
+        bodyFont: { size: 12, weight: "bold" },
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        borderWidth: 1,
+        padding: 8,
+        displayColors: false,
+        callbacks: {
+          label: (context) => formatCurrency(context.parsed.y),
+        },
+      },
+    },
+    scales: {
+      x: { display: false },
+      y: {
+        display: false,
+        suggestedMin: Math.max(0, minPrice - padding),
+        suggestedMax: maxPrice + padding,
+      },
+    },
+    interaction: {
+      mode: "nearest",
+      axis: "x",
+      intersect: false,
+    },
   };
 
   return (
-    <div
-      className="sparkline-interactive-wrapper"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverIndex(null)}
-    >
-      <svg viewBox={`0 0 ${width} ${height}`} className="tracker-sparkline-svg">
-        <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={strokeColor} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={strokeColor} stopOpacity="0.0" />
-          </linearGradient>
-        </defs>
-        <path d={fillPath} fill={`url(#${gradId})`} />
-        <path
-          d={linePath}
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="2"
-          className="tracker-sparkline-path"
-        />
-
-        {/* Pulse dot on current value when idle */}
-        {hoverIndex === null && (
-          <circle
-            cx={pointCoords[pointCoords.length - 1].x}
-            cy={pointCoords[pointCoords.length - 1].y}
-            r="3.5"
-            fill={strokeColor}
-            className="tracker-sparkline-dot"
-          />
-        )}
-
-        {/* Active hover indicator */}
-        {hoverPoint && (
-          <g>
-            <line
-              x1={hoverPoint.x}
-              y1="0"
-              x2={hoverPoint.x}
-              y2={height}
-              stroke="rgba(255, 255, 255, 0.4)"
-              strokeWidth="1"
-              strokeDasharray="2,2"
-            />
-            <circle
-              cx={hoverPoint.x}
-              cy={hoverPoint.y}
-              r="4.5"
-              fill="#ffffff"
-              stroke={strokeColor}
-              strokeWidth="2"
-            />
-          </g>
-        )}
-      </svg>
-
-      {/* Floating Hover Tooltip Box */}
-      {hoverPoint && (
-        <div
-          className="sparkline-tooltip-box"
-          style={{ left: `${Math.min(85, Math.max(15, tooltipX))}%` }}
-        >
-          <div className="tooltip-label">{hoverPoint.label}</div>
-          <div className="tooltip-price">{formatCurrency(hoverPoint.price)}</div>
-        </div>
-      )}
+    <div className="sparkline-chartjs-wrapper" style={{ width: "180px", height: "44px" }}>
+      <Line data={data} options={options} />
     </div>
   );
 }
 
 /**
- * Detailed Large Interactive Chart Component
+ * Detailed Large Chart Component built with Chart.js
  */
 function DetailedInteractiveChart({ points }) {
-  const [hoverIdx, setHoverIdx] = useState(null);
-
   if (!points || points.length === 0) return null;
 
   const prices = points.map((p) => p.price);
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice;
+  const padding = priceRange > 0 ? priceRange * 0.15 : (minPrice > 0 ? minPrice * 0.05 : 0.5);
 
-  const width = 800;
-  const height = 200;
-  const paddingX = 40;
-  const paddingY = 25;
-  const usableW = width - paddingX * 2;
-  const usableH = height - paddingY * 2;
+  const isPositive = prices[prices.length - 1] >= prices[0];
+  const mainColor = isPositive ? "#10b981" : "#ef4444";
 
-  const coords = points.map((p, idx) => {
-    const x = points.length === 1 ? width / 2 : paddingX + (idx / (points.length - 1)) * usableW;
-    const y = height - paddingY - ((p.price - min) / range) * usableH;
-    return { ...p, x, y };
-  });
-
-  const linePath = coords
-    .map((p, idx) => `${idx === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(" ");
-
-  const fillPath = `${linePath} L${coords[coords.length - 1].x.toFixed(1)} ${height - paddingY} L${coords[0].x.toFixed(1)} ${height - paddingY} Z`;
-
-  const isPos = prices[prices.length - 1] >= prices[0];
-  const strokeColor = isPos ? "var(--tracker-green)" : "var(--tracker-red)";
-
-  const handleMouseMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const relX = Math.max(0, Math.min(width, (mouseX / rect.width) * width));
-    let closest = 0;
-    let minDist = Infinity;
-    coords.forEach((p, idx) => {
-      const d = Math.abs(p.x - relX);
-      if (d < minDist) {
-        minDist = d;
-        closest = idx;
-      }
-    });
-    setHoverIdx(closest);
+  const data = {
+    labels: points.map((p) => p.label),
+    datasets: [
+      {
+        data: prices,
+        borderColor: mainColor,
+        borderWidth: 2.5,
+        tension: 0.35,
+        pointRadius: points.length <= 10 ? 3 : 0,
+        pointHoverRadius: 6,
+        pointHoverBackgroundColor: "#ffffff",
+        pointHoverBorderColor: mainColor,
+        pointHoverBorderWidth: 3,
+        fill: true,
+        backgroundColor: (context) => {
+          const chart = context.chart;
+          const { ctx, chartArea } = chart;
+          if (!chartArea) return null;
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, mainColor + "44");
+          gradient.addColorStop(1, mainColor + "00");
+          return gradient;
+        },
+      },
+    ],
   };
 
-  const activePoint = hoverIdx !== null ? coords[hoverIdx] : null;
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        enabled: true,
+        mode: "index",
+        intersect: false,
+        backgroundColor: "rgba(15, 23, 42, 0.95)",
+        titleColor: "#94a3b8",
+        bodyColor: "#f8fafc",
+        titleFont: { size: 12 },
+        bodyFont: { size: 14, weight: "bold" },
+        borderColor: "rgba(255, 255, 255, 0.12)",
+        borderWidth: 1,
+        padding: 10,
+        displayColors: false,
+        callbacks: {
+          label: (context) => `Price: ${formatCurrency(context.parsed.y)}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: "rgba(255, 255, 255, 0.05)" },
+        ticks: { color: "#64748b", font: { size: 11 } },
+      },
+      y: {
+        grid: { color: "rgba(255, 255, 255, 0.05)" },
+        ticks: {
+          color: "#64748b",
+          font: { size: 11 },
+          callback: (val) => `€${val.toFixed(2)}`,
+        },
+        suggestedMin: Math.max(0, minPrice - padding),
+        suggestedMax: maxPrice + padding,
+      },
+    },
+  };
 
   return (
     <div className="detailed-chart-wrapper mb-4">
       <div className="d-flex justify-content-between align-items-center mb-2 px-1">
         <span className="small text-muted">Hover chart line to view price timeline</span>
-        {activePoint && (
-          <div className="active-point-badge">
-            <span className="text-muted me-2">{activePoint.label}:</span>
-            <strong className="text-white">{formatCurrency(activePoint.price)}</strong>
-          </div>
-        )}
       </div>
-      <div
-        className="detailed-chart-container"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoverIdx(null)}
-      >
-        <svg viewBox={`0 0 ${width} ${height}`} className="detailed-chart-svg">
-          <defs>
-            <linearGradient id="detail-grad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={strokeColor} stopOpacity="0.3" />
-              <stop offset="100%" stopColor={strokeColor} stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-
-          {/* Grid lines */}
-          <line x1={paddingX} y1={paddingY} x2={width - paddingX} y2={paddingY} stroke="rgba(255,255,255,0.06)" strokeDasharray="4,4" />
-          <line x1={paddingX} y1={height / 2} x2={width - paddingX} y2={height / 2} stroke="rgba(255,255,255,0.06)" strokeDasharray="4,4" />
-          <line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} stroke="rgba(255,255,255,0.12)" />
-
-          {/* Graph paths */}
-          <path d={fillPath} fill="url(#detail-grad)" />
-          <path d={linePath} fill="none" stroke={strokeColor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-
-          {/* Data nodes */}
-          {coords.map((c, idx) => (
-            <circle
-              key={idx}
-              cx={c.x}
-              cy={c.y}
-              r={hoverIdx === idx ? "6" : "3.5"}
-              fill={hoverIdx === idx ? "#ffffff" : strokeColor}
-              stroke={strokeColor}
-              strokeWidth="2"
-            />
-          ))}
-
-          {/* Crosshair guide line */}
-          {activePoint && (
-            <line
-              x1={activePoint.x}
-              y1={paddingY}
-              x2={activePoint.x}
-              y2={height - paddingY}
-              stroke="rgba(255,255,255,0.5)"
-              strokeWidth="1.5"
-              strokeDasharray="3,3"
-            />
-          )}
-        </svg>
+      <div className="detailed-chart-container p-2" style={{ height: "220px" }}>
+        <Line data={data} options={options} />
       </div>
     </div>
   );
@@ -394,419 +348,422 @@ export default function PriceTracker() {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedSearchItem, setSelectedSearchItem] = useState(null);
-  const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [trackedItems, setTrackedItems] = useState([]);
-  const [historyMap, setHistoryMap] = useState({});
-  const [selectedItemId, setSelectedItemId] = useState(null);
-  
-  // Global Timeframe selection ("24H", "7D", "1M", "3M")
+  const [priceHistories, setPriceHistories] = useState({});
+
   const [selectedTimeframe, setSelectedTimeframe] = useState("1M");
+  const [detailItem, setDetailItem] = useState(null);
 
-  // Debounced search for CS items in database
-  useEffect(() => {
-    const controller = new AbortController();
-    const searchTerm = query.trim();
-
-    if (!searchTerm || (selectedSearchItem && selectedSearchItem.name === searchTerm)) {
-      setSearchResults([]);
-      return;
-    }
-
-    const timeout = setTimeout(async () => {
-      try {
-        const results = await UserService.searchCsItems(searchTerm, {
-          signal: controller.signal,
-        });
-        setSearchResults(Array.isArray(results) ? results : []);
-      } catch (err) {
-        if (err.name !== "CanceledError" && err.name !== "AbortError") {
-          console.error("searchCsItems error", err);
-        }
-      }
-    }, 300);
-
-    return () => {
-      clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [query, selectedSearchItem]);
-
-  const loadTrackedItems = async () => {
-    setLoading(true);
-    setError("");
+  const fetchTrackedItems = async () => {
     try {
-      const response = await UserService.getTrackedItems();
-      const items = Array.isArray(response) ? response : [];
-      const validItems = items.filter((item) => item.steamFoundCheck === true);
-      setTrackedItems(validItems);
-      // Fetch history for all tracked items
-      await Promise.all(validItems.map((item) => fetchHistory(item.id, true)));
+      const data = await UserService.getTrackedItems();
+      const list = Array.isArray(data) ? data : [];
+      // Sort so newly added items (highest ID) appear on top
+      list.sort((a, b) => (b.id || 0) - (a.id || 0));
+      setTrackedItems(list);
     } catch (err) {
-      setError("Unable to load tracked items. Please try again.");
-      console.error("PriceTracker loadTrackedItems", err);
-    } finally {
-      setLoading(false);
+      console.error("Failed to load tracked items:", err);
+      setError("Failed to load tracked items from backend.");
     }
   };
 
   useEffect(() => {
-    loadTrackedItems();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchTrackedItems();
   }, []);
 
-  const fetchHistory = async (itemId, force = false) => {
-    if (!itemId || (!force && historyMap[itemId])) return;
-    try {
-      const result = await UserService.getPriceHistoryByItem(itemId);
-      setHistoryMap((prev) => ({
-        ...prev,
-        [itemId]: Array.isArray(result) ? result : [],
-      }));
-    } catch (err) {
-      console.error("Error fetching price history", err);
-    }
-  };
+  useEffect(() => {
+    if (!trackedItems || trackedItems.length === 0) return;
 
-  const handleAddItem = async () => {
-    setStatus("");
-    setError("");
+    trackedItems.forEach((item) => {
+      if (!priceHistories[item.id]) {
+        UserService.getPriceHistory(item.id)
+          .then((history) => {
+            setPriceHistories((prev) => ({
+              ...prev,
+              [item.id]: Array.isArray(history) ? history : [],
+            }));
+          })
+          .catch((err) => {
+            console.error(`Failed to load history for item ${item.id}:`, err);
+          });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackedItems]);
 
-    if (!selectedSearchItem) {
-      setError("Please select an item from the suggestions list first.");
+  const itemPointsMap = useMemo(() => {
+    const map = {};
+    trackedItems.forEach((item) => {
+      const history = priceHistories[item.id] || [];
+      map[item.id] = getItemPoints(item, history, selectedTimeframe);
+    });
+    return map;
+  }, [trackedItems, priceHistories, selectedTimeframe]);
+
+  const itemTrendsMap = useMemo(() => {
+    const map = {};
+    trackedItems.forEach((item) => {
+      const points = itemPointsMap[item.id] || [];
+      map[item.id] = getPeriodChange(points);
+    });
+    return map;
+  }, [trackedItems, itemPointsMap]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      setSelectedSearchItem(null);
       return;
     }
 
+    const timer = setTimeout(async () => {
+      try {
+        const results = await UserService.searchCsItems(query.trim());
+        setSearchResults(Array.isArray(results) ? results : []);
+      } catch (err) {
+        console.error("Search failed:", err);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const handleSelectSearchItem = (csItem) => {
+    setSelectedSearchItem(csItem);
+    setQuery(csItem.name);
+    setSearchResults([]);
+  };
+
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+
     setLoading(true);
+    setError("");
+
     try {
       const payload = {
-        itemName: selectedSearchItem.name || selectedSearchItem.marketHashName,
-        marketHashName: selectedSearchItem.marketHashName,
-        csItemId: selectedSearchItem.id,
+        itemName: selectedSearchItem ? selectedSearchItem.name : query.trim(),
+        marketHashName: selectedSearchItem ? selectedSearchItem.marketHashName : query.trim(),
+        csItemId: selectedSearchItem ? selectedSearchItem.id : null,
         quantity: 1,
-        showInDashboard: true,
-        priceNotification: 0,
-        steamFoundCheck: true,
+        showInDashboard: false,
       };
 
-      const added = await UserService.addSteamTrackerItem(payload);
-      const displayName = selectedSearchItem.name || selectedSearchItem.marketHashName;
-      setStatus(`Now tracking: ${displayName}!`);
+      await UserService.addTrackedItem(payload);
       setQuery("");
       setSelectedSearchItem(null);
       setSearchResults([]);
-      await loadTrackedItems();
-      if (added?.id) {
-        await fetchHistory(added.id, true);
-      }
+      await fetchTrackedItems();
     } catch (err) {
-      const msg = err?.error || err?.message || "Failed to add item. Please try again.";
-      setError(msg);
-      console.error("handleAddItem error", err);
+      console.error("Failed to add item:", err);
+      setError(err.response?.data?.error || err.message || "Failed to add item to tracker.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (itemId, itemName) => {
-    if (!window.confirm(`Are you sure you want to stop tracking "${itemName}"?`)) {
-      return;
-    }
-    setStatus("");
-    setError("");
-    setLoading(true);
+  const handleDeleteItem = async (itemId) => {
+    if (!window.confirm("Are you sure you want to remove this item from your tracker?")) return;
+
     try {
       await UserService.deleteTrackedItem(itemId);
-      setStatus(`Stopped tracking "${itemName}".`);
-      if (selectedItemId === itemId) {
-        setSelectedItemId(null);
+      setTrackedItems((prev) => prev.filter((i) => i.id !== itemId));
+      if (detailItem && detailItem.id === itemId) {
+        setDetailItem(null);
       }
-      setTrackedItems((prev) => prev.filter((item) => item.id !== itemId));
     } catch (err) {
-      setError(err?.error || err?.message || "Unable to stop tracking item.");
-      console.error("handleDelete error", err);
-    } finally {
-      setLoading(false);
+      console.error("Failed to delete item:", err);
+      setError("Failed to delete item.");
     }
   };
 
-  const handleSelectItem = async (itemId) => {
-    setSelectedItemId(itemId);
-    await fetchHistory(itemId);
+  const handleToggleBookmark = async (itemId) => {
+    try {
+      const res = await UserService.toggleBookmark(itemId);
+      setTrackedItems((prev) =>
+        prev.map((i) => (i.id === itemId ? { ...i, showInDashboard: res.bookmarked } : i))
+      );
+    } catch (err) {
+      console.error("Failed to toggle bookmark:", err);
+    }
   };
 
-  const currentSelectedHistory = useMemo(
-    () => historyMap[selectedItemId] || [],
-    [historyMap, selectedItemId]
-  );
+  const detailPoints = useMemo(() => {
+    if (!detailItem) return [];
+    return getItemPoints(detailItem, priceHistories[detailItem.id] || [], selectedTimeframe);
+  }, [detailItem, priceHistories, selectedTimeframe]);
 
-  const selectedItemMeta = useMemo(() => {
-    return trackedItems.find((item) => item.id === selectedItemId);
-  }, [trackedItems, selectedItemId]);
+  const detailTrend = useMemo(() => {
+    return getPeriodChange(detailPoints);
+  }, [detailPoints]);
 
-  const selectedItemPoints = useMemo(() => {
-    if (!selectedItemMeta) return [];
-    return getItemPoints(selectedItemMeta, currentSelectedHistory, selectedTimeframe);
-  }, [selectedItemMeta, currentSelectedHistory, selectedTimeframe]);
+  const detailHistoryList = useMemo(() => {
+    if (!detailItem) return [];
+    return priceHistories[detailItem.id] || [];
+  }, [detailItem, priceHistories]);
 
   return (
-    <div className="tracker-page-wrapper">
-      <div className="container py-4">
-        <div className="row justify-content-center">
-          <div className="col-12 col-xl-11">
-            
-            {/* Header & Subtitle */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <div>
-                <h1 className="tracker-title m-0">Steam Price Tracker</h1>
-                <p className="tracker-copy m-0 mt-1">
-                  Monitor skin prices and view historical trends from the Steam Community Market.
-                </p>
-              </div>
+    <div className="tracker-page-container container-fluid py-4 px-md-5">
+      {/* Page Header */}
+      <div className="row mb-4 align-items-center">
+        <div className="col-12">
+          <h2 className="tracker-header-title text-white fw-bold mb-1">
+            📈 Steam Community Market Price Tracker
+          </h2>
+          <p className="text-secondary mb-0">
+            Track real-time market trends, historical price charts, and value changes for CS items.
+          </p>
+        </div>
+      </div>
+
+      {/* Alert Messages */}
+      {error && <div className="alert alert-danger border-0 shadow-sm mb-4">{error}</div>}
+
+      {/* Search & Add Item Section */}
+      <div className="card tracker-card-dark mb-4">
+        <div className="card-body p-4">
+          <h5 className="card-title text-white mb-3">Add CS Item to Tracker</h5>
+          <div className="row g-3">
+            <div className="col-lg-9 position-relative">
+              <input
+                type="text"
+                className="form-control tracker-search-input"
+                placeholder="Search CS item (e.g. AK-47 | Redline, Case, Sticker)..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {searchResults.length > 0 && (
+                <div className="tracker-autocomplete-dropdown">
+                  {searchResults.map((item) => (
+                    <div
+                      key={item.id}
+                      className="tracker-autocomplete-item d-flex align-items-center gap-3 p-2"
+                      onClick={() => handleSelectSearchItem(item)}
+                    >
+                      {item.image && (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="tracker-autocomplete-img"
+                          style={{ width: "40px", height: "30px", objectFit: "contain" }}
+                        />
+                      )}
+                      <div>
+                        <div className="fw-semibold text-white">{item.name}</div>
+                        <div className="small text-muted">{item.marketHashName}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="col-lg-3">
               <button
-                className="tracker-btn-primary d-flex align-items-center gap-2"
-                onClick={loadTrackedItems}
-                disabled={loading}
+                type="button"
+                className="btn btn-primary w-100 tracker-add-btn"
+                onClick={handleAddItem}
+                disabled={loading || !query.trim()}
               >
-                {loading ? <span className="tracker-spinner"></span> : null}
-                Refresh Prices
+                Track Item
               </button>
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* Notifications */}
-            {status && (
-              <div className="tracker-alert tracker-alert-success d-flex align-items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                </svg>
-                <span>{status}</span>
-              </div>
-            )}
-            {error && (
-              <div className="tracker-alert tracker-alert-danger d-flex align-items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-                <span>{error}</span>
-              </div>
-            )}
+      {/* Global Timeframe Control Bar */}
+      <div className="timeframe-bar-card p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div className="d-flex align-items-center gap-2">
+          <span className="timeframe-bar-title">📊 Trend Period:</span>
+        </div>
+        <div className="btn-group timeframe-toggle-group" role="group">
+          {["24H", "7D", "1M", "3M"].map((tf) => (
+            <button
+              key={tf}
+              type="button"
+              className={`btn btn-sm timeframe-toggle-btn ${selectedTimeframe === tf ? "active" : ""}`}
+              onClick={() => setSelectedTimeframe(tf)}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+      </div>
 
-            {/* Search / Track Control Panel */}
-            <div className="tracker-card p-4 mb-4">
-              <div className="row align-items-center">
-                <div className="col-12 col-md-8 col-lg-9 mb-3 mb-md-0">
-                  <div className="tracker-search-container">
-                    <input
-                      type="text"
-                      className="form-control tracker-search"
-                      placeholder="Type a skin name (e.g. AWP | Dragon Lore)..."
-                      value={query}
-                      onChange={(e) => {
-                        setQuery(e.target.value);
-                        setSelectedSearchItem(null);
-                      }}
-                      disabled={loading}
-                    />
-                    
-                    {searchResults.length > 0 && (
-                      <div className="tracker-suggestions list-group position-absolute w-100">
-                        {searchResults.slice(0, 8).map((item) => (
-                          <button
-                            key={item.id || item.marketHashName || item.name}
-                            type="button"
-                            className="list-group-item list-group-item-action d-flex align-items-center"
-                            onClick={() => {
-                              setQuery(item.name || item.marketHashName || "");
-                              setSelectedSearchItem(item);
-                              setSearchResults([]);
-                            }}
-                          >
-                            {item.image ? (
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="tracker-suggestion-image"
-                              />
-                            ) : (
-                              <div className="tracker-suggestion-image d-flex align-items-center justify-content-center bg-dark text-white rounded">
-                                📷
-                              </div>
-                            )}
-                            <span>{item.name || item.marketHashName}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="col-12 col-md-4 col-lg-3">
-                  <button
-                    className="tracker-btn-primary w-100 py-3"
-                    onClick={handleAddItem}
-                    disabled={loading || !query.trim()}
-                  >
-                    Track Item
-                  </button>
+      {/* Focused Overlay Modal for Item Detail View */}
+      {detailItem && (
+        <div className="modal-backdrop-custom" onClick={() => setDetailItem(null)}>
+          <div className="modal-content-custom card tracker-card-dark p-4 position-relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="btn-close btn-close-white position-absolute top-0 end-0 m-3"
+              onClick={() => setDetailItem(null)}
+              title="Close Detail View"
+            ></button>
+            
+            <div className="d-flex align-items-center gap-4 mb-4">
+              {detailItem.image && (
+                <img
+                  src={detailItem.image}
+                  alt={detailItem.itemName}
+                  style={{ width: "100px", height: "75px", objectFit: "contain" }}
+                />
+              )}
+              <div>
+                <h4 className="text-white mb-1 fw-bold">{detailItem.itemName}</h4>
+                <div className="text-muted small mb-2">{detailItem.marketHashName}</div>
+                <div className="d-flex align-items-center gap-3">
+                  <span className="fs-4 fw-bold text-success">{formatCurrency(detailItem.price)}</span>
+                  <span className={`badge ${detailTrend.direction === "positive" ? "bg-success" : detailTrend.direction === "negative" ? "bg-danger" : "bg-secondary"}`}>
+                    {detailTrend.direction === "positive" ? "▲ +" : detailTrend.direction === "negative" ? "▼ " : ""}
+                    {detailTrend.pct.toFixed(2)}% ({selectedTimeframe})
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Global Timeframe Control Bar */}
-            <div className="timeframe-bar-card p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
-              <div className="d-flex align-items-center gap-2">
-                <span className="timeframe-bar-title">📊 Trend Period:</span>
-              </div>
-              <div className="btn-group timeframe-toggle-group" role="group">
-                {["24H", "7D", "1M", "3M"].map((tf) => (
-                  <button
-                    key={tf}
-                    type="button"
-                    className={`btn btn-sm timeframe-toggle-btn ${selectedTimeframe === tf ? "active" : ""}`}
-                    onClick={() => setSelectedTimeframe(tf)}
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <DetailedInteractiveChart points={detailPoints} />
 
-            {/* Tracked Items Table */}
-            <div className="tracker-table-container">
-              <table className="tracker-table">
-                <thead>
-                  <tr>
-                    <th>Skin</th>
-                    <th>Name</th>
-                    <th>Current Price</th>
-                    <th>{selectedTimeframe} Change</th>
-                    <th className="tracker-sparkline-cell">Trend ({selectedTimeframe})</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trackedItems.length > 0 ? (
-                    trackedItems.map((item) => {
-                      const history = historyMap[item.id] || [];
-                      const points = getItemPoints(item, history, selectedTimeframe);
-                      const currentPrice = item.price ?? (points[points.length - 1]?.price || 0);
-                      const { pct, direction } = getPeriodChange(points);
-                      const strokeColor = direction === "negative" ? "var(--tracker-red)" : "var(--tracker-green)";
-
-                      return (
-                        <tr
-                          key={item.id}
-                          className={`tracker-row ${selectedItemId === item.id ? "selected-row" : ""}`}
-                          onClick={() => handleSelectItem(item.id)}
-                        >
-                          <td>
-                            {item.image ? (
-                              <div className="tracker-img-wrapper">
-                                <img src={item.image} alt={item.itemName} className="tracker-img" />
-                              </div>
-                            ) : (
-                              <div className="tracker-img-wrapper">
-                                <div className="tracker-image-placeholder">📷</div>
-                              </div>
-                            )}
-                          </td>
-                          <td className="tracker-name-cell">
-                            {item.itemName || item.marketHashName || "Unnamed skin"}
-                          </td>
-                          <td className="tracker-price-cell">
-                            {formatCurrency(currentPrice)}
-                          </td>
-                          <td>
-                            <span className={`change-badge ${direction}`}>
-                              {pct > 0 ? (
-                                <>▲ +{pct.toFixed(2)}%</>
-                              ) : pct < 0 ? (
-                                <>▼ {pct.toFixed(2)}%</>
-                              ) : (
-                                <>0.00%</>
-                              )}
-                            </span>
-                          </td>
-                          <td className="tracker-sparkline-cell">
-                            <InteractiveSparkline
-                              itemId={item.id}
-                              points={points}
-                              strokeColor={strokeColor}
-                            />
-                          </td>
-                          <td>
-                            <button
-                              className="btn-delete-track"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(item.id, item.itemName || item.marketHashName);
-                              }}
-                              title="Stop Tracking"
-                            >
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6"></polyline>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                <line x1="10" y1="11" x2="10" y2="17"></line>
-                                <line x1="14" y1="11" x2="14" y2="17"></line>
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="text-center py-5 text-muted">
-                        {loading ? "Fetching tracked items..." : "No items are currently tracked. Search above to add one!"}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Detailed Price History Panel */}
-            {selectedItemId && selectedItemMeta && (
-              <div className="history-panel-card p-4">
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h3 className="history-panel-title m-0">
-                    Price History details: {selectedItemMeta.itemName || selectedItemMeta.marketHashName}
-                  </h3>
-                  <span className="badge bg-secondary">{selectedTimeframe} View</span>
+            {/* Historical Price Log Table (2 Clean Columns: Date Recorded & Market Price) */}
+            <div className="mt-4">
+              <h5 className="text-white fw-bold mb-3">📋 Historical Price Log</h5>
+              {detailHistoryList.length === 0 ? (
+                <div className="text-muted small p-3 bg-dark rounded text-center">
+                  No historical price logs recorded yet. Automated price updates run hourly.
                 </div>
-
-                {/* Large Interactive Chart */}
-                <DetailedInteractiveChart points={selectedItemPoints} />
-
-                {/* Details Table */}
-                <div className="table-responsive">
-                  <table className="tracker-table history-details-table">
+              ) : (
+                <div className="table-responsive rounded border border-secondary border-opacity-25" style={{ maxHeight: "250px", overflowY: "auto" }}>
+                  <table className="table table-dark table-sm table-striped table-hover align-middle mb-0">
                     <thead>
                       <tr>
-                        <th>Date & Time / Period</th>
-                        <th>Price</th>
+                        <th scope="col" className="ps-3">Date Recorded</th>
+                        <th scope="col" className="text-end pe-3">Recorded Market Price (€)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedItemPoints.slice().reverse().map((point, idx) => (
-                        <tr key={idx}>
-                          <td>{point.label}</td>
-                          <td className="tracker-price-cell">
-                            {formatCurrency(point.price)}
+                      {detailHistoryList.map((h) => (
+                        <tr key={h.id || h.dateExtracted}>
+                          <td className="ps-3 small text-secondary">
+                            {h.dateExtracted ? new Date(h.dateExtracted).toLocaleString() : "-"}
+                          </td>
+                          <td className="text-end pe-3 font-mono text-success fw-bold">
+                            {formatCurrency(h.price)}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
+            <div className="text-end mt-4">
+              <button className="btn btn-outline-light btn-sm px-4" onClick={() => setDetailItem(null)}>
+                ✕ Close Detail View
+              </button>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Main Tracked Items Table */}
+      <div className="card tracker-card-dark">
+        <div className="card-body p-0">
+          {trackedItems.length === 0 ? (
+            <div className="p-5 text-center text-muted">
+              <h5>No items tracked yet.</h5>
+              <p>Search and add CS items above to track real-time Steam Community Market prices.</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-dark table-hover tracker-table mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th scope="col" style={{ width: "45px" }} className="text-center">Pin</th>
+                    <th scope="col" style={{ width: "60px" }}>Image</th>
+                    <th scope="col">Item Name</th>
+                    <th scope="col">Market Price</th>
+                    <th scope="col" style={{ width: "200px" }}>Sparkline ({selectedTimeframe})</th>
+                    <th scope="col">% Change</th>
+                    <th scope="col" className="text-end" style={{ width: "80px" }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trackedItems.map((item) => {
+                    const points = itemPointsMap[item.id] || [];
+                    const trend = itemTrendsMap[item.id] || { pct: 0, direction: "neutral" };
+                    const strokeColor = trend.direction === "positive" ? "#10b981" : trend.direction === "negative" ? "#ef4444" : "#6b7280";
+
+                    return (
+                      <tr key={item.id} className="tracker-row">
+                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className={`btn btn-sm p-1 border-0 ${item.showInDashboard ? "text-warning" : "text-secondary"}`}
+                            title={item.showInDashboard ? "Unpin from Main Dashboard" : "Pin to Main Dashboard"}
+                            onClick={() => handleToggleBookmark(item.id)}
+                            style={{ fontSize: "1.2rem", background: "transparent" }}
+                          >
+                            {item.showInDashboard ? "⭐" : "☆"}
+                          </button>
+                        </td>
+                        <td onClick={() => setDetailItem(item)}>
+                          {item.image ? (
+                            <img
+                              src={item.image}
+                              alt={item.itemName}
+                              style={{ width: "48px", height: "36px", objectFit: "contain" }}
+                            />
+                          ) : (
+                            <div className="tracker-no-img">📦</div>
+                          )}
+                        </td>
+                        <td onClick={() => setDetailItem(item)}>
+                          <div className="fw-bold text-white cursor-pointer">
+                            {item.itemName}
+                          </div>
+                          <div className="small text-muted">{item.marketHashName}</div>
+                        </td>
+                        <td className="fw-bold text-success fs-6" onClick={() => setDetailItem(item)}>
+                          {formatCurrency(item.price)}
+                        </td>
+                        <td onClick={() => setDetailItem(item)}>
+                          <InteractiveSparkline points={points} strokeColor={strokeColor} />
+                        </td>
+                        <td onClick={() => setDetailItem(item)}>
+                          <span
+                            className={`badge ${
+                              trend.direction === "positive"
+                                ? "bg-success"
+                                : trend.direction === "negative"
+                                ? "bg-danger"
+                                : "bg-secondary"
+                            }`}
+                          >
+                            {trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}
+                            {trend.pct.toFixed(2)}%
+                          </span>
+                        </td>
+                        <td className="text-end" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            title="Delete item from tracker"
+                            onClick={() => handleDeleteItem(item.id)}
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -407,40 +407,34 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* Sparkline Interactive Wrapper & Hover Tooltip */
-.sparkline-interactive-wrapper {
+/* Dark Overlay Modal Backdrop for Focused Item Detail View */
+.modal-backdrop-custom {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(6, 9, 15, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 999999 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.modal-content-custom {
+  background: #121620 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9) !important;
+  max-width: 850px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
   position: relative;
-  width: 180px;
-  cursor: crosshair;
-}
-
-.sparkline-tooltip-box {
-  position: absolute;
-  top: -38px;
-  transform: translateX(-50%);
-  background: #1a2232;
-  border: 1px solid rgba(88, 166, 255, 0.4);
-  color: #ffffff;
-  border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 0.72rem;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  z-index: 20;
-}
-
-.sparkline-tooltip-box .tooltip-label {
-  color: var(--tracker-text-muted);
-  font-size: 0.68rem;
-  line-height: 1;
-  margin-bottom: 2px;
-}
-
-.sparkline-tooltip-box .tooltip-price {
-  font-weight: 700;
-  color: #ffffff;
-  line-height: 1;
+  z-index: 1000000 !important;
 }
 
 /* Detailed Chart Styles */

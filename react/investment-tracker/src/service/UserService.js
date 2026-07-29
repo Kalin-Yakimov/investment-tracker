@@ -165,7 +165,7 @@ class UserService {
     try {
       const token = UserService.getToken();
       const response = await axios.get(
-        `${UserService.BASE_URL}/cs-items/search`,
+        `${UserService.BASE_URL}/api/cs-items/search`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -232,6 +232,10 @@ class UserService {
     }
   }
 
+  static async addTrackedItem(itemData) {
+    return UserService.addSteamTrackerItem(itemData);
+  }
+
   static async getPriceHistoryByItem(itemId) {
     try {
       const token = UserService.getToken();
@@ -240,6 +244,45 @@ class UserService {
         {
           headers: {
             Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async getPriceHistory(itemId) {
+    return UserService.getPriceHistoryByItem(itemId);
+  }
+
+  static async toggleBookmark(itemId) {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.patch(
+        `${UserService.BASE_URL}/api/items/${itemId}/bookmark`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async updatePrices(itemIds) {
+    try {
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/prices/update`,
+        { itemIds },
+        {
+          headers: {
+            "Content-Type": "application/json",
           },
         },
       );
