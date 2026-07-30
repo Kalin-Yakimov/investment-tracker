@@ -45,30 +45,42 @@ public class SteamPriceController {
             @RequestParam(value = "dashboard", required = false, defaultValue = "false") boolean dashboard) {
         try {
             List<Item> items;
-            
-            // If token provided, filter by user, otherwise return all (for admin/debug)
+
+            // Use targeted DB query instead of findAll() + in-memory stream filter
             if (token != null && !token.isEmpty()) {
                 String jwt = token.substring(7);
-                String userIdStr = jwtService.extractUserId(jwt);
-                items = itemRepository.findAll().stream()
-                        .filter(item -> item.getUser() != null && item.getUser().getId().equals(Integer.parseInt(userIdStr)))
-                        .filter(item -> Boolean.TRUE.equals(item.getSteamFoundCheck()))
-                        .toList();
+                Integer userId = Integer.parseInt(jwtService.extractUserId(jwt));
+                items = itemRepository.findSteamTrackedItemsByUserId(userId);
             } else {
-                items = itemRepository.findAll().stream()
-                        .filter(item -> Boolean.TRUE.equals(item.getSteamFoundCheck()))
-                        .toList();
+                items = itemRepository.findAllSteamTrackedItems();
             }
 
-            // Filter by dashboard status if requested
+            // Filter by dashboard/pinned status if requested
             if (dashboard) {
                 items = items.stream()
                         .filter(item -> Boolean.TRUE.equals(item.getShowInDashboard()))
                         .toList();
             }
 
+            // Bulk fetch all image URLs for items on this list in 1 query (eliminates N+1 DB calls)
+            java.util.Set<String> csItemIds = items.stream()
+                    .map(Item::getCsItemId)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            Map<String, String> imageMap = new java.util.HashMap<>();
+            if (!csItemIds.isEmpty()) {
+                imageMap = csItemRepository.findAllById(csItemIds).stream()
+                        .collect(Collectors.toMap(
+                                com.kalin.investment_tracker.model.CsItem::getId,
+                                com.kalin.investment_tracker.model.CsItem::getImage,
+                                (existing, replacement) -> existing
+                        ));
+            }
+
+            final Map<String, String> finalImageMap = imageMap;
             List<SteamItemDto> dtos = items.stream()
-                    .map(this::mapToSteamItemDto)
+                    .map(item -> mapToSteamItemDto(item, finalImageMap.get(item.getCsItemId())))
                     .collect(Collectors.toList());
 
             return ResponseEntity.ok(dtos);
@@ -83,18 +95,33 @@ public class SteamPriceController {
      */
     @PostMapping("/items")
     public ResponseEntity<?> addItem(@RequestBody SteamItemDto itemDto,
-                                      @RequestHeader("Authorization") String token) {
+                                      @RequestHeader(value = "Authorization", required = false) String token,
+                                      org.springframework.security.core.Authentication connectedUser) {
         try {
-            // If csItemId is provided, pull marketHashName and name directly from our DB
+            User user = resolveUser(token, connectedUser);
+            if (user == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized user session"));
+            }
+
+            // If csItemId is provided, pull marketHashName and name directly from DB
             if (itemDto.getCsItemId() != null && !itemDto.getCsItemId().isEmpty()) {
                 com.kalin.investment_tracker.model.CsItem csItem = csItemRepository.findById(itemDto.getCsItemId())
                         .orElse(null);
                 if (csItem != null) {
-                    // DB record is authoritative - always override with DB market hash name
                     itemDto.setMarketHashName(csItem.getMarketHashName());
                     if (itemDto.getItemName() == null || itemDto.getItemName().isEmpty()) {
                         itemDto.setItemName(csItem.getName());
                     }
+                }
+            } else if (itemDto.getMarketHashName() != null && !itemDto.getMarketHashName().isEmpty()) {
+                // Fallback resolution: find best matching CS item in DB if csItemId wasn't passed directly
+                List<com.kalin.investment_tracker.model.CsItem> matches = csItemRepository.findBestMatch(
+                        itemDto.getMarketHashName(), org.springframework.data.domain.PageRequest.of(0, 1));
+                if (!matches.isEmpty()) {
+                    com.kalin.investment_tracker.model.CsItem csItem = matches.get(0);
+                    itemDto.setCsItemId(csItem.getId());
+                    itemDto.setMarketHashName(csItem.getMarketHashName());
+                    itemDto.setItemName(csItem.getName());
                 }
             }
 
@@ -103,18 +130,9 @@ public class SteamPriceController {
                         .body(Map.of("error", "marketHashName is required"));
             }
 
-            // Set user from token
-            String jwt = token.substring(7);
-            String userIdStr = jwtService.extractUserId(jwt);
-            User user = userRepository.findById(Integer.parseInt(userIdStr))
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-
-            // Check if this exact item is already being tracked by this user
-            boolean alreadyTracked = itemRepository.findAll().stream()
-                    .anyMatch(i -> i.getUser() != null
-                            && i.getUser().getId().equals(user.getId())
-                            && itemDto.getMarketHashName().equals(i.getMarketHashName())
-                            && Boolean.TRUE.equals(i.getSteamFoundCheck()));
+            // Fast DB-level check if this exact item is already being tracked by this user
+            boolean alreadyTracked = itemRepository.existsByUserIdAndMarketHashNameAndSteamFoundCheckTrue(
+                    user.getId(), itemDto.getMarketHashName());
             if (alreadyTracked) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "You are already tracking this item"));
@@ -142,17 +160,10 @@ public class SteamPriceController {
                     savedItem.getMarketHashName(), user.getId(),
                     savedItem.getPrice() != null ? savedItem.getPrice() : "pending scheduler");
 
-            // Save initial price history entry if we got a price
-            if (savedItem.getPrice() != null) {
-                PriceHistory priceHistory = new PriceHistory(
-                        savedItem,
-                        savedItem.getPrice(),
-                        savedItem.getQuantity(),
-                        java.time.LocalDateTime.now(),
-                        java.time.LocalDateTime.now()
-                );
-                priceHistoryRepository.save(priceHistory);
-            }
+            // Seed historical price data from the csgotrader cache (24h / 7d / 30d / 90d averages).
+            // This gives the chart meaningful data from day one instead of a single "now" point.
+            // seedHistoricalPriceData() is a no-op if the cache hasn't loaded yet (e.g. first startup).
+            steamPriceService.seedHistoricalPriceData(savedItem, priceHistoryRepository);
 
             // Build response DTO and attach image from cs_items if available
             return ResponseEntity.ok(mapToSteamItemDto(savedItem));
@@ -165,26 +176,29 @@ public class SteamPriceController {
     }
 
     /**
-     * POST /api/prices/update - Update prices for selected items (bulk)
+     * POST /api/prices/update - Update prices for selected items (bulk).
+     * Uses a Spring-managed thread pool via TaskExecutor instead of raw new Thread().
      */
     @PostMapping("/prices/update")
     public ResponseEntity<?> updatePrices(@RequestBody Map<String, List<Long>> request) {
         try {
             List<Long> itemIds = request.get("itemIds");
-            
+
             if (itemIds == null || itemIds.isEmpty()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "No item IDs provided"));
             }
 
-            // Run price update asynchronously
-            new Thread(() -> {
+            // Run price update asynchronously on a Spring-managed task executor
+            org.springframework.core.task.SimpleAsyncTaskExecutor executor =
+                    new org.springframework.core.task.SimpleAsyncTaskExecutor("price-update-");
+            executor.execute(() -> {
                 try {
                     steamPriceService.updatePricesForItems(itemIds);
                 } catch (Exception e) {
                     log.error("Error in async price update: {}", e.getMessage());
                 }
-            }).start();
+            });
 
             return ResponseEntity.ok(Map.of(
                     "message", "Price update started for " + itemIds.size() + " items",
@@ -259,25 +273,24 @@ public class SteamPriceController {
     }
 
     /**
-     * PATCH /api/items/{id}/bookmark - Toggle bookmark status
+     * PATCH /api/items/{id}/bookmark - Toggle bookmark status with IDOR protection
      */
     @PatchMapping("/items/{id}/bookmark")
     public ResponseEntity<?> toggleBookmark(@PathVariable Long id,
-                                           @RequestHeader("Authorization") String token) {
+                                           @RequestHeader(value = "Authorization", required = false) String token,
+                                           org.springframework.security.core.Authentication connectedUser) {
         try {
-            Item item = itemRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Item not found"));
-
-            // Verify ownership
-            String jwt = token.substring(7);
-            String userIdStr = jwtService.extractUserId(jwt);
-            if (!item.getUser().getId().equals(Integer.parseInt(userIdStr))) {
-                return ResponseEntity.status(403)
-                        .body(Map.of("error", "You are not authorized to modify this item"));
+            User user = resolveUser(token, connectedUser);
+            if (user == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized user session"));
             }
 
+            // IDOR Protection: query DB for item matching BOTH id AND authenticated userId
+            Item item = itemRepository.findByIdAndUserId(id, user.getId())
+                    .orElseThrow(() -> new RuntimeException("Item not found or unauthorized"));
+
             // Toggle bookmark status
-            item.setShowInDashboard(!item.getShowInDashboard());
+            item.setShowInDashboard(!Boolean.TRUE.equals(item.getShowInDashboard()));
             Item updatedItem = itemRepository.save(item);
 
             return ResponseEntity.ok(Map.of(
@@ -293,17 +306,28 @@ public class SteamPriceController {
     }
 
     /**
-     * DELETE /api/items/{id} - Delete an item
+     * DELETE /api/items/{id} - Delete an item with IDOR protection
      */
     @DeleteMapping("/items/{id}")
     @org.springframework.transaction.annotation.Transactional
-    public ResponseEntity<?> deleteItem(@PathVariable Long id) {
+    public ResponseEntity<?> deleteItem(@PathVariable Long id,
+                                         @RequestHeader(value = "Authorization", required = false) String token,
+                                         org.springframework.security.core.Authentication connectedUser) {
         try {
+            User user = resolveUser(token, connectedUser);
+            if (user == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized user session"));
+            }
+
+            // IDOR Protection: verify ownership before deletion
+            Item item = itemRepository.findByIdAndUserId(id, user.getId())
+                    .orElseThrow(() -> new RuntimeException("Item not found or unauthorized"));
+
             // Delete price history first
-            priceHistoryRepository.deleteByItemId(id);
+            priceHistoryRepository.deleteByItemId(item.getId());
             
             // Then delete the item
-            itemRepository.deleteById(id);
+            itemRepository.delete(item);
 
             return ResponseEntity.ok(Map.of("message", "Item deleted successfully"));
 
@@ -312,6 +336,18 @@ public class SteamPriceController {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Failed to delete item: " + e.getMessage()));
         }
+    }
+
+    private User resolveUser(String token, org.springframework.security.core.Authentication connectedUser) {
+        if (connectedUser != null && connectedUser.getPrincipal() instanceof User) {
+            return (User) connectedUser.getPrincipal();
+        }
+        if (token != null && token.length() > 7 && token.startsWith("Bearer ")) {
+            String jwt = token.substring(7);
+            String userIdStr = jwtService.extractUserId(jwt);
+            return userRepository.findById(Integer.parseInt(userIdStr)).orElse(null);
+        }
+        return null;
     }
 
     /**
@@ -342,6 +378,16 @@ public class SteamPriceController {
     }
 
     private SteamItemDto mapToSteamItemDto(Item item) {
+        String imageUrl = null;
+        if (item.getCsItemId() != null) {
+            imageUrl = csItemRepository.findById(item.getCsItemId())
+                    .map(com.kalin.investment_tracker.model.CsItem::getImage)
+                    .orElse(null);
+        }
+        return mapToSteamItemDto(item, imageUrl);
+    }
+
+    private SteamItemDto mapToSteamItemDto(Item item, String imageUrl) {
         SteamItemDto.SteamItemDtoBuilder builder = SteamItemDto.builder()
                 .id(item.getId())
                 .itemName(item.getItemName())
@@ -353,14 +399,8 @@ public class SteamPriceController {
                 .boughtDate(item.getBoughtDate())
                 .showInDashboard(item.getShowInDashboard())
                 .priceNotification(item.getPriceNotification())
-                .steamFoundCheck(item.getSteamFoundCheck());
-
-        // Add image URL if csItemId is available
-        if (item.getCsItemId() != null) {
-            csItemRepository.findById(item.getCsItemId()).ifPresent(csItem -> {
-                builder.image(csItem.getImage());
-            });
-        }
+                .steamFoundCheck(item.getSteamFoundCheck())
+                .image(imageUrl);
 
         // Add historical trend data if available
         if (item.getMarketHashName() != null) {

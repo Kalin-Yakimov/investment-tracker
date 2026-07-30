@@ -9,8 +9,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import jakarta.persistence.Index;
+
 @Entity
-@Table(name = "cs_items")
+@Table(name = "cs_items", indexes = {
+    @Index(name = "idx_cs_items_market_hash", columnList = "marketHashName"),
+    @Index(name = "idx_cs_items_name", columnList = "name")
+})
 @Data
 @Builder
 @NoArgsConstructor

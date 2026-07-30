@@ -38,24 +38,33 @@ const formatCurrency = (value) => {
  * - 24H and 7D: Includes time ("Jul 28, 20:54")
  * - 1M and 3M: Date only ("Jul 28, 2026")
  */
+/**
+ * Formats timestamps strictly as DD/MM/YYYY (with optional HH:mm for 24H/7D)
+ */
 const formatDateTime = (dateObj, timeframe = "1M") => {
   if (!dateObj || Number.isNaN(dateObj.getTime())) return "";
   
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const year = dateObj.getFullYear();
+
   if (timeframe === "24H" || timeframe === "7D") {
-    return dateObj.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
+    const hours = String(dateObj.getHours()).padStart(2, "0");
+    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
   }
 
-  return dateObj.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return `${day}/${month}/${year}`;
+};
+
+const formatDateDDMMYYYY = (dateStr) => {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 /**
@@ -507,7 +516,7 @@ export default function Home() {
                             {isBought ? "Bought" : "Sold"}
                           </span>
                         </td>
-                        <td className="text-muted small">{item.date}</td>
+                        <td className="text-muted small">{formatDateDDMMYYYY(item.date)}</td>
                         <td className="text-center font-mono">{item.quantity}</td>
                         <td className="text-end font-mono">€{Number(item.price).toFixed(2)}</td>
                         <td className="text-end font-mono fw-bold">
@@ -531,7 +540,7 @@ export default function Home() {
       {/* Pinned Market Items Section (Infinite Scroll & Timeframe Selector) */}
       <div className="card portfolio-table-card shadow-lg p-4">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-          <h3 className="portfolio-table-title mb-0">⭐ Pinned Steam Market Items</h3>
+          <h3 className="portfolio-table-title mb-0">⭐ Pinned Market Items</h3>
           
           {/* Trend Period Control Group in Header */}
           <div className="btn-group timeframe-toggle-group" role="group">
@@ -560,9 +569,9 @@ export default function Home() {
                   <th scope="col" style={{ width: "45px" }} className="text-center">Unpin</th>
                   <th scope="col" style={{ width: "60px" }}>Image</th>
                   <th scope="col">Item Name</th>
-                  <th scope="col" className="text-end">Market Price</th>
+                  <th scope="col">Current Price</th>
                   <th scope="col">% Change</th>
-                  <th scope="col" style={{ width: "200px" }}>Sparkline ({selectedTimeframe})</th>
+                  <th scope="col" style={{ width: "200px" }}>Chart ({selectedTimeframe})</th>
                 </tr>
               </thead>
               <tbody>
@@ -597,9 +606,8 @@ export default function Home() {
                       </td>
                       <td>
                         <div className="fw-semibold text-white">{item.itemName}</div>
-                        <div className="small text-muted">{item.marketHashName}</div>
                       </td>
-                      <td className="text-end font-mono fw-bold text-success">
+                      <td className="font-mono fw-bold text-success">
                         {formatCurrency(item.price)}
                       </td>
                       <td>

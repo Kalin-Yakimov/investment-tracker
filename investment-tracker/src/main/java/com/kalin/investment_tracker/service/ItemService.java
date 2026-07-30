@@ -58,11 +58,9 @@ public class ItemService {
 
     public Item updateItem(Long id, Item newItem, String token, JwtService jwtService) {
         User user = validateUser(token, jwtService);
-        return itemRepository.findById(id)
+        // IDOR protection: query DB for item matching BOTH id AND authenticated userId
+        return itemRepository.findByIdAndUserId(id, user.getId())
                 .map(item -> {
-                    if (!item.getUser().getId().equals(user.getId())) {
-                        throw new RuntimeException("You are not authorized to update this item.");
-                    }
                     if (newItem.getCsItemId() != null) {
                         CsItem csItem = csItemRepository.findById(newItem.getCsItemId())
                                 .orElseThrow(() -> new RuntimeException("CS Item not found"));
@@ -86,7 +84,7 @@ public class ItemService {
         Pageable pageable = PageRequest.of(page, size);
         Page<Item> items = itemRepository.findByUserIdOrderByDateDesc(user.getId(), pageable);
         
-        return items.map(this::mapToDto);
+        return mapPageToDtoBatch(items);
     }
 
     public ItemResponseDto getItemById(Long id) {
@@ -100,20 +98,43 @@ public class ItemService {
         Pageable pageable = PageRequest.of(page, size);
         Page<Item> items = itemRepository.findByUserIdAndItemNameOrderByDateDesc(user.getId(), normalizeString(name), pageable);
         
-        return items.map(this::mapToDto);
+        return mapPageToDtoBatch(items);
     }
 
     public String deleteItem(Long id, String token, JwtService jwtService) {
         User user = validateUser(token, jwtService);
-        return itemRepository.findById(id)
-                .map(item -> {
-                    if (!item.getUser().getId().equals(user.getId())) {
-                        throw new RuntimeException("You are not authorized to delete this item.");
-                    }
-                    itemRepository.deleteById(id);
-                    return "Item with id" + id + "has been deleted successfully.";
-                })
+        // IDOR protection: verify ownership at DB level before deletion
+        Item item = itemRepository.findByIdAndUserId(id, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(id));
+        
+        itemRepository.delete(item);
+        return "Item with id " + id + " has been deleted successfully.";
+    }
+
+    private Page<ItemResponseDto> mapPageToDtoBatch(Page<Item> items) {
+        // Collect all CS item IDs on the page to fetch image URLs in a single query (prevents N+1)
+        java.util.Set<String> csItemIds = items.getContent().stream()
+                .map(Item::getCsItemId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+
+        java.util.Map<String, String> imageMap = new java.util.HashMap<>();
+        if (!csItemIds.isEmpty()) {
+            imageMap = csItemRepository.findAllById(csItemIds).stream()
+                    .collect(java.util.stream.Collectors.toMap(CsItem::getId, CsItem::getImage, (a, b) -> a));
+        }
+
+        final java.util.Map<String, String> finalImageMap = imageMap;
+        return items.map(item -> ItemResponseDto.builder()
+                .id(item.getId())
+                .itemName(item.getItemName())
+                .csItemId(item.getCsItemId())
+                .itemStatus(item.getItemStatus())
+                .date(item.getDate())
+                .quantity(item.getQuantity())
+                .price(item.getPrice())
+                .image(item.getCsItemId() != null ? finalImageMap.get(item.getCsItemId()) : null)
+                .build());
     }
 
     private ItemResponseDto mapToDto(Item item) {

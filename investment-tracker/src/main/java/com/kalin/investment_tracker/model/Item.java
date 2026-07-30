@@ -9,6 +9,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
+@Table(name = "item", indexes = {
+    @Index(name = "idx_item_user_id", columnList = "user_id"),
+    @Index(name = "idx_item_market_hash", columnList = "marketHashName"),
+    @Index(name = "idx_item_steam_found", columnList = "steamFoundCheck")
+})
 public class Item {
 
     @Id

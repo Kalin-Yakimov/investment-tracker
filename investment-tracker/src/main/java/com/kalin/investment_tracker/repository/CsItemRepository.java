@@ -28,4 +28,7 @@ public interface CsItemRepository extends JpaRepository<CsItem, String>, JpaSpec
     @Transactional
     @Query("DELETE FROM CsItem c WHERE c.id LIKE 'graffiti-%' OR c.id LIKE 'key-%' OR c.id LIKE 'collectible-%' OR c.id LIKE 'collection-%'")
     int deleteExcludedCategories();
+
+    @Query("SELECT c FROM CsItem c WHERE LOWER(c.name) = LOWER(:query) OR LOWER(c.marketHashName) = LOWER(:query) OR LOWER(c.name) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY LENGTH(c.name) ASC")
+    List<CsItem> findBestMatch(@Param("query") String query, Pageable pageable);
 }

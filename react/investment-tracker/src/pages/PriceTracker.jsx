@@ -35,24 +35,35 @@ const formatCurrency = (value) => {
  * - 24H and 7D: Includes time ("Jul 28, 20:54")
  * - 1M and 3M: Date only ("Jul 28, 2026")
  */
+/**
+ * Formats timestamps strictly as DD/MM/YYYY (with optional HH:mm for 24H/7D)
+ */
 const formatDateTime = (dateObj, timeframe = "1M") => {
   if (!dateObj || Number.isNaN(dateObj.getTime())) return "";
   
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const year = dateObj.getFullYear();
+
   if (timeframe === "24H" || timeframe === "7D") {
-    return dateObj.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
+    const hours = String(dateObj.getHours()).padStart(2, "0");
+    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
   }
 
-  return dateObj.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return `${day}/${month}/${year}`;
+};
+
+const formatDateDDMMYYYY = (dateStr) => {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
 /**
@@ -355,6 +366,16 @@ export default function PriceTracker() {
 
   const [selectedTimeframe, setSelectedTimeframe] = useState("1M");
   const [detailItem, setDetailItem] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+
+  // Auto-dismiss error message after 5 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError("");
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [error]);
 
   const fetchTrackedItems = async () => {
     try {
@@ -412,9 +433,9 @@ export default function PriceTracker() {
   }, [trackedItems, itemPointsMap]);
 
   useEffect(() => {
-    if (!query.trim()) {
+    // If an item was selected or query is empty, do not trigger search dropdown
+    if (!query.trim() || selectedSearchItem) {
       setSearchResults([]);
-      setSelectedSearchItem(null);
       return;
     }
 
@@ -428,46 +449,49 @@ export default function PriceTracker() {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, selectedSearchItem]);
 
-  const handleSelectSearchItem = (csItem) => {
-    setSelectedSearchItem(csItem);
-    setQuery(csItem.name);
+  const handleSelectSearchItem = async (csItem) => {
     setSearchResults([]);
-  };
-
-  const handleAddItem = async (e) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-
-    setLoading(true);
+    setQuery("");
+    setSelectedSearchItem(null);
     setError("");
 
+    // Instant client-side check before API call
+    const isAlreadyTracked = trackedItems.some(
+      (i) => i.marketHashName === csItem.marketHashName || i.itemName === csItem.name
+    );
+    if (isAlreadyTracked) {
+      setError("Item is already tracked.");
+      return;
+    }
+
+    setLoading(true);
     try {
       const payload = {
-        itemName: selectedSearchItem ? selectedSearchItem.name : query.trim(),
-        marketHashName: selectedSearchItem ? selectedSearchItem.marketHashName : query.trim(),
-        csItemId: selectedSearchItem ? selectedSearchItem.id : null,
+        itemName: csItem.name,
+        marketHashName: csItem.marketHashName,
+        csItemId: csItem.id,
         quantity: 1,
         showInDashboard: false,
       };
 
       await UserService.addTrackedItem(payload);
-      setQuery("");
-      setSelectedSearchItem(null);
-      setSearchResults([]);
       await fetchTrackedItems();
     } catch (err) {
       console.error("Failed to add item:", err);
-      setError(err.response?.data?.error || err.message || "Failed to add item to tracker.");
+      const serverErr = err.response?.data?.error;
+      if (serverErr && (serverErr.includes("already tracking") || serverErr.includes("already tracked"))) {
+        setError("Item is already tracked.");
+      } else {
+        setError(serverErr || err.message || "Failed to add item to tracker.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteItem = async (itemId) => {
-    if (!window.confirm("Are you sure you want to remove this item from your tracker?")) return;
-
     try {
       await UserService.deleteTrackedItem(itemId);
       setTrackedItems((prev) => prev.filter((i) => i.id !== itemId));
@@ -519,57 +543,63 @@ export default function PriceTracker() {
         </div>
       </div>
 
-      {/* Alert Messages */}
-      {error && <div className="alert alert-danger border-0 shadow-sm mb-4">{error}</div>}
+      {/* Notification Messages */}
+      {error && (
+        <div
+          className="mb-4 p-3 rounded-3 shadow-lg text-white"
+          style={{
+            background: "rgba(22, 27, 38, 0.95)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            color: "#ffffff",
+            backdropFilter: "blur(12px)",
+            fontSize: "0.95rem",
+            fontWeight: "500",
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       {/* Search & Add Item Section */}
-      <div className="card tracker-card-dark mb-4">
-        <div className="card-body p-4">
-          <h5 className="card-title text-white mb-3">Add CS Item to Tracker</h5>
-          <div className="row g-3">
-            <div className="col-lg-9 position-relative">
-              <input
-                type="text"
-                className="form-control tracker-search-input"
-                placeholder="Search CS item (e.g. AK-47 | Redline, Case, Sticker)..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              {searchResults.length > 0 && (
-                <div className="tracker-autocomplete-dropdown">
-                  {searchResults.map((item) => (
-                    <div
-                      key={item.id}
-                      className="tracker-autocomplete-item d-flex align-items-center gap-3 p-2"
-                      onClick={() => handleSelectSearchItem(item)}
-                    >
-                      {item.image && (
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="tracker-autocomplete-img"
-                          style={{ width: "40px", height: "30px", objectFit: "contain" }}
-                        />
-                      )}
-                      <div>
-                        <div className="fw-semibold text-white">{item.name}</div>
-                        <div className="small text-muted">{item.marketHashName}</div>
-                      </div>
+      <div className="card tracker-card-dark mb-4 position-relative" style={{ overflow: "visible", zIndex: 100 }}>
+        <div className="card-body p-4" style={{ overflow: "visible" }}>
+          <h5 className="card-title text-white mb-3 fw-bold">Add CS Item to Tracker</h5>
+          <div className="position-relative w-100">
+            <input
+              type="text"
+              className="form-control tracker-search"
+              placeholder="Type CS2 skin or item name to track (e.g. AK-47 | Redline, Case)..."
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSelectedSearchItem(null);
+              }}
+              autoComplete="off"
+            />
+            {searchResults.length > 0 && (
+              <div className="tracker-autocomplete-dropdown">
+                {searchResults.map((item) => (
+                  <div
+                    key={item.id}
+                    className="tracker-autocomplete-item d-flex align-items-center gap-3 p-2"
+                    onClick={() => handleSelectSearchItem(item)}
+                  >
+                    {item.image && (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="tracker-autocomplete-img"
+                        style={{ width: "40px", height: "30px", objectFit: "contain" }}
+                      />
+                    )}
+                    <div>
+                      <div className="fw-semibold text-white">{item.name}</div>
+                      <div className="small text-muted">{item.marketHashName}</div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="col-lg-3">
-              <button
-                type="button"
-                className="btn btn-primary w-100 tracker-add-btn"
-                onClick={handleAddItem}
-                disabled={loading || !query.trim()}
-              >
-                Track Item
-              </button>
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -614,8 +644,7 @@ export default function PriceTracker() {
               )}
               <div>
                 <h4 className="text-white mb-1 fw-bold">{detailItem.itemName}</h4>
-                <div className="text-muted small mb-2">{detailItem.marketHashName}</div>
-                <div className="d-flex align-items-center gap-3">
+                <div className="d-flex align-items-center gap-3 mt-2">
                   <span className="fs-4 fw-bold text-success">{formatCurrency(detailItem.price)}</span>
                   <span className={`badge ${detailTrend.direction === "positive" ? "bg-success" : detailTrend.direction === "negative" ? "bg-danger" : "bg-secondary"}`}>
                     {detailTrend.direction === "positive" ? "▲ +" : detailTrend.direction === "negative" ? "▼ " : ""}
@@ -647,7 +676,7 @@ export default function PriceTracker() {
                       {detailHistoryList.map((h) => (
                         <tr key={h.id || h.dateExtracted}>
                           <td className="ps-3 small text-secondary">
-                            {h.dateExtracted ? new Date(h.dateExtracted).toLocaleString() : "-"}
+                            {formatDateDDMMYYYY(h.dateExtracted)}
                           </td>
                           <td className="text-end pe-3 font-mono text-success fw-bold">
                             {formatCurrency(h.price)}
@@ -685,8 +714,8 @@ export default function PriceTracker() {
                     <th scope="col" style={{ width: "45px" }} className="text-center">Pin</th>
                     <th scope="col" style={{ width: "60px" }}>Image</th>
                     <th scope="col">Item Name</th>
-                    <th scope="col">Market Price</th>
-                    <th scope="col" style={{ width: "200px" }}>Sparkline ({selectedTimeframe})</th>
+                    <th scope="col">Current Price</th>
+                    <th scope="col" style={{ width: "200px" }}>Chart ({selectedTimeframe})</th>
                     <th scope="col">% Change</th>
                     <th scope="col" className="text-end" style={{ width: "80px" }}>Action</th>
                   </tr>
@@ -725,7 +754,6 @@ export default function PriceTracker() {
                           <div className="fw-bold text-white cursor-pointer">
                             {item.itemName}
                           </div>
-                          <div className="small text-muted">{item.marketHashName}</div>
                         </td>
                         <td className="fw-bold text-success fs-6" onClick={() => setDetailItem(item)}>
                           {formatCurrency(item.price)}
@@ -752,7 +780,7 @@ export default function PriceTracker() {
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             title="Delete item from tracker"
-                            onClick={() => handleDeleteItem(item.id)}
+                            onClick={() => setDeleteConfirmId(item.id)}
                           >
                             🗑️
                           </button>
@@ -766,6 +794,44 @@ export default function PriceTracker() {
           )}
         </div>
       </div>
+      {/* Centered Custom Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div
+          className="modal-backdrop-custom d-flex align-items-center justify-content-center"
+          onClick={() => setDeleteConfirmId(null)}
+        >
+          <div
+            className="modal-content-custom card tracker-card-dark p-4 position-relative text-center shadow-lg border border-secondary border-opacity-25"
+            style={{ maxWidth: "420px", width: "90%", borderRadius: "16px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="fs-1 mb-2">🗑️</div>
+            <h4 className="text-white fw-bold mb-2">Remove Item?</h4>
+            <p className="text-secondary small mb-4">
+              Are you sure you want to remove this item from your price tracker? Its recorded price history will be deleted.
+            </p>
+            <div className="d-flex align-items-center justify-content-center gap-3">
+              <button
+                type="button"
+                className="btn btn-outline-light px-4"
+                onClick={() => setDeleteConfirmId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger px-4"
+                onClick={() => {
+                  handleDeleteItem(deleteConfirmId);
+                  setDeleteConfirmId(null);
+                }}
+              >
+                Remove Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
