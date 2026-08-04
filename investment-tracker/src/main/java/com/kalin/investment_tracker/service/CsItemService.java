@@ -46,13 +46,17 @@ public class CsItemService {
         updateExistingItemsWithMarketHashNames();
     }
 
-    private boolean isExcludedCategory(String id) {
+    private boolean isExcludedCategory(String id, String name) {
         if (id == null || id.isEmpty()) return true;
         String lowerId = id.toLowerCase();
+        String lowerName = name != null ? name.toLowerCase() : "";
         return lowerId.startsWith("graffiti-") ||
                lowerId.startsWith("key-") ||
                lowerId.startsWith("collectible-") ||
-               lowerId.startsWith("collection-");
+               lowerId.startsWith("collection-") ||
+               lowerName.contains("sticker collection") ||
+               lowerName.contains("patch collection") ||
+               lowerName.contains("pin collection");
     }
 
     private void cleanExcludedItemsFromDatabase() {
@@ -118,11 +122,11 @@ public class CsItemService {
                     JsonNode node = entry.getValue();
                     
                     String id = node.path("id").asText();
-                    if (isExcludedCategory(id)) {
+                    String name = node.path("name").asText();
+                    if (isExcludedCategory(id, name)) {
                         continue;
                     }
 
-                    String name = node.path("name").asText();
                     String image = node.path("image").asText();
                     
                     if (id != null && !id.isEmpty() && name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
@@ -166,12 +170,12 @@ public class CsItemService {
                     JsonNode node = entry.getValue();
 
                     String id = node.path("id").asText();
-                    if (isExcludedCategory(id)) {
+                    String name = node.path("name").asText();
+                    if (isExcludedCategory(id, name)) {
                         continue;
                     }
 
                     if (id != null && !id.isEmpty() && !existingIds.contains(id)) {
-                        String name = node.path("name").asText();
                         String image = node.path("image").asText();
 
                         if (name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
@@ -206,6 +210,7 @@ public class CsItemService {
         return csApiName;
     }
 
+    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.CS_ITEMS_SEARCH_CACHE, key = "#query.toLowerCase().trim()")
     public List<CsItem> searchItems(String query) {
         if (query == null || query.trim().isEmpty()) {
             return List.of();

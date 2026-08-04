@@ -15,6 +15,10 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) ORDER BY i.date DESC")
     Page<Item> findByUserIdOrderByDateDesc(@Param("userId") Integer userId, Pageable pageable);
 
+    // All non-Steam items of a specific user with optional status filter and dynamic Pageable sorting
+    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) AND (:status IS NULL OR i.itemStatus = :status)")
+    Page<Item> findByUserIdAndOptionalStatus(@Param("userId") Integer userId, @Param("status") com.kalin.investment_tracker.model.ItemStatus status, Pageable pageable);
+
     // Used for the item history (non-Steam items only).
     @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND i.itemName = :itemName AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) ORDER BY i.date DESC")
     Page<Item> findByUserIdAndItemNameOrderByDateDesc(@Param("userId") Integer userId, @Param("itemName") String itemName, Pageable pageable);
@@ -32,4 +36,12 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     // IDOR protection: find item by ID strictly belonging to the authenticated user
     java.util.Optional<Item> findByIdAndUserId(Long id, Integer userId);
+
+    // Total count of all non-Steam items for a user
+    @Query("SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)")
+    long countAllUserItems(@Param("userId") Integer userId);
+
+    // Total investment value of all BOUGHT non-Steam items for a user
+    @Query("SELECT COALESCE(SUM(i.price * i.quantity), 0) FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) AND i.itemStatus = com.kalin.investment_tracker.model.ItemStatus.BOUGHT")
+    java.math.BigDecimal sumTotalInvestmentValue(@Param("userId") Integer userId);
 }

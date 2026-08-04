@@ -85,9 +85,54 @@ label, .form-label {
   color: var(--text-muted);
 }
 
+/* Webkit Browser Autofill Dark Overrides */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: #ffffff !important;
+  transition: background-color 50000s ease-in-out 0s !important;
+  box-shadow: inset 0 0 20px 20px rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--input-border) !important;
+}
+
 select.form-control option, select.form-select option {
   background-color: #161b26;
   color: var(--text-primary);
+}
+
+/* Password Input Group & Show/Hide Toggle Button */
+.input-group.password-input-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.input-group.password-input-group .form-control {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.password-toggle-btn {
+  background-color: var(--input-bg) !important;
+  border: 1px solid var(--input-border) !important;
+  border-left: none !important;
+  color: var(--text-secondary) !important;
+  border-top-right-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+  padding: 0 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  font-size: 1.1rem;
+}
+
+.password-toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
 }
 
 /* Buttons */

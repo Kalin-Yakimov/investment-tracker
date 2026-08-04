@@ -18,7 +18,7 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    private final long jwtExpiration = 604800000L;
+    private final long jwtExpiration = 7776000000L; // 90 days (3 months) in milliseconds (90 * 24 * 60 * 60 * 1000)
     private final String secretKey = "5696A3420E239F798374D232188E4CD8CD3EA18983FEF669DE16CA7501853A57";
 
     public String extractUsername(String token) {

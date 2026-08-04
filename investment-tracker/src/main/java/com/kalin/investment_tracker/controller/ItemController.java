@@ -47,12 +47,23 @@ public class ItemController {
     public Page<ItemResponseDto> getAllUserItems(
             @RequestHeader("Authorization") String token,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false, defaultValue = "newest_date") String filter) {
         try {
-            return itemService.getUserItems(token, jwtService, page, size);
+            return itemService.getUserItems(token, jwtService, page, size, filter);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Failed to retrieve user items: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/portfolio-summary")
+    public org.springframework.http.ResponseEntity<?> getPortfolioSummary(
+            @RequestHeader("Authorization") String token) {
+        try {
+            return org.springframework.http.ResponseEntity.ok(itemService.getPortfolioSummary(token, jwtService));
+        } catch (Exception e) {
+            return org.springframework.http.ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
         }
     }
 

@@ -269,6 +269,59 @@ export default function Home() {
   const [totalPages, setTotalPages] = useState(0);
   const navigate = useNavigate();
 
+  // Portfolio Filtering & Sorting State
+  const [filterSortOption, setFilterSortOption] = useState("newest_date");
+
+  const sortedFilteredItems = useMemo(() => {
+    let list = [...items];
+
+    if (filterSortOption === "bought") {
+      list = list.filter((i) => i.itemStatus === "BOUGHT");
+    } else if (filterSortOption === "sold") {
+      list = list.filter((i) => i.itemStatus === "SOLD");
+    }
+
+    list.sort((a, b) => {
+      const aQty = Number(a.quantity || 1);
+      const bQty = Number(b.quantity || 1);
+      const aUnit = Number(a.price || 0);
+      const bUnit = Number(b.price || 0);
+      const aTotal = aUnit * aQty;
+      const bTotal = bUnit * bQty;
+
+      const parseDate = (d) => {
+        if (!d) return 0;
+        if (typeof d === "number") return d;
+        if (typeof d === "string" && d.includes("/")) {
+          const p = d.split("/");
+          if (p.length === 3) return new Date(p[2], p[1] - 1, p[0]).getTime();
+        }
+        return new Date(d).getTime() || 0;
+      };
+
+      switch (filterSortOption) {
+        case "oldest_date":
+          return parseDate(a.date) - parseDate(b.date) || (a.id || 0) - (b.id || 0);
+        case "newest_date":
+          return parseDate(b.date) - parseDate(a.date) || (b.id || 0) - (a.id || 0);
+        case "highest_quantity":
+          return bQty - aQty;
+        case "highest_total_price":
+          return bTotal - aTotal;
+        case "lowest_total_price":
+          return aTotal - bTotal;
+        case "highest_unit_price":
+          return bUnit - aUnit;
+        case "lowest_unit_price":
+          return aUnit - bUnit;
+        default:
+          return 0;
+      }
+    });
+
+    return list;
+  }, [items, filterSortOption]);
+
   // Pinned Items State & Selected Timeframe
   const [selectedTimeframe, setSelectedTimeframe] = useState("1M");
   const [allPinnedItems, setAllPinnedItems] = useState([]);
@@ -277,9 +330,10 @@ export default function Home() {
   const loaderRef = useRef(null);
 
   const loadItems = useCallback(
-    async (page = 0) => {
+    async (page = 0, filter = filterSortOption) => {
       try {
-        const result = await UserService.getUserItems(page, itemsPerPage);
+        setLoading(true);
+        const result = await UserService.getUserItems(page, itemsPerPage, filter);
         setItems(result.content || []);
         setTotalPages(result.totalPages || 0);
         setCurrentPage(page);
@@ -290,7 +344,7 @@ export default function Home() {
         setLoading(false);
       }
     },
-    [itemsPerPage],
+    [itemsPerPage, filterSortOption],
   );
 
   const loadPinnedItems = useCallback(async () => {
@@ -307,9 +361,9 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    loadItems();
+    loadItems(0, filterSortOption);
     loadPinnedItems();
-  }, [loadItems, loadPinnedItems]);
+  }, [filterSortOption, loadItems, loadPinnedItems]);
 
   // Load price histories for visible pinned items
   useEffect(() => {
@@ -379,20 +433,24 @@ export default function Home() {
     }
   };
 
-  // Calculate portfolio summary stats for display
-  const stats = useMemo(() => {
-    let totalBought = 0;
-    items.forEach((item) => {
-      const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
-      if (item.itemStatus === "BOUGHT") {
-        totalBought += itemTotal;
-      }
-    });
-    return {
-      count: items.length,
-      bought: totalBought,
-    };
-  }, [items]);
+  // Portfolio summary stats across ALL registered items
+  const [stats, setStats] = useState({ count: 0, bought: 0 });
+
+  const loadPortfolioSummary = useCallback(async () => {
+    try {
+      const summary = await UserService.getPortfolioSummary();
+      setStats({
+        count: summary.count || 0,
+        bought: Number(summary.totalInvestmentValue || 0),
+      });
+    } catch (err) {
+      console.error("Failed to load portfolio summary:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPortfolioSummary();
+  }, [loadPortfolioSummary, items]);
 
   const visiblePinnedItems = useMemo(() => {
     return allPinnedItems.slice(0, pinnedVisibleCount);
@@ -465,14 +523,45 @@ export default function Home() {
 
       {/* Main Portfolio Table Card */}
       <div className="card portfolio-table-card shadow-lg p-4 mb-5">
-        <div className="d-flex align-items-center justify-content-between mb-3">
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
           <h3 className="portfolio-table-title mb-0">📁 Portfolio History</h3>
-          <span className="text-white-50 small">Click any item row to view details or edit</span>
+          
+          {/* Dynamic Portfolio Filter Dropdown */}
+          <div className="d-flex align-items-center gap-2">
+            <select
+              className="form-select form-select-sm text-white border-0 shadow-sm"
+              value={filterSortOption}
+              onChange={(e) => setFilterSortOption(e.target.value)}
+              style={{
+                backgroundColor: "#161b26",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                borderRadius: "8px",
+                padding: "0.45rem 2.2rem 0.45rem 0.85rem",
+                fontWeight: "600",
+                fontSize: "0.875rem",
+                cursor: "pointer",
+                minWidth: "220px",
+                color: "#ffffff",
+              }}
+            >
+              <option value="newest_date">Filter by newest date</option>
+              <option value="oldest_date">Filter by oldest date</option>
+              <option value="bought">Filter by bought</option>
+              <option value="sold">Filter by sold</option>
+              <option value="highest_quantity">Filter by highest quantity</option>
+              <option value="highest_total_price">Filter by highest total price</option>
+              <option value="lowest_total_price">Filter by lowest total price</option>
+              <option value="highest_unit_price">Filter by highest unit price</option>
+              <option value="lowest_unit_price">Filter by lowest unit price</option>
+            </select>
+          </div>
         </div>
 
         {loading ? (
-          <div className="alert alert-info py-3 text-center mb-0" role="alert">
-            ⚡ Loading portfolio items...
+          <div className="d-flex justify-content-center align-items-center py-5">
+            <div className="spinner-border text-info" role="status" style={{ width: "2.2rem", height: "2.2rem" }}>
+              <span className="visually-hidden">Loading...</span>
+            </div>
           </div>
         ) : items.length > 0 ? (
           <>
@@ -490,7 +579,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => {
+                  {sortedFilteredItems.map((item) => {
                     const isBought = item.itemStatus === "BOUGHT";
                     const totalPrice = Number(item.price || 0) * Number(item.quantity || 1);
                     return (

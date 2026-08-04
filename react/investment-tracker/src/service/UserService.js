@@ -1,15 +1,41 @@
 import axios from "axios";
 import CookieService from "./CookieService";
 
+// Axios Interceptor: Catch 401/403 Unauthorized/Forbidden (expired tokens) and gracefully redirect to login
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403)
+    ) {
+      const currentPath = window.location.pathname;
+      if (
+        currentPath !== "/login" &&
+        currentPath !== "/registration" &&
+        currentPath !== "/forgot-password"
+      ) {
+        UserService.removeToken();
+        window.location.href = "/login?expired=true";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 class UserService {
   static BASE_URL = "http://localhost:8080";
   static TOKEN_KEY = "user_token";
 
-  static saveToken(token) {
-    CookieService.setCookie(UserService.TOKEN_KEY, token, {
+  static saveToken(token, rememberMe = true) {
+    const options = {
       secure: true,
       sameSite: "strict",
-    });
+    };
+    if (rememberMe) {
+      options.maxAge = 90 * 24 * 60 * 60; // 90 days (3 months) in seconds (7,776,000s)
+    }
+    CookieService.setCookie(UserService.TOKEN_KEY, token, options);
   }
 
   static getToken() {
@@ -18,19 +44,27 @@ class UserService {
 
   static removeToken() {
     CookieService.removeCookie(UserService.TOKEN_KEY);
+    CookieService.removeCookie("role");
   }
 
-  static async login(email, password) {
+  static async login(email, password, rememberMe = true) {
     try {
       const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/authenticate`,
-        { email, password },
+        { email, password }
       );
-      const { token } = response.data;
-      UserService.saveToken(token);
+      const { token, role } = response.data;
+      UserService.saveToken(token, rememberMe);
+      if (role) {
+        CookieService.setCookie(
+          "role",
+          role,
+          rememberMe ? { maxAge: 90 * 24 * 60 * 60 } : {}
+        );
+      }
       return response.data;
     } catch (error) {
-      throw error.response.data;
+      throw error.response?.data || error;
     }
   }
 
@@ -121,7 +155,7 @@ class UserService {
     }
   }
 
-  static async getUserItems(page = 0, size = 10) {
+  static async getUserItems(page = 0, size = 10, filter = "newest_date") {
     try {
       const token = UserService.getToken();
       const response = await axios.get(
@@ -133,12 +167,30 @@ class UserService {
           params: {
             page,
             size,
+            filter,
           },
         },
       );
       return response.data;
     } catch (error) {
-      throw error.response.data;
+      throw error.response?.data || error;
+    }
+  }
+
+  static async getPortfolioSummary() {
+    try {
+      const token = UserService.getToken();
+      const response = await axios.get(
+        `${UserService.BASE_URL}/portfolio-summary`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
     }
   }
 

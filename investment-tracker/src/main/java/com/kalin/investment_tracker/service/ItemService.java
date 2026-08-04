@@ -38,6 +38,7 @@ public class ItemService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
+    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, allEntries = true)
     public Item addItem(Item newItem, String token, JwtService jwtService) {
         User user = validateUser(token, jwtService);
         newItem.setUser(user);
@@ -56,6 +57,7 @@ public class ItemService {
         return itemRepository.save(newItem);
     }
 
+    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, allEntries = true)
     public Item updateItem(Long id, Item newItem, String token, JwtService jwtService) {
         User user = validateUser(token, jwtService);
         // IDOR protection: query DB for item matching BOTH id AND authenticated userId
@@ -79,12 +81,42 @@ public class ItemService {
                 .orElseThrow(() -> new ItemNotFoundException(id));
     }
 
-    public Page<ItemResponseDto> getUserItems(String token, JwtService jwtService, int page, int size) {
+    public Page<ItemResponseDto> getUserItems(String token, JwtService jwtService, int page, int size, String filter) {
         User user = validateUser(token, jwtService);
-        Pageable pageable = PageRequest.of(page, size);
-        Page<Item> items = itemRepository.findByUserIdOrderByDateDesc(user.getId(), pageable);
+        
+        ItemStatus statusFilter = null;
+        org.springframework.data.domain.Sort sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "date");
+
+        if ("bought".equalsIgnoreCase(filter)) {
+            statusFilter = ItemStatus.BOUGHT;
+        } else if ("sold".equalsIgnoreCase(filter)) {
+            statusFilter = ItemStatus.SOLD;
+        } else if ("oldest_date".equalsIgnoreCase(filter)) {
+            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "date");
+        } else if ("highest_quantity".equalsIgnoreCase(filter)) {
+            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "quantity");
+        } else if ("highest_unit_price".equalsIgnoreCase(filter) || "highest_total_price".equalsIgnoreCase(filter)) {
+            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "price");
+        } else if ("lowest_unit_price".equalsIgnoreCase(filter) || "lowest_total_price".equalsIgnoreCase(filter)) {
+            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "price");
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+        Page<Item> items = itemRepository.findByUserIdAndOptionalStatus(user.getId(), statusFilter, pageable);
         
         return mapPageToDtoBatch(items);
+    }
+
+    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#token")
+    public java.util.Map<String, Object> getPortfolioSummary(String token, JwtService jwtService) {
+        User user = validateUser(token, jwtService);
+        long count = itemRepository.countAllUserItems(user.getId());
+        java.math.BigDecimal totalBought = itemRepository.sumTotalInvestmentValue(user.getId());
+        
+        java.util.Map<String, Object> summary = new java.util.HashMap<>();
+        summary.put("count", count);
+        summary.put("totalInvestmentValue", totalBought != null ? totalBought : java.math.BigDecimal.ZERO);
+        return summary;
     }
 
     public ItemResponseDto getItemById(Long id) {
@@ -101,6 +133,7 @@ public class ItemService {
         return mapPageToDtoBatch(items);
     }
 
+    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, allEntries = true)
     public String deleteItem(Long id, String token, JwtService jwtService) {
         User user = validateUser(token, jwtService);
         // IDOR protection: verify ownership at DB level before deletion

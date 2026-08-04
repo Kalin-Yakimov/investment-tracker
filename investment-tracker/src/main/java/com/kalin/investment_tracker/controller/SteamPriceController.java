@@ -216,6 +216,7 @@ public class SteamPriceController {
      * GET /api/price-history/{itemId} - Get price history for charts
      */
     @GetMapping("/price-history/{itemId}")
+    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PRICE_HISTORY_CHART_CACHE, key = "#itemId")
     public ResponseEntity<List<PriceHistoryDto>> getPriceHistory(@PathVariable Long itemId) {
         try {
             Item item = itemRepository.findById(itemId)
