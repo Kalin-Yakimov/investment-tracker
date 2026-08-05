@@ -80,13 +80,19 @@ export default function Navbar() {
                     className={`nav-pill-link ${location.pathname === "/" ? "active" : ""}`}
                     to="/"
                   >
-                    📁 Portfolio Overview
+                    Portfolio Overview
                   </Link>
                   <Link
                     className={`nav-pill-link ${location.pathname === "/tracker" ? "active" : ""}`}
                     to="/tracker"
                   >
-                    📈 Steam Price Tracker
+                    Steam Price Tracker
+                  </Link>
+                  <Link
+                    className={`nav-pill-link ${location.pathname === "/inventory-calculator" ? "active" : ""}`}
+                    to="/inventory-calculator"
+                  >
+                    Inventory Calculator
                   </Link>
                 </>
               )}

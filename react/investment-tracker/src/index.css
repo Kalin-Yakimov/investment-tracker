@@ -81,8 +81,9 @@ label, .form-label {
   color: #fff !important;
 }
 
-.form-control::placeholder {
-  color: var(--text-muted);
+.form-control::placeholder, .form-select::placeholder, input::placeholder, textarea::placeholder {
+  color: rgba(255, 255, 255, 0.65) !important;
+  opacity: 1 !important;
 }
 
 /* Webkit Browser Autofill Dark Overrides */

@@ -18,6 +18,7 @@ public class CacheConfig {
     public static final String PRICE_HISTORY_CHART_CACHE = "priceHistoryChart";
     public static final String PORTFOLIO_SUMMARY_CACHE = "portfolioSummary";
     public static final String TRACKED_ITEMS_CACHE = "trackedItems";
+    public static final String INVENTORY_CALCULATOR_CACHE = "inventoryCalculatorCache";
 
     @Bean
     public CacheManager cacheManager() {
@@ -26,7 +27,8 @@ public class CacheConfig {
                 CS_ITEMS_SEARCH_CACHE,
                 PRICE_HISTORY_CHART_CACHE,
                 PORTFOLIO_SUMMARY_CACHE,
-                TRACKED_ITEMS_CACHE
+                TRACKED_ITEMS_CACHE,
+                INVENTORY_CALCULATOR_CACHE
         ));
 
         cacheManager.setCaffeine(Caffeine.newBuilder()

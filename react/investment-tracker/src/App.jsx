@@ -4,6 +4,7 @@ import "../node_modules/bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./layout/Navbar";
 import Home from "./pages/Home";
 import PriceTracker from "./pages/PriceTracker";
+import InventoryCalculatorPage from "./pages/InventoryCalculatorPage";
 import AddItem from "./item/AddItem";
 import EditItem from "./item/EditItem";
 import ViewItem from "./item/ViewItem";
@@ -81,6 +82,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <PriceTracker />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            exact
+            path="/inventory-calculator"
+            element={
+              <ProtectedRoute>
+                <InventoryCalculatorPage />
               </ProtectedRoute>
             }
           />

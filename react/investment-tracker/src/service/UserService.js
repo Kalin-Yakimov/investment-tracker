@@ -5,9 +5,11 @@ import CookieService from "./CookieService";
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
+    const requestUrl = error.config?.url || "";
     if (
       error.response &&
-      (error.response.status === 401 || error.response.status === 403)
+      (error.response.status === 401 || error.response.status === 403) &&
+      !requestUrl.includes("/inventory/calculate")
     ) {
       const currentPath = window.location.pathname;
       if (
@@ -354,6 +356,24 @@ class UserService {
             Authorization: `Bearer ${token}`,
           },
         },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
+  static async calculateSteamInventory(steamUrl) {
+    try {
+      const token = UserService.getToken();
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/v1/inventory/calculate`,
+        { steamUrl },
+        { headers }
       );
       return response.data;
     } catch (error) {

@@ -1,4 +1,5 @@
 package com.kalin.investment_tracker.security;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,6 +10,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 import static org.springframework.security.config.Customizer.withDefaults;
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
@@ -26,28 +28,23 @@ public class SecurityConfig {
         http
                 .cors(withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(req ->
-                                req.requestMatchers(
-                                        "/api/v1/auth/register",
-                                        "/api/v1/auth/authenticate",
-                                        "/api/v1/auth/activate-account",
-                                        "/api/v1/auth/forgot-password",
-                                        "/api/v1/auth/reset-password",
-                                        "/api/v1/auth/validate-token",
-                                        "/item",
-                                        "/items",
-                                        "/item/{id}",
-                                        "/dropdownItem",
-                                        "/dropdownItems",
-                                        "/dropdownItems/{id}",
-                                        "/dropdownItems/search/{itemName}"
-                                ).permitAll()
-                                        .anyRequest()
-                                            .authenticated()
-                        )
+                .authorizeHttpRequests(req -> req
+                        // Public Authentication Routes (Register, Login, Activation, Password Reset)
+                        .requestMatchers(
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/authenticate",
+                                "/api/v1/auth/activate-account",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/auth/validate-token"
+                        ).permitAll()
+                        // All Website Features (Portfolio, Price Tracker, Search, Inventory Calculator) require login
+                        .anyRequest().authenticated()
+                )
                 .sessionManagement(session -> session.sessionCreationPolicy(STATELESS))
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 }
