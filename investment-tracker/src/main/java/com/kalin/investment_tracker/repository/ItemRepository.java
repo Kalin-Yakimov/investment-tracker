@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Collection;
 
 public interface ItemRepository extends JpaRepository<Item, Long> {
 
@@ -36,6 +37,8 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     // IDOR protection: find item by ID strictly belonging to the authenticated user
     java.util.Optional<Item> findByIdAndUserId(Long id, Integer userId);
+
+    List<Item> findAllByIdInAndUserIdAndSteamFoundCheckTrue(Collection<Long> ids, Integer userId);
 
     // Total count of all non-Steam items for a user
     @Query("SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)")

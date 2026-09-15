@@ -1,16 +1,13 @@
 package com.kalin.investment_tracker.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.dto.PriceHistoryDto;
 import com.kalin.investment_tracker.dto.SteamItemDto;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.model.PriceHistory;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
-import com.kalin.investment_tracker.security.JwtService;
 import com.kalin.investment_tracker.service.SteamPriceService;
 import com.kalin.investment_tracker.user.User;
-import com.kalin.investment_tracker.user.UserRepository;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.task.TaskExecutor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -45,13 +43,10 @@ class SteamPriceControllerTest {
     private ItemRepository itemRepository;
 
     @Mock
-    private JwtService jwtService;
-
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
     private CsItemRepository csItemRepository;
+
+    @Mock
+    private TaskExecutor applicationTaskExecutor;
 
     @InjectMocks
     private SteamPriceController steamPriceController;
@@ -89,10 +84,10 @@ class SteamPriceControllerTest {
     @Test
     void testGetAllItems_Success() {
         // Arrange
-        when(itemRepository.findAllSteamTrackedItems()).thenReturn(Arrays.asList(testItem));
+        when(itemRepository.findSteamTrackedItemsByUserId(1)).thenReturn(Arrays.asList(testItem));
 
         // Act
-        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems(null, false);
+        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems(testUser, false);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -102,17 +97,13 @@ class SteamPriceControllerTest {
     }
 
     @Test
-    void testGetAllItems_WithToken() {
-        // Arrange
-        when(jwtService.extractUserId(anyString())).thenReturn("1");
-        when(itemRepository.findSteamTrackedItemsByUserId(1)).thenReturn(Arrays.asList(testItem));
+    void testGetAllItems_NeverUsesGlobalItemQuery() {
+        when(itemRepository.findSteamTrackedItemsByUserId(1)).thenReturn(List.of());
 
-        // Act
-        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems("Bearer token", false);
+        steamPriceController.getAllItems(testUser, false);
 
-        // Assert
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
+        verify(itemRepository).findSteamTrackedItemsByUserId(1);
+        verify(itemRepository, never()).findAllSteamTrackedItems();
     }
 
     @Test
@@ -128,11 +119,9 @@ class SteamPriceControllerTest {
                 .build();
 
         when(steamPriceService.tryFetchPrice(anyString())).thenReturn(Optional.of(new BigDecimal("50.00")));
-        when(userRepository.findById(1)).thenReturn(Optional.of(testUser));
         when(itemRepository.save(any(Item.class))).thenReturn(testItem);
-        when(jwtService.extractUserId(anyString())).thenReturn("1");
         // Act
-        ResponseEntity<?> response = steamPriceController.addItem(itemDto, "Bearer token", null);
+        ResponseEntity<?> response = steamPriceController.addItem(itemDto, testUser);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -148,11 +137,7 @@ class SteamPriceControllerTest {
                 .build();
 
         // Act
-        org.springframework.security.core.Authentication authentication =
-                mock(org.springframework.security.core.Authentication.class);
-        when(authentication.getPrincipal()).thenReturn(testUser);
-
-        ResponseEntity<?> response = steamPriceController.addItem(itemDto, null, authentication);
+        ResponseEntity<?> response = steamPriceController.addItem(itemDto, testUser);
 
         // Assert
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
@@ -164,14 +149,23 @@ class SteamPriceControllerTest {
     void testUpdatePrices_Success() {
         // Arrange
         Map<String, List<Long>> request = Map.of("itemIds", Arrays.asList(1L, 2L));
+        Item secondItem = new Item();
+        secondItem.setId(2L);
+        when(itemRepository.findAllByIdInAndUserIdAndSteamFoundCheckTrue(List.of(1L, 2L), 1))
+                .thenReturn(List.of(testItem, secondItem));
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(0).run();
+            return null;
+        }).when(applicationTaskExecutor).execute(any(Runnable.class));
 
         // Act
-        ResponseEntity<?> response = steamPriceController.updatePrices(request);
+        ResponseEntity<?> response = steamPriceController.updatePrices(request, testUser);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertTrue(response.getBody() instanceof Map);
+        verify(steamPriceService).updatePricesForItems(List.of(1L, 2L));
     }
 
     @Test
@@ -180,7 +174,7 @@ class SteamPriceControllerTest {
         Map<String, List<Long>> request = Map.of("itemIds", Arrays.asList());
 
         // Act
-        ResponseEntity<?> response = steamPriceController.updatePrices(request);
+        ResponseEntity<?> response = steamPriceController.updatePrices(request, testUser);
 
         // Assert
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
@@ -189,14 +183,27 @@ class SteamPriceControllerTest {
     }
 
     @Test
+    void testUpdatePrices_DeniesIdsThatDoNotBelongToUser() {
+        Map<String, List<Long>> request = Map.of("itemIds", List.of(99L));
+        when(itemRepository.findAllByIdInAndUserIdAndSteamFoundCheckTrue(List.of(99L), 1))
+                .thenReturn(List.of());
+
+        ResponseEntity<?> response = steamPriceController.updatePrices(request, testUser);
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        verify(applicationTaskExecutor, never()).execute(any(Runnable.class));
+        verify(steamPriceService, never()).updatePricesForItems(anyList());
+    }
+
+    @Test
     void testGetPriceHistory_Success() {
         // Arrange
-        when(itemRepository.findById(1L)).thenReturn(Optional.of(testItem));
+        when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.of(testItem));
         when(priceHistoryRepository.findByItemIdOrderByDateExtractedDesc(1L))
                 .thenReturn(Arrays.asList(testPriceHistory));
 
         // Act
-        ResponseEntity<List<PriceHistoryDto>> response = steamPriceController.getPriceHistory(1L);
+        ResponseEntity<List<PriceHistoryDto>> response = steamPriceController.getPriceHistory(1L, testUser);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -208,13 +215,14 @@ class SteamPriceControllerTest {
     @Test
     void testGetPriceHistory_ItemNotFound() {
         // Arrange
-        when(itemRepository.findById(1L)).thenReturn(Optional.empty());
+        when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.empty());
 
         // Act
-        ResponseEntity<List<PriceHistoryDto>> response = steamPriceController.getPriceHistory(1L);
+        ResponseEntity<List<PriceHistoryDto>> response = steamPriceController.getPriceHistory(1L, testUser);
 
         // Assert
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        verify(priceHistoryRepository, never()).findByItemIdOrderByDateExtractedDesc(anyLong());
     }
 
     @Test
@@ -226,11 +234,11 @@ class SteamPriceControllerTest {
                 .price(new BigDecimal("60.00"))
                 .build();
 
-        when(itemRepository.findById(1L)).thenReturn(Optional.of(testItem));
+        when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.of(testItem));
         when(itemRepository.save(any(Item.class))).thenReturn(testItem);
 
         // Act
-        ResponseEntity<?> response = steamPriceController.updateItem(1L, itemDto);
+        ResponseEntity<?> response = steamPriceController.updateItem(1L, itemDto, testUser);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -241,26 +249,25 @@ class SteamPriceControllerTest {
     void testUpdateItem_ItemNotFound() {
         // Arrange
         SteamItemDto itemDto = SteamItemDto.builder().build();
-        when(itemRepository.findById(1L)).thenReturn(Optional.empty());
+        when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.empty());
 
         // Act
-        ResponseEntity<?> response = steamPriceController.updateItem(1L, itemDto);
+        ResponseEntity<?> response = steamPriceController.updateItem(1L, itemDto, testUser);
 
         // Assert
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        verify(itemRepository, never()).save(any(Item.class));
     }
 
     @Test
     void testDeleteItem_Success() {
         // Arrange
-        when(jwtService.extractUserId(anyString())).thenReturn("1");
-        when(userRepository.findById(1)).thenReturn(Optional.of(testUser));
         when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.of(testItem));
         doNothing().when(priceHistoryRepository).deleteByItemId(1L);
         doNothing().when(itemRepository).delete(testItem);
 
         // Act
-        ResponseEntity<?> response = steamPriceController.deleteItem(1L, "Bearer token", null);
+        ResponseEntity<?> response = steamPriceController.deleteItem(1L, testUser);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());

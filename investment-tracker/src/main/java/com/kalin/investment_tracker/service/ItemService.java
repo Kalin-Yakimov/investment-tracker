@@ -7,9 +7,7 @@ import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.model.ItemStatus;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.security.JwtService;
 import com.kalin.investment_tracker.user.User;
-import com.kalin.investment_tracker.user.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -26,21 +24,10 @@ public class ItemService {
     private ItemRepository itemRepository;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
     private CsItemRepository csItemRepository;
 
-    public User validateUser(String token, JwtService jwtService) {
-        String jwt = token.substring(7);
-        String userIdStr = jwtService.extractUserId(jwt);
-        return userRepository.findById(Integer.parseInt(userIdStr))
-                .orElseThrow(() -> new RuntimeException("User not found"));
-    }
-
-    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, allEntries = true)
-    public Item addItem(Item newItem, String token, JwtService jwtService) {
-        User user = validateUser(token, jwtService);
+    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public Item addItem(Item newItem, User user) {
         newItem.setUser(user);
         
         if (newItem.getCsItemId() != null) {
@@ -57,9 +44,8 @@ public class ItemService {
         return itemRepository.save(newItem);
     }
 
-    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, allEntries = true)
-    public Item updateItem(Long id, Item newItem, String token, JwtService jwtService) {
-        User user = validateUser(token, jwtService);
+    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public Item updateItem(Long id, Item newItem, User user) {
         // IDOR protection: query DB for item matching BOTH id AND authenticated userId
         return itemRepository.findByIdAndUserId(id, user.getId())
                 .map(item -> {
@@ -81,9 +67,7 @@ public class ItemService {
                 .orElseThrow(() -> new ItemNotFoundException(id));
     }
 
-    public Page<ItemResponseDto> getUserItems(String token, JwtService jwtService, int page, int size, String filter) {
-        User user = validateUser(token, jwtService);
-        
+    public Page<ItemResponseDto> getUserItems(User user, int page, int size, String filter) {
         ItemStatus statusFilter = null;
         org.springframework.data.domain.Sort sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "date");
 
@@ -107,9 +91,8 @@ public class ItemService {
         return mapPageToDtoBatch(items);
     }
 
-    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#token")
-    public java.util.Map<String, Object> getPortfolioSummary(String token, JwtService jwtService) {
-        User user = validateUser(token, jwtService);
+    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public java.util.Map<String, Object> getPortfolioSummary(User user) {
         long count = itemRepository.countAllUserItems(user.getId());
         java.math.BigDecimal totalBought = itemRepository.sumTotalInvestmentValue(user.getId());
         
@@ -119,23 +102,21 @@ public class ItemService {
         return summary;
     }
 
-    public ItemResponseDto getItemById(Long id) {
-        Item item = itemRepository.findById(id)
+    public ItemResponseDto getItemById(Long id, User user) {
+        Item item = itemRepository.findByIdAndUserId(id, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(id));
         return mapToDto(item);
     }
 
-    public Page<ItemResponseDto> getItemHistory(String token, JwtService jwtService, String name, int page, int size) {
-        User user = validateUser(token, jwtService);
+    public Page<ItemResponseDto> getItemHistory(User user, String name, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         Page<Item> items = itemRepository.findByUserIdAndItemNameOrderByDateDesc(user.getId(), normalizeString(name), pageable);
         
         return mapPageToDtoBatch(items);
     }
 
-    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, allEntries = true)
-    public String deleteItem(Long id, String token, JwtService jwtService) {
-        User user = validateUser(token, jwtService);
+    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public String deleteItem(Long id, User user) {
         // IDOR protection: verify ownership at DB level before deletion
         Item item = itemRepository.findByIdAndUserId(id, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(id));

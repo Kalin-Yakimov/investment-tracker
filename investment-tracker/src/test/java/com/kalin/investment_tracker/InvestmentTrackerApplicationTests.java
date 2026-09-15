@@ -1,45 +1,29 @@
 package com.kalin.investment_tracker;
 
-import com.kalin.investment_tracker.model.Item;
-import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.service.SteamPriceService;
+import com.kalin.investment_tracker.service.CsItemService;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import java.util.List;
-
-@SpringBootTest
+@SpringBootTest(properties = {
+		"spring.datasource.url=jdbc:h2:mem:context-test;MODE=MySQL;DB_CLOSE_DELAY=-1",
+		"spring.datasource.driver-class-name=org.h2.Driver",
+		"spring.datasource.username=sa",
+		"spring.datasource.password=",
+		"spring.jpa.hibernate.ddl-auto=create-drop",
+		"spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+		"spring.task.scheduling.enabled=false",
+		"spring.mail.username=test@example.com",
+		"spring.mail.password=test-password",
+		"security.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+})
 class InvestmentTrackerApplicationTests {
 
-	@Autowired
-	private ItemRepository itemRepository;
-
-	@Autowired
-	private SteamPriceService steamPriceService;
+	@MockitoBean
+	private CsItemService csItemService;
 
 	@Test
 	void contextLoads() {
-		System.out.println("=== DIAGNOSTIC START ===");
-		try {
-			List<Item> trackedItems = itemRepository.findAll().stream()
-					.filter(item -> Boolean.TRUE.equals(item.getSteamFoundCheck()))
-					.toList();
-			System.out.println("Tracked items count: " + trackedItems.size());
-			for (Item item : trackedItems) {
-				System.out.println("Item: id=" + item.getId() + ", name='" + item.getItemName() + "', marketHashName='" + item.getMarketHashName() + "', price=" + item.getPrice());
-				try {
-					java.math.BigDecimal fetched = steamPriceService.fetchCurrentPrice(item.getMarketHashName());
-					System.out.println(" -> Successfully fetched price from Steam: " + fetched);
-				} catch (Exception e) {
-					System.err.println(" -> FAILED to fetch price from Steam: " + e.getMessage());
-					e.printStackTrace();
-				}
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		System.out.println("=== DIAGNOSTIC END ===");
 	}
 
 }

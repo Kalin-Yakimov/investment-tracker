@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.handler;
 
 import com.kalin.investment_tracker.exeption.ExpiredTokenException;
+import com.kalin.investment_tracker.exeption.ItemNotFoundException;
 import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import jakarta.mail.MessagingException;
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +74,15 @@ public class GlobalExceptionHandler {
                                 .error(EXPIRED_TOKEN.getDescription())
                                 .build()
                 );
+    }
+
+    @ExceptionHandler(ItemNotFoundException.class)
+    public ResponseEntity<ExceptionResponse> handleException(ItemNotFoundException exp) {
+        return ResponseEntity
+                .status(NOT_FOUND)
+                .body(ExceptionResponse.builder()
+                        .error("The requested item was not found")
+                        .build());
     }
 
     @ExceptionHandler(InvalidRefreshTokenException.class)
