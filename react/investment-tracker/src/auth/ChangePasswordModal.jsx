@@ -61,6 +61,7 @@ function ChangePasswordModal({ show, onClose }) {
       setTimeout(() => {
         setSuccess("");
         onClose();
+        window.location.href = "/login?passwordChanged=true";
       }, 1800);
     } catch (err) {
       console.error("Change password error:", err);

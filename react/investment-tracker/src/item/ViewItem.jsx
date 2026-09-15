@@ -27,7 +27,7 @@ export default function ViewItem() {
   const loadItem = useCallback(async () => {
     try {
       const token = UserService.getToken();
-      const result = await axios.get(`http://localhost:8080/item/${id}`, {
+      const result = await axios.get(`${UserService.BASE_URL}/item/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -77,7 +77,7 @@ export default function ViewItem() {
     try {
       const token = UserService.getToken();
       const targetId = activeItem?.id || id;
-      await axios.delete(`http://localhost:8080/item/${targetId}`, {
+      await axios.delete(`${UserService.BASE_URL}/item/${targetId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

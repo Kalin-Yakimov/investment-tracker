@@ -1,7 +1,9 @@
 package com.kalin.investment_tracker.security;
 
-import com.kalin.investment_tracker.exeption.ExpiredTokenException;
-import io.jsonwebtoken.ExpiredJwtException;
+import com.kalin.investment_tracker.user.User;
+import com.kalin.investment_tracker.user.UserRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,9 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -26,7 +25,8 @@ import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
+    private final UserRepository userRepository;
+    private final AuthSessionService authSessionService;
 
     @Override
     protected void doFilterInternal(
@@ -36,7 +36,6 @@ public class JwtFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
         final String authHeader = request.getHeader(AUTHORIZATION);
         final String jwt;
-        final String userEmail;
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -44,24 +43,35 @@ public class JwtFilter extends OncePerRequestFilter {
 
         jwt = authHeader.substring(7);
         try {
-            userEmail = jwtService.extractUsername(jwt);
-        } catch (ExpiredJwtException e) {
-            throw new ExpiredTokenException("Expired Token");
-        }
+            Claims claims = jwtService.parseAndValidate(jwt);
+            Integer userId = jwtService.extractUserId(claims);
+            String sessionId = jwtService.extractSessionId(claims);
+            User user = userRepository.findById(userId).orElse(null);
 
-        if(userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
-            if(jwtService.isTokenValid(jwt, userDetails)) {
+            if (user == null
+                    || !user.isEnabled()
+                    || !user.isAccountNonLocked()
+                    || !user.isAccountNonExpired()
+                    || !user.isCredentialsNonExpired()
+                    || !jwtService.isAccessTokenForUser(claims, user)
+                    || !authSessionService.isSessionActive(sessionId, userId)) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or revoked access token");
+                return;
+            }
+
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
+                        user,
                         null,
-                        userDetails.getAuthorities()
+                        user.getAuthorities()
                 );
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
+            request.setAttribute("authSessionId", sessionId);
+        } catch (JwtException | IllegalArgumentException e) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired access token");
+            return;
         }
         filterChain.doFilter(request, response);
     }

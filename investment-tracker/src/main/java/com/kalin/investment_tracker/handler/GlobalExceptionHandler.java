@@ -1,7 +1,9 @@
 package com.kalin.investment_tracker.handler;
 
 import com.kalin.investment_tracker.exeption.ExpiredTokenException;
+import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import jakarta.mail.MessagingException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -18,6 +20,7 @@ import static com.kalin.investment_tracker.handler.BusinessErrorCodes.*;
 import static org.springframework.http.HttpStatus.*;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(LockedException.class)
@@ -72,13 +75,26 @@ public class GlobalExceptionHandler {
                 );
     }
 
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ExceptionResponse> handleException(InvalidRefreshTokenException exp) {
+        return ResponseEntity
+                .status(UNAUTHORIZED)
+                .body(
+                        ExceptionResponse.builder()
+                                .businessErrorDescription("Invalid or expired refresh token")
+                                .error("The session is no longer valid. Please sign in again.")
+                                .build()
+                );
+    }
+
     @ExceptionHandler(MessagingException.class)
     public ResponseEntity<ExceptionResponse> handleException(MessagingException exp) {
+        log.error("Email delivery failed", exp);
         return ResponseEntity
                 .status(INTERNAL_SERVER_ERROR)
                 .body(
                         ExceptionResponse.builder()
-                                .error(exp.getMessage())
+                                .error("The email could not be sent. Please try again later.")
                                 .build()
                 );
     }
@@ -102,14 +118,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ExceptionResponse> handleException(Exception exp) {
-        // log the exception
-        exp.printStackTrace();
+        log.error("Unhandled server error", exp);
         return ResponseEntity
                 .status(INTERNAL_SERVER_ERROR)
                 .body(
                         ExceptionResponse.builder()
                                 .businessErrorDescription("Internal error")
-                                .error(exp.getMessage())
+                                .error("An unexpected server error occurred")
                                 .build()
                 );
     }

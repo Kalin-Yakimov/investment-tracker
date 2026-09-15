@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
-@CrossOrigin("http://localhost:3000")
 @RequestMapping("/api")
 @RequiredArgsConstructor
 @Slf4j

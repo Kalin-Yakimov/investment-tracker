@@ -20,6 +20,10 @@ public class Token {
     private LocalDateTime expiresAt;
     private LocalDateTime validatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private TokenType type;
+
     @ManyToOne
     @JoinColumn(name = "userId", nullable = false)
     private User user;

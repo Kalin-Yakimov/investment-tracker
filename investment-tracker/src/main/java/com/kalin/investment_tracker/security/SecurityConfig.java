@@ -36,12 +36,19 @@ public class SecurityConfig {
                                 "/api/v1/auth/activate-account",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
-                                "/api/v1/auth/validate-token"
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/logout"
                         ).permitAll()
                         // All Website Features (Portfolio, Price Tracker, Search, Inventory Calculator) require login
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(STATELESS))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, exception) ->
+                                response.sendError(401, "Authentication required"))
+                        .accessDeniedHandler((request, response, exception) ->
+                                response.sendError(403, "Access denied"))
+                )
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

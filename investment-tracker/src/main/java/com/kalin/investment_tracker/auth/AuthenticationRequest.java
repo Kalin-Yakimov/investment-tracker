@@ -21,5 +21,6 @@ public class AuthenticationRequest {
     @NotBlank(message = "Password is mandatory")
     @Size(min = 6, message = "Password should be at least 6 characters long")
     private String password;
+    private boolean rememberMe;
 }
 

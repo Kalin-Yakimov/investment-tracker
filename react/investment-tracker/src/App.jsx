@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import "../node_modules/bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./layout/Navbar";
 import Home from "./pages/Home";
@@ -14,20 +14,35 @@ import RegistrationPage from "./auth/RegistrationPage";
 import ActivateAccountPage from "./auth/ActivateAccountPage";
 import ForgotPasswordPage from "./auth/ForgotPasswordPage";
 import ProtectedRoute from "./service/ProtectedRoutes";
-import checkTokenExpiration from "./utils/checkTokenExpiration";
+import UserService from "./service/UserService";
 import { CookiesProvider } from "react-cookie";
 
 function App() {
   const [refresh, SetRefresh] = useState(false);
-  const navigate = useNavigate();
+  const [authReady, setAuthReady] = useState(false);
+  const [, setAuthVersion] = useState(0);
 
   useEffect(() => {
-    checkTokenExpiration(navigate);
-  }, [navigate]);
+    const unsubscribe = UserService.subscribe(() => {
+      setAuthVersion((version) => version + 1);
+    });
+    UserService.initializeSession().finally(() => setAuthReady(true));
+    return unsubscribe;
+  }, []);
 
   const handleItemAdded = () => {
     SetRefresh(!refresh);
   };
+
+  if (!authReady) {
+    return (
+      <div className="min-vh-100 d-flex align-items-center justify-content-center">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <CookiesProvider>

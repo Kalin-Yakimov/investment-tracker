@@ -3,8 +3,6 @@ import React, { useState, useEffect } from "react";
 import UserService from "../service/UserService";
 import DatePicker from "react-datepicker";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
-import checkTokenExpiration from "../utils/checkTokenExpiration";
 import "react-datepicker/dist/react-datepicker.module.css";
 import "../styles/AddItem.css";
 
@@ -21,8 +19,6 @@ export default function AddItem({ onItemAdded }) {
   const [csItems, setCsItems] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
-
   const { itemName, csItemId, itemStatus, date, quantity, price } = item;
 
   useEffect(() => {
@@ -49,7 +45,7 @@ export default function AddItem({ onItemAdded }) {
     try {
       const token = UserService.getToken();
       const response = await axios.get(
-        `http://localhost:8080/cs-items/search`,
+        `${UserService.BASE_URL}/cs-items/search`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -110,8 +106,6 @@ export default function AddItem({ onItemAdded }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-
-    checkTokenExpiration(navigate);
 
     if (!item.csItemId) {
       setError("Please select a valid CS item from the search dropdown menu.");

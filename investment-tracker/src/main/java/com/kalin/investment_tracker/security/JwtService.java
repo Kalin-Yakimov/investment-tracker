@@ -2,77 +2,91 @@ package com.kalin.investment_tracker.security;
 
 import com.kalin.investment_tracker.user.User;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
-import java.security.Key;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
+import java.util.UUID;
+import javax.crypto.SecretKey;
 
 @Service
+@RequiredArgsConstructor
 public class JwtService {
 
-    private final long jwtExpiration = 7776000000L; // 90 days (3 months) in milliseconds (90 * 24 * 60 * 60 * 1000)
-    private final String secretKey = "5696A3420E239F798374D232188E4CD8CD3EA18983FEF669DE16CA7501853A57";
+    private static final String TOKEN_TYPE_CLAIM = "tokenType";
+    private static final String ACCESS_TOKEN_TYPE = "access";
+    private static final String SESSION_ID_CLAIM = "sid";
 
-    public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
+    private final JwtProperties properties;
 
-    public String extractUserId(String token) {
-        return extractClaim(token, claims -> String.valueOf(claims.get("userId")));
-    }
+    public String generateAccessToken(User user, String sessionId) {
+        long now = System.currentTimeMillis();
+        long expiresAt = now + getAccessExpirationSeconds() * 1_000;
+        var authorities = user.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList();
 
-    public <T> T extractClaim(String token, Function<Claims, T> claimResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimResolver.apply(claims);
-    }
-
-    private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder().setSigningKey(getSignInKey()).build().parseClaimsJws(token).getBody();
-    }
-
-    public String generateToken(HashMap<String, Object> claims, UserDetails userDetails) {
-        if (userDetails instanceof User) {
-            User user = (User) userDetails;
-            claims.put("userId", user.getId());
-        }
-        return buildToken(claims, userDetails, jwtExpiration);
-    }
-
-    private String buildToken(Map<String, Object> extraClaims, UserDetails userDetails, long jwtExpiration) {
-        var authorities = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
         return Jwts.builder()
-                .setClaims(extraClaims)
-                .setSubject(userDetails.getUsername())
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
+                .id(UUID.randomUUID().toString())
+                .subject(String.valueOf(user.getId()))
+                .issuer(properties.getIssuer())
+                .audience().add(properties.getAudience()).and()
+                .issuedAt(new Date(now))
+                .expiration(new Date(expiresAt))
+                .claim(SESSION_ID_CLAIM, sessionId)
+                .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
+                .claim("email", user.getEmail())
+                .claim("fullName", user.fullName())
                 .claim("authorities", authorities)
-                .signWith(getSignInKey())
+                .signWith(getSignInKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
-    public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
+    public Claims parseAndValidate(String token) {
+        Jws<Claims> parsed = Jwts.parser()
+                .requireIssuer(properties.getIssuer())
+                .requireAudience(properties.getAudience())
+                .verifyWith(getSignInKey())
+                .build()
+                .parseSignedClaims(token);
+        return parsed.getPayload();
     }
 
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+    public boolean isAccessTokenForUser(Claims claims, User user) {
+        return ACCESS_TOKEN_TYPE.equals(claims.get(TOKEN_TYPE_CLAIM, String.class))
+                && String.valueOf(user.getId()).equals(claims.getSubject());
     }
 
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
+    public Integer extractUserId(Claims claims) {
+        return Integer.valueOf(claims.getSubject());
     }
 
-    private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+    public String extractUserId(String token) {
+        return String.valueOf(extractUserId(parseAndValidate(token)));
+    }
+
+    public String extractSessionId(Claims claims) {
+        return claims.get(SESSION_ID_CLAIM, String.class);
+    }
+
+    public long getAccessExpirationSeconds() {
+        return properties.getAccessExpirationMinutes() * 60;
+    }
+
+    private SecretKey getSignInKey() {
+        String secret = properties.getSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET is not configured");
+        }
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 256 bits");
+        }
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }

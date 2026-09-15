@@ -1,72 +1,106 @@
 import axios from "axios";
-import CookieService from "./CookieService";
 
-// Axios Interceptor: Catch 401/403 Unauthorized/Forbidden (expired tokens) and gracefully redirect to login
-axios.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const requestUrl = error.config?.url || "";
-    if (
-      error.response &&
-      (error.response.status === 401 || error.response.status === 403) &&
-      !requestUrl.includes("/inventory/calculate")
-    ) {
-      const currentPath = window.location.pathname;
-      if (
-        currentPath !== "/login" &&
-        currentPath !== "/registration" &&
-        currentPath !== "/forgot-password"
-      ) {
-        UserService.removeToken();
-        window.location.href = "/login?expired=true";
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+let refreshPromise = null;
 
 class UserService {
-  static BASE_URL = "http://localhost:8080";
-  static TOKEN_KEY = "user_token";
+  static BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080";
+  static accessToken = null;
+  static authListeners = new Set();
 
-  static saveToken(token, rememberMe = true) {
-    const options = {
-      secure: true,
-      sameSite: "strict",
-    };
-    if (rememberMe) {
-      options.maxAge = 90 * 24 * 60 * 60; // 90 days (3 months) in seconds (7,776,000s)
-    }
-    CookieService.setCookie(UserService.TOKEN_KEY, token, options);
+  static saveToken(token) {
+    UserService.accessToken = token || null;
+    UserService.notifyAuthChanged();
   }
 
   static getToken() {
-    return CookieService.getCookie(UserService.TOKEN_KEY);
+    return UserService.accessToken;
   }
 
   static removeToken() {
-    CookieService.removeCookie(UserService.TOKEN_KEY);
-    CookieService.removeCookie("role");
+    UserService.accessToken = null;
+    UserService.notifyAuthChanged();
+  }
+
+  static isAuthenticated() {
+    return Boolean(UserService.accessToken);
+  }
+
+  static subscribe(listener) {
+    UserService.authListeners.add(listener);
+    return () => UserService.authListeners.delete(listener);
+  }
+
+  static notifyAuthChanged() {
+    UserService.authListeners.forEach((listener) => listener());
+  }
+
+  static async initializeSession() {
+    if (UserService.accessToken) return true;
+    return UserService.refreshAccessToken();
+  }
+
+  static async refreshAccessToken() {
+    if (!refreshPromise) {
+      const requestNewToken = () =>
+        axios
+          .post(
+            `${UserService.BASE_URL}/api/v1/auth/refresh`,
+            {},
+            { withCredentials: true, skipAuthRefresh: true },
+          )
+          .then((response) => {
+            UserService.saveToken(response.data.token);
+            return true;
+          })
+          .catch(() => {
+            UserService.removeToken();
+            return false;
+          });
+
+      const guardedRequest =
+        typeof navigator !== "undefined" && navigator.locks
+          ? navigator.locks.request("investment-tracker-refresh", requestNewToken)
+          : requestNewToken();
+
+      refreshPromise = guardedRequest.finally(() => {
+        refreshPromise = null;
+      });
+    }
+    return refreshPromise;
   }
 
   static async login(email, password, rememberMe = true) {
     try {
       const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/authenticate`,
-        { email, password }
+        { email, password, rememberMe },
+        { withCredentials: true, skipAuthRefresh: true },
       );
-      const { token, role } = response.data;
-      UserService.saveToken(token, rememberMe);
-      if (role) {
-        CookieService.setCookie(
-          "role",
-          role,
-          rememberMe ? { maxAge: 90 * 24 * 60 * 60 } : {}
-        );
-      }
+      const { token } = response.data;
+      UserService.saveToken(token);
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
+    }
+  }
+
+  static async logout() {
+    try {
+      await axios.post(
+        `${UserService.BASE_URL}/api/v1/auth/logout`,
+        {},
+        { withCredentials: true, skipAuthRefresh: true },
+      );
+    } finally {
+      UserService.removeToken();
+    }
+  }
+
+  static async logoutAll() {
+    try {
+      await axios.post(`${UserService.BASE_URL}/api/v1/auth/logout-all`, {});
+    } finally {
+      UserService.removeToken();
     }
   }
 
@@ -112,6 +146,7 @@ class UserService {
         `${UserService.BASE_URL}/api/v1/auth/reset-password`,
         { email, code, newPassword },
       );
+      UserService.removeToken();
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
@@ -130,6 +165,7 @@ class UserService {
           },
         },
       );
+      UserService.removeToken();
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
@@ -381,5 +417,60 @@ class UserService {
     }
   }
 }
+
+axios.defaults.withCredentials = true;
+
+axios.interceptors.request.use((config) => {
+  const token = UserService.getToken();
+  const url = config.url || "";
+  const isBackendRequest = url.startsWith(UserService.BASE_URL) || url.startsWith("/");
+  const isPublicAuthRequest = [
+    "/api/v1/auth/authenticate",
+    "/api/v1/auth/register",
+    "/api/v1/auth/activate-account",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout",
+  ].some((path) => url.includes(path));
+
+  if (token && isBackendRequest && !isPublicAuthRequest && !config.headers?.Authorization) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    const status = error.response?.status;
+
+    if (
+      status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !originalRequest.skipAuthRefresh
+    ) {
+      originalRequest._retry = true;
+      const refreshed = await UserService.refreshAccessToken();
+      if (refreshed) {
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${UserService.getToken()}`;
+        return axios(originalRequest);
+      }
+    }
+
+    if (status === 401 && !originalRequest?.skipAuthRefresh) {
+      UserService.removeToken();
+      const publicPaths = ["/login", "/registration", "/forgot-password", "/activate-account"];
+      if (!publicPaths.includes(window.location.pathname)) {
+        window.location.href = "/login?expired=true";
+      }
+    }
+    return Promise.reject(error);
+  },
+);
 
 export default UserService;

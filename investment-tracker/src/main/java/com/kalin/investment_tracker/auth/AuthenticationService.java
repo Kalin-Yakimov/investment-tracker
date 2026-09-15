@@ -2,16 +2,18 @@ package com.kalin.investment_tracker.auth;
 import com.kalin.investment_tracker.email.EmailService;
 import com.kalin.investment_tracker.email.EmailTemplateName;
 import com.kalin.investment_tracker.role.RoleRepository;
+import com.kalin.investment_tracker.security.AuthSessionService;
 import com.kalin.investment_tracker.security.JwtService;
 import com.kalin.investment_tracker.user.Token;
 import com.kalin.investment_tracker.user.TokenRepository;
+import com.kalin.investment_tracker.user.TokenType;
 import com.kalin.investment_tracker.user.User;
 import com.kalin.investment_tracker.user.UserRepository;
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 
 @Service
@@ -33,7 +34,9 @@ public class AuthenticationService {
     private final EmailService emailService;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
-    private String activationUrl = "http://localhost:3000/activate-account";
+    private final AuthSessionService authSessionService;
+    @Value("${app.frontend.base-url:http://localhost:3000}")
+    private String frontendBaseUrl;
 
     public void register(RegistrationRequest request) throws MessagingException {
         if (userRepository.existsByUsername(request.getUsername())) {
@@ -58,24 +61,34 @@ public class AuthenticationService {
     }
 
     private void sendValidationEmail(User user) throws MessagingException {
-        var newToken = generateAndSaveActivationToken(user);
+        var newToken = generateAndSaveVerificationToken(user, TokenType.ACCOUNT_ACTIVATION);
 
         emailService.sendEmail(
                 user.getEmail(),
                 user.fullName(),
                 EmailTemplateName.ACTIVATE_ACCOUNT,
-                activationUrl,
+                frontendBaseUrl + "/activate-account",
                 newToken,
                 "Account activation"
         );
     }
 
-    private String generateAndSaveActivationToken(User user) {
-        String generatedToken = generateAndSaveActivationCode(6);
+    private String generateAndSaveVerificationToken(User user, TokenType type) {
+        LocalDateTime now = LocalDateTime.now();
+        var activeTokens = tokenRepository.findAllByUserIdAndTypeAndValidatedAtIsNull(user.getId(), type);
+        activeTokens.forEach(existingToken -> existingToken.setValidatedAt(now));
+        tokenRepository.saveAll(activeTokens);
+
+        String generatedToken;
+        do {
+            generatedToken = generateAndSaveActivationCode(6);
+        } while (tokenRepository.existsByTokenAndValidatedAtIsNull(generatedToken));
+
         var token = Token.builder()
                 .token(generatedToken)
-                .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusMinutes(15))
+                .createdAt(now)
+                .expiresAt(now.plusMinutes(15))
+                .type(type)
                 .user(user)
                 .build();
         tokenRepository.save(token);
@@ -93,7 +106,11 @@ public class AuthenticationService {
         return codeBuilder.toString();
     }
 
-    public AuthenticationResponse authenticate(AuthenticationRequest request) {
+    public AuthenticationResult authenticate(
+            AuthenticationRequest request,
+            String userAgent,
+            String ipAddress
+    ) {
         var auth = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
@@ -101,18 +118,49 @@ public class AuthenticationService {
                 )
         );
         var user = (User) auth.getPrincipal();
-        var claims = new HashMap<String, Object>();
-        claims.put("fullName", user.fullName());
-        claims.put("userId", user.getId());
-        var jwtToken = jwtService.generateToken(claims, user);
-        return AuthenticationResponse.builder()
-                .token(jwtToken).build();
+        var issuedRefreshToken = authSessionService.createSession(
+                user,
+                request.isRememberMe(),
+                userAgent,
+                ipAddress
+        );
+        var session = issuedRefreshToken.session();
+
+        return new AuthenticationResult(
+                buildAuthenticationResponse(user, session.getId()),
+                issuedRefreshToken.rawToken(),
+                session.isRemembered(),
+                session.getExpiresAt()
+        );
+    }
+
+    public AuthenticationResult refresh(String refreshToken) {
+        var rotated = authSessionService.rotateRefreshToken(refreshToken);
+        return new AuthenticationResult(
+                buildAuthenticationResponse(rotated.user(), rotated.sessionId()),
+                rotated.rawToken(),
+                rotated.remembered(),
+                rotated.expiresAt()
+        );
+    }
+
+    public void logout(String refreshToken) {
+        authSessionService.revokeByRefreshToken(refreshToken);
+    }
+
+    public void logoutAll(java.security.Principal connectedUser) {
+        authSessionService.revokeAllForUser(getAuthenticatedUser(connectedUser).getId());
     }
 
     public void activateAccount(String token) throws MessagingException {
-        Token savedToken = tokenRepository.findByToken(token)
+        Token savedToken = tokenRepository.findByTokenAndType(token, TokenType.ACCOUNT_ACTIVATION)
                 .orElseThrow(() -> new RuntimeException("Invalid token"));
+        if (savedToken.getValidatedAt() != null) {
+            throw new RuntimeException("Activation code has already been used");
+        }
         if (LocalDateTime.now().isAfter(savedToken.getExpiresAt())) {
+            savedToken.setValidatedAt(LocalDateTime.now());
+            tokenRepository.save(savedToken);
             sendValidationEmail(savedToken.getUser());
             throw new RuntimeException("Activation token has expired. A new token has been sent to the same email");
         }
@@ -124,21 +172,19 @@ public class AuthenticationService {
         tokenRepository.save(savedToken);
     }
 
-    public boolean validateToken(String token, UserDetails userDetails) {
-        return jwtService.isTokenValid(token, userDetails);
-    }
-
     public void forgotPassword(ForgotPasswordRequest request) throws MessagingException {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("No account found with email: " + request.getEmail()));
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        if (user == null) {
+            return;
+        }
 
-        String resetCode = generateAndSaveActivationToken(user);
+        String resetCode = generateAndSaveVerificationToken(user, TokenType.PASSWORD_RESET);
 
         emailService.sendEmail(
                 user.getEmail(),
                 user.fullName(),
                 EmailTemplateName.RESET_PASSWORD,
-                "http://localhost:3000/forgot-password",
+                frontendBaseUrl + "/forgot-password",
                 resetCode,
                 "Password Reset Request"
         );
@@ -148,19 +194,27 @@ public class AuthenticationService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("No account found with email: " + request.getEmail()));
 
-        Token savedToken = tokenRepository.findByToken(request.getCode())
+        Token savedToken = tokenRepository.findByTokenAndType(request.getCode(), TokenType.PASSWORD_RESET)
                 .orElseThrow(() -> new RuntimeException("Invalid or expired reset code"));
+
+        if (savedToken.getValidatedAt() != null) {
+            throw new RuntimeException("Reset code has already been used");
+        }
 
         if (!savedToken.getUser().getId().equals(user.getId())) {
             throw new RuntimeException("Invalid reset code for this account");
         }
 
         if (LocalDateTime.now().isAfter(savedToken.getExpiresAt())) {
+            savedToken.setValidatedAt(LocalDateTime.now());
+            tokenRepository.save(savedToken);
             throw new RuntimeException("Reset code has expired. Please request a new code.");
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+
+        authSessionService.revokeAllForUser(user.getId());
 
         savedToken.setValidatedAt(LocalDateTime.now());
         tokenRepository.save(savedToken);
@@ -205,9 +259,14 @@ public class AuthenticationService {
         // Save encoded new password
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        authSessionService.revokeAllForUser(user.getId());
     }
 
-    public AuthenticationResponse changeUsername(ChangeUsernameRequest request, java.security.Principal connectedUser) {
+    public AuthenticationResponse changeUsername(
+            ChangeUsernameRequest request,
+            java.security.Principal connectedUser,
+            String sessionId
+    ) {
         var user = getAuthenticatedUser(connectedUser);
 
         String newUsername = request.getNewUsername().trim();
@@ -218,13 +277,13 @@ public class AuthenticationService {
         user.setUsername(newUsername);
         userRepository.save(user);
 
-        var claims = new HashMap<String, Object>();
-        claims.put("fullName", user.fullName());
-        claims.put("userId", user.getId());
-        var jwtToken = jwtService.generateToken(claims, user);
+        return buildAuthenticationResponse(user, sessionId);
+    }
 
+    private AuthenticationResponse buildAuthenticationResponse(User user, String sessionId) {
         return AuthenticationResponse.builder()
-                .token(jwtToken)
+                .token(jwtService.generateAccessToken(user, sessionId))
+                .expiresInSeconds(jwtService.getAccessExpirationSeconds())
                 .build();
     }
 }

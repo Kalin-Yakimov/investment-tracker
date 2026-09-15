@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from "react";
 import "../styles/Navbar.css";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import UserService from "../service/UserService";
-import checkTokenExpiration from "../utils/checkTokenExpiration";
 import ChangePasswordModal from "../auth/ChangePasswordModal";
 import ChangeUsernameModal from "../auth/ChangeUsernameModal";
 
@@ -17,18 +16,10 @@ export default function Navbar() {
   const menuRef = useRef(null);
 
   useEffect(() => {
-    const token = UserService.getToken();
-    if (token) {
-      const isTokenExpired = checkTokenExpiration(navigate);
-      if (!isTokenExpired) {
-        setIsLoggedIn(true);
-      } else {
-        setIsLoggedIn(false);
-      }
-    } else {
-      setIsLoggedIn(false);
-    }
-  }, [navigate, location, refreshUser]);
+    const updateLoginState = () => setIsLoggedIn(UserService.isAuthenticated());
+    updateLoginState();
+    return UserService.subscribe(updateLoginState);
+  }, [location, refreshUser]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -40,10 +31,20 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowProfileMenu(false);
-    UserService.removeToken();
-    setIsLoggedIn(false);
+    await UserService.logout();
+    navigate("/login");
+  };
+
+  const handleLogoutAll = async () => {
+    const confirmed = window.confirm(
+      "Sign out from all devices? You will need to sign in again.",
+    );
+    if (!confirmed) return;
+
+    setShowProfileMenu(false);
+    await UserService.logoutAll();
     navigate("/login");
   };
 
@@ -53,8 +54,8 @@ export default function Navbar() {
       if (!token) return { name: "User Account", email: "user@account.com" };
       const payload = JSON.parse(atob(token.split(".")[1]));
       return {
-        name: payload.fullName || payload.sub || "User Account",
-        email: payload.sub || "user@account.com",
+        name: payload.fullName || payload.email || "User Account",
+        email: payload.email || "user@account.com",
       };
     } catch {
       return { name: "User Account", email: "user@account.com" };
@@ -158,6 +159,13 @@ export default function Navbar() {
                         >
                           <span>🚪</span>
                           <span className="small fw-semibold">Sign Out</span>
+                        </button>
+                        <button
+                          className="popover-item-btn text-danger d-flex align-items-center gap-2 btn text-start w-100 py-2 px-3 rounded-2"
+                          onClick={handleLogoutAll}
+                        >
+                          <span>🛡️</span>
+                          <span className="small fw-semibold">Sign Out All Devices</span>
                         </button>
                       </div>
                     </div>

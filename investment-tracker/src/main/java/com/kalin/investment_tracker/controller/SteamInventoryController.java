@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@CrossOrigin("http://localhost:3000")
 @RequestMapping("/api/v1/inventory")
 @RequiredArgsConstructor
 @Slf4j

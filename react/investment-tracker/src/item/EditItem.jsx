@@ -33,7 +33,7 @@ export default function EditItem() {
   const loadItem = useCallback(async () => {
     try {
       const token = UserService.getToken();
-      const result = await axios.get(`http://localhost:8080/item/${id}`, {
+      const result = await axios.get(`${UserService.BASE_URL}/item/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -66,7 +66,7 @@ export default function EditItem() {
       const formattedDate = format(date, "dd.MM.yyyy");
       const token = UserService.getToken();
       await axios.put(
-        `http://localhost:8080/item/${id}`,
+        `${UserService.BASE_URL}/item/${id}`,
         { ...item, date: formattedDate },
         {
           headers: {

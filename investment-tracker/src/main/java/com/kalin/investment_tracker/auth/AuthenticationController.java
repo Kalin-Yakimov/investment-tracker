@@ -1,12 +1,22 @@
 package com.kalin.investment_tracker.auth;
 
+import com.kalin.investment_tracker.security.AuthSessionProperties;
+import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.mail.MessagingException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Cookie;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
+import java.time.Duration;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -15,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthenticationController {
 
     private final AuthenticationService service;
+    private final AuthSessionProperties authSessionProperties;
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -27,9 +38,42 @@ public class AuthenticationController {
 
     @PostMapping("/authenticate")
     public ResponseEntity<AuthenticationResponse> authenticate(
-            @RequestBody @Valid AuthenticationRequest request
+            @RequestBody @Valid AuthenticationRequest request,
+            HttpServletRequest httpRequest
     ) {
-        return ResponseEntity.ok(service.authenticate(request));
+        AuthenticationResult result = service.authenticate(
+                request,
+                httpRequest.getHeader(HttpHeaders.USER_AGENT),
+                httpRequest.getRemoteAddr()
+        );
+        return withRefreshCookie(result);
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(HttpServletRequest request) {
+        try {
+            return withRefreshCookie(service.refresh(readRefreshToken(request)));
+        } catch (InvalidRefreshTokenException exception) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
+                    .build();
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(HttpServletRequest request) {
+        service.logout(readRefreshToken(request));
+        return ResponseEntity.noContent()
+                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
+                .build();
+    }
+
+    @PostMapping("/logout-all")
+    public ResponseEntity<Void> logoutAll(Principal connectedUser) {
+        service.logoutAll(connectedUser);
+        return ResponseEntity.noContent()
+                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
+                .build();
     }
 
     @GetMapping("/activate-account")
@@ -40,17 +84,8 @@ public class AuthenticationController {
     }
 
     @GetMapping("/validate-token")
-    public ResponseEntity<Void> validateToken(@RequestHeader("Authorization") String tokenHeader) {
-        try {
-            String token = tokenHeader.substring("Bearer ".length());
-            if (service.validateToken(token, null)) { // Pass null for UserDetails if not needed
-                return ResponseEntity.ok().build();
-            } else {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+    public ResponseEntity<Void> validateToken() {
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/forgot-password")
@@ -66,24 +101,84 @@ public class AuthenticationController {
             @RequestBody @Valid ResetPasswordRequest request
     ) {
         service.resetPassword(request);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
+                .build();
     }
 
     @PatchMapping("/change-password")
     public ResponseEntity<?> changePassword(
             @RequestBody @Valid ChangePasswordRequest request,
-            java.security.Principal connectedUser
+            Principal connectedUser
     ) {
         service.changePassword(request, connectedUser);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
+                .build();
     }
 
     @PatchMapping("/change-username")
     public ResponseEntity<AuthenticationResponse> changeUsername(
             @RequestBody @Valid ChangeUsernameRequest request,
-            java.security.Principal connectedUser
+            Principal connectedUser,
+            @RequestAttribute("authSessionId") String sessionId
     ) {
-        return ResponseEntity.ok(service.changeUsername(request, connectedUser));
+        return ResponseEntity.ok(service.changeUsername(request, connectedUser, sessionId));
     }
 
+    private ResponseEntity<AuthenticationResponse> withRefreshCookie(AuthenticationResult result) {
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.SET_COOKIE,
+                        buildRefreshCookie(
+                                result.refreshToken(),
+                                result.remembered(),
+                                result.refreshExpiresAt()
+                        ).toString()
+                )
+                .body(result.response());
+    }
+
+    private ResponseCookie buildRefreshCookie(
+            String value,
+            boolean remembered,
+            LocalDateTime expiresAt
+    ) {
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie
+                .from(authSessionProperties.getRefreshCookieName(), value)
+                .httpOnly(true)
+                .secure(authSessionProperties.isCookieSecure())
+                .sameSite(authSessionProperties.getCookieSameSite())
+                .path("/api/v1/auth");
+
+        if (remembered) {
+            long maxAgeSeconds = Math.max(0, Duration.between(LocalDateTime.now(), expiresAt).toSeconds());
+            builder.maxAge(Duration.ofSeconds(maxAgeSeconds));
+        }
+        return builder.build();
+    }
+
+    private ResponseCookie clearRefreshCookie() {
+        return ResponseCookie
+                .from(authSessionProperties.getRefreshCookieName(), "")
+                .httpOnly(true)
+                .secure(authSessionProperties.isCookieSecure())
+                .sameSite(authSessionProperties.getCookieSameSite())
+                .path("/api/v1/auth")
+                .maxAge(Duration.ZERO)
+                .build();
+    }
+
+    private String readRefreshToken(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        for (Cookie cookie : cookies) {
+            if (authSessionProperties.getRefreshCookieName().equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
 }

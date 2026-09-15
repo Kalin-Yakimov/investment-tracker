@@ -33,6 +33,8 @@ function LoginPage() {
     const searchParams = new URLSearchParams(location.search);
     if (searchParams.get("expired") === "true") {
       setInfoMessage("Your session has expired. Please sign in again.");
+    } else if (searchParams.get("passwordChanged") === "true") {
+      setInfoMessage("Your password was changed. Please sign in again.");
     }
   }, [location]);
 
