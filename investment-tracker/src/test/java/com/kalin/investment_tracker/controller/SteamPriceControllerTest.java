@@ -89,7 +89,7 @@ class SteamPriceControllerTest {
     @Test
     void testGetAllItems_Success() {
         // Arrange
-        when(itemRepository.findAll()).thenReturn(Arrays.asList(testItem));
+        when(itemRepository.findAllSteamTrackedItems()).thenReturn(Arrays.asList(testItem));
 
         // Act
         ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems(null, false);
@@ -105,7 +105,7 @@ class SteamPriceControllerTest {
     void testGetAllItems_WithToken() {
         // Arrange
         when(jwtService.extractUserId(anyString())).thenReturn("1");
-        when(itemRepository.findAll()).thenReturn(Arrays.asList(testItem));
+        when(itemRepository.findSteamTrackedItemsByUserId(1)).thenReturn(Arrays.asList(testItem));
 
         // Act
         ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems("Bearer token", false);
@@ -131,10 +131,8 @@ class SteamPriceControllerTest {
         when(userRepository.findById(1)).thenReturn(Optional.of(testUser));
         when(itemRepository.save(any(Item.class))).thenReturn(testItem);
         when(jwtService.extractUserId(anyString())).thenReturn("1");
-        when(priceHistoryRepository.save(any(PriceHistory.class))).thenReturn(testPriceHistory);
-
         // Act
-        ResponseEntity<?> response = steamPriceController.addItem(itemDto, "Bearer token");
+        ResponseEntity<?> response = steamPriceController.addItem(itemDto, "Bearer token", null);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -150,7 +148,11 @@ class SteamPriceControllerTest {
                 .build();
 
         // Act
-        ResponseEntity<?> response = steamPriceController.addItem(itemDto, "Bearer token");
+        org.springframework.security.core.Authentication authentication =
+                mock(org.springframework.security.core.Authentication.class);
+        when(authentication.getPrincipal()).thenReturn(testUser);
+
+        ResponseEntity<?> response = steamPriceController.addItem(itemDto, null, authentication);
 
         // Assert
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
@@ -251,15 +253,20 @@ class SteamPriceControllerTest {
     @Test
     void testDeleteItem_Success() {
         // Arrange
+        when(jwtService.extractUserId(anyString())).thenReturn("1");
+        when(userRepository.findById(1)).thenReturn(Optional.of(testUser));
+        when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.of(testItem));
         doNothing().when(priceHistoryRepository).deleteByItemId(1L);
-        doNothing().when(itemRepository).deleteById(1L);
+        doNothing().when(itemRepository).delete(testItem);
 
         // Act
-        ResponseEntity<?> response = steamPriceController.deleteItem(1L);
+        ResponseEntity<?> response = steamPriceController.deleteItem(1L, "Bearer token", null);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody() instanceof Map);
+        verify(priceHistoryRepository).deleteByItemId(1L);
+        verify(itemRepository).delete(testItem);
     }
 
     @Test

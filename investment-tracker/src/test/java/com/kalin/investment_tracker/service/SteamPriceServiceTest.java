@@ -184,42 +184,42 @@ class SteamPriceServiceTest {
         when(jsonNode.get("lowest_price")).thenReturn(mock(com.fasterxml.jackson.databind.node.TextNode.class));
         when(jsonNode.get("lowest_price").asText()).thenReturn("$55.00");
 
-        when(itemRepository.findById(1L)).thenReturn(Optional.of(testItem));
-        when(itemRepository.save(any(Item.class))).thenReturn(testItem);
-        when(priceHistoryRepository.save(any(PriceHistory.class))).thenReturn(new PriceHistory());
+        when(itemRepository.findAllById(java.util.List.of(1L))).thenReturn(java.util.List.of(testItem));
+        when(itemRepository.saveAll(any())).thenReturn(java.util.List.of(testItem));
+        when(priceHistoryRepository.saveAll(any())).thenReturn(java.util.List.of(new PriceHistory()));
 
         // Act
         steamPriceService.updatePricesForItems(java.util.List.of(1L));
 
         // Assert
-        verify(itemRepository, times(1)).save(any(Item.class));
-        verify(priceHistoryRepository, times(1)).save(any(PriceHistory.class));
+        verify(itemRepository, times(1)).saveAll(any());
+        verify(priceHistoryRepository, times(1)).saveAll(any());
     }
 
     @Test
     void testUpdatePricesForItems_ItemNotFound() {
         // Arrange
-        when(itemRepository.findById(1L)).thenReturn(Optional.empty());
+        when(itemRepository.findAllById(java.util.List.of(1L))).thenReturn(java.util.List.of());
 
         // Act
         steamPriceService.updatePricesForItems(java.util.List.of(1L));
 
         // Assert
-        verify(itemRepository, never()).save(any(Item.class));
-        verify(priceHistoryRepository, never()).save(any(PriceHistory.class));
+        verify(itemRepository, never()).saveAll(any());
+        verify(priceHistoryRepository, never()).saveAll(any());
     }
 
     @Test
     void testUpdatePricesForItems_NoMarketHashName() {
         // Arrange
         testItem.setMarketHashName(null);
-        when(itemRepository.findById(1L)).thenReturn(Optional.of(testItem));
+        when(itemRepository.findAllById(java.util.List.of(1L))).thenReturn(java.util.List.of(testItem));
 
         // Act
         steamPriceService.updatePricesForItems(java.util.List.of(1L));
 
         // Assert
-        verify(itemRepository, never()).save(any(Item.class));
-        verify(priceHistoryRepository, never()).save(any(PriceHistory.class));
+        verify(itemRepository, never()).saveAll(any());
+        verify(priceHistoryRepository, never()).saveAll(any());
     }
 }

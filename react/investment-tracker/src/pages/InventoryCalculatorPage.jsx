@@ -10,7 +10,6 @@ function InventoryCalculatorPage() {
   const [result, setResult] = useState(null);
 
   const [activeCategory, setActiveCategory] = useState("All");
-  const [tableSearch, setTableSearch] = useState("");
 
   const handleCalculate = async (e) => {
     if (e) e.preventDefault();
@@ -274,7 +273,7 @@ function InventoryCalculatorPage() {
               </div>
             ) : (
               <div className="text-center py-4 text-white-50">
-                No items found matching category "{activeCategory}" {tableSearch && `and query "${tableSearch}"`}.
+                No items found matching category "{activeCategory}".
               </div>
             )}
           </div>
