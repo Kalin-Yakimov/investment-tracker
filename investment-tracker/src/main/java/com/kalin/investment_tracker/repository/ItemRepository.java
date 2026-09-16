@@ -20,6 +20,24 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) AND (:status IS NULL OR i.itemStatus = :status)")
     Page<Item> findByUserIdAndOptionalStatus(@Param("userId") Integer userId, @Param("status") com.kalin.investment_tracker.model.ItemStatus status, Pageable pageable);
 
+    @Query(
+            value = "SELECT i FROM Item i WHERE i.user.id = :userId " +
+                    "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) " +
+                    "ORDER BY (COALESCE(i.price, 0) * i.quantity) DESC",
+            countQuery = "SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId " +
+                    "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)"
+    )
+    Page<Item> findPortfolioOrderByTotalPriceDesc(@Param("userId") Integer userId, Pageable pageable);
+
+    @Query(
+            value = "SELECT i FROM Item i WHERE i.user.id = :userId " +
+                    "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) " +
+                    "ORDER BY (COALESCE(i.price, 0) * i.quantity) ASC",
+            countQuery = "SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId " +
+                    "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)"
+    )
+    Page<Item> findPortfolioOrderByTotalPriceAsc(@Param("userId") Integer userId, Pageable pageable);
+
     // Used for the item history (non-Steam items only).
     @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND i.itemName = :itemName AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) ORDER BY i.date DESC")
     Page<Item> findByUserIdAndItemNameOrderByDateDesc(@Param("userId") Integer userId, @Param("itemName") String itemName, Pageable pageable);

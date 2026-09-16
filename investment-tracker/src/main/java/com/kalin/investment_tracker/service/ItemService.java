@@ -79,14 +79,23 @@ public class ItemService {
             sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "date");
         } else if ("highest_quantity".equalsIgnoreCase(filter)) {
             sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "quantity");
-        } else if ("highest_unit_price".equalsIgnoreCase(filter) || "highest_total_price".equalsIgnoreCase(filter)) {
+        } else if ("highest_unit_price".equalsIgnoreCase(filter)) {
             sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "price");
-        } else if ("lowest_unit_price".equalsIgnoreCase(filter) || "lowest_total_price".equalsIgnoreCase(filter)) {
+        } else if ("lowest_unit_price".equalsIgnoreCase(filter)) {
             sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "price");
         }
 
-        Pageable pageable = PageRequest.of(page, size, sort);
-        Page<Item> items = itemRepository.findByUserIdAndOptionalStatus(user.getId(), statusFilter, pageable);
+        Page<Item> items;
+        if ("highest_total_price".equalsIgnoreCase(filter)) {
+            items = itemRepository.findPortfolioOrderByTotalPriceDesc(
+                    user.getId(), PageRequest.of(page, size));
+        } else if ("lowest_total_price".equalsIgnoreCase(filter)) {
+            items = itemRepository.findPortfolioOrderByTotalPriceAsc(
+                    user.getId(), PageRequest.of(page, size));
+        } else {
+            Pageable pageable = PageRequest.of(page, size, sort);
+            items = itemRepository.findByUserIdAndOptionalStatus(user.getId(), statusFilter, pageable);
+        }
         
         return mapPageToDtoBatch(items);
     }

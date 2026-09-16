@@ -13,6 +13,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 		"spring.jpa.hibernate.ddl-auto=create-drop",
 		"spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
 		"spring.task.scheduling.enabled=false",
+		"price.update.initial-delay-ms=3600000",
 		"spring.mail.username=test@example.com",
 		"spring.mail.password=test-password",
 		"security.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="

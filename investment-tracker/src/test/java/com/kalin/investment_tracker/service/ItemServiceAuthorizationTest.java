@@ -11,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.Optional;
 
@@ -74,5 +76,35 @@ class ItemServiceAuthorizationTest {
         );
 
         verify(itemRepository, never()).delete(org.mockito.ArgumentMatchers.any(Item.class));
+    }
+
+    @Test
+    void highestTotalPriceIsSortedInDatabaseBeforePagination() {
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(itemRepository.findPortfolioOrderByTotalPriceDesc(7, pageable))
+                .thenReturn(Page.empty(pageable));
+
+        itemService.getUserItems(authenticatedUser, 0, 10, "highest_total_price");
+
+        verify(itemRepository).findPortfolioOrderByTotalPriceDesc(7, pageable);
+        verify(itemRepository, never()).findByUserIdAndOptionalStatus(
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void lowestTotalPriceIsSortedInDatabaseBeforePagination() {
+        PageRequest pageable = PageRequest.of(1, 10);
+        when(itemRepository.findPortfolioOrderByTotalPriceAsc(7, pageable))
+                .thenReturn(Page.empty(pageable));
+
+        itemService.getUserItems(authenticatedUser, 1, 10, "lowest_total_price");
+
+        verify(itemRepository).findPortfolioOrderByTotalPriceAsc(7, pageable);
+        verify(itemRepository, never()).findByUserIdAndOptionalStatus(
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 }
