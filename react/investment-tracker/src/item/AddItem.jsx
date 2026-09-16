@@ -36,7 +36,7 @@ export default function AddItem({ onItemAdded }) {
         setCsItems([]);
         setShowDropdown(false);
       }
-    }, 300);
+    }, 1500);
 
     return () => clearTimeout(delayDebounceFn);
   }, [itemName, csItemId]);

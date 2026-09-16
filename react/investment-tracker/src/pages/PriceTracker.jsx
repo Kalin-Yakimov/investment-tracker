@@ -376,7 +376,7 @@ export default function PriceTracker() {
       } catch (err) {
         console.error("Search failed:", err);
       }
-    }, 250);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [query, selectedSearchItem]);

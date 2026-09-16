@@ -3,11 +3,12 @@ package com.kalin.investment_tracker.config;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
+import org.springframework.cache.caffeine.CaffeineCache;
+import org.springframework.cache.support.SimpleCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
@@ -22,21 +23,23 @@ public class CacheConfig {
 
     @Bean
     public CacheManager cacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
-        cacheManager.setCacheNames(Arrays.asList(
-                CS_ITEMS_SEARCH_CACHE,
-                PRICE_HISTORY_CHART_CACHE,
-                PORTFOLIO_SUMMARY_CACHE,
-                TRACKED_ITEMS_CACHE,
-                INVENTORY_CALCULATOR_CACHE
+        SimpleCacheManager cacheManager = new SimpleCacheManager();
+        cacheManager.setCaches(List.of(
+                buildCache(CS_ITEMS_SEARCH_CACHE, 12, TimeUnit.HOURS),
+                buildCache(PRICE_HISTORY_CHART_CACHE, 15, TimeUnit.MINUTES),
+                buildCache(PORTFOLIO_SUMMARY_CACHE, 15, TimeUnit.MINUTES),
+                buildCache(TRACKED_ITEMS_CACHE, 15, TimeUnit.MINUTES),
+                buildCache(INVENTORY_CALCULATOR_CACHE, 15, TimeUnit.MINUTES)
         ));
+        return cacheManager;
+    }
 
-        cacheManager.setCaffeine(Caffeine.newBuilder()
+    private CaffeineCache buildCache(String name, long duration, TimeUnit unit) {
+        return new CaffeineCache(name, Caffeine.newBuilder()
                 .initialCapacity(100)
                 .maximumSize(1000)
-                .expireAfterWrite(15, TimeUnit.MINUTES)
-                .recordStats());
-
-        return cacheManager;
+                .expireAfterWrite(duration, unit)
+                .recordStats()
+                .build());
     }
 }
