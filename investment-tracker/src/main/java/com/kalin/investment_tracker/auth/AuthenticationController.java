@@ -61,16 +61,8 @@ public class AuthenticationController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(HttpServletRequest request) {
-        service.logout(readRefreshToken(request));
-        return ResponseEntity.noContent()
-                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
-                .build();
-    }
-
-    @PostMapping("/logout-all")
-    public ResponseEntity<Void> logoutAll(Principal connectedUser) {
-        service.logoutAll(connectedUser);
+    public ResponseEntity<Void> logout(Principal connectedUser) {
+        service.logout(connectedUser);
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
                 .build();

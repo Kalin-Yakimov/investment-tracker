@@ -36,8 +36,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/activate-account",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
-                                "/api/v1/auth/refresh",
-                                "/api/v1/auth/logout"
+                                "/api/v1/auth/refresh"
                         ).permitAll()
                         // All Website Features (Portfolio, Price Tracker, Search, Inventory Calculator) require login
                         .anyRequest().authenticated()

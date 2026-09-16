@@ -144,11 +144,7 @@ public class AuthenticationService {
         );
     }
 
-    public void logout(String refreshToken) {
-        authSessionService.revokeByRefreshToken(refreshToken);
-    }
-
-    public void logoutAll(java.security.Principal connectedUser) {
+    public void logout(java.security.Principal connectedUser) {
         authSessionService.revokeAllForUser(getAuthenticatedUser(connectedUser).getId());
     }
 

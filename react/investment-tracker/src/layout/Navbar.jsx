@@ -37,17 +37,6 @@ export default function Navbar() {
     navigate("/login");
   };
 
-  const handleLogoutAll = async () => {
-    const confirmed = window.confirm(
-      "Sign out from all devices? You will need to sign in again.",
-    );
-    if (!confirmed) return;
-
-    setShowProfileMenu(false);
-    await UserService.logoutAll();
-    navigate("/login");
-  };
-
   const getUserInfo = () => {
     try {
       const token = UserService.getToken();
@@ -159,13 +148,6 @@ export default function Navbar() {
                         >
                           <span>🚪</span>
                           <span className="small fw-semibold">Sign Out</span>
-                        </button>
-                        <button
-                          className="popover-item-btn text-danger d-flex align-items-center gap-2 btn text-start w-100 py-2 px-3 rounded-2"
-                          onClick={handleLogoutAll}
-                        >
-                          <span>🛡️</span>
-                          <span className="small fw-semibold">Sign Out All Devices</span>
                         </button>
                       </div>
                     </div>

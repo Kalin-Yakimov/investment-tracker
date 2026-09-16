@@ -96,15 +96,6 @@ public class AuthSessionService {
     }
 
     @Transactional
-    public void revokeByRefreshToken(String rawRefreshToken) {
-        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
-            return;
-        }
-        refreshTokenRepository.findByTokenHash(hash(rawRefreshToken))
-                .ifPresent(token -> revokeSession(token.getSession(), LocalDateTime.now()));
-    }
-
-    @Transactional
     public void revokeAllForUser(Integer userId) {
         authSessionRepository.revokeAllForUser(userId, LocalDateTime.now());
     }

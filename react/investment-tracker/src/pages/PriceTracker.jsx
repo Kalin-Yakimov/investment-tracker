@@ -111,7 +111,7 @@ function InteractiveSparkline({ points, strokeColor }) {
   if (!points || points.length === 0) {
     return (
       <div
-        className="sparkline-chart-frame tracker-chart-empty"
+        className="sparkline-chart-frame tracker-chart-empty sparkline-empty-label"
       >
         No data
       </div>
@@ -469,11 +469,8 @@ export default function PriceTracker() {
       <div className="row mb-4 align-items-center">
         <div className="col-12">
           <h2 className="tracker-header-title text-white fw-bold mb-1">
-            📈 Steam Community Market Price Tracker
+            Steam Community Market Price Tracker
           </h2>
-          <p className="text-secondary mb-0">
-            Track CSGOTrader 24-hour average prices and their recorded history for CS items.
-          </p>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.security.Principal;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuthenticationControllerTest {
@@ -74,6 +76,19 @@ class AuthenticationControllerTest {
         String cookie = response.getHeaders().getFirst("Set-Cookie");
 
         assertEquals(401, response.getStatusCode().value());
+        assertNotNull(cookie);
+        assertTrue(cookie.contains("Max-Age=0"));
+    }
+
+    @Test
+    void logoutRevokesAllUserSessionsAndClearsCookie() {
+        Principal principal = mock(Principal.class);
+
+        var response = controller.logout(principal);
+        String cookie = response.getHeaders().getFirst("Set-Cookie");
+
+        verify(authenticationService).logout(principal);
+        assertEquals(204, response.getStatusCode().value());
         assertNotNull(cookie);
         assertTrue(cookie.contains("Max-Age=0"));
     }

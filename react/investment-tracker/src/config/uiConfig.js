@@ -5,4 +5,4 @@ const configuredSearchDebounce = Number(
 export const ITEM_SEARCH_DEBOUNCE_MS =
   Number.isFinite(configuredSearchDebounce) && configuredSearchDebounce >= 0
     ? configuredSearchDebounce
-    : 1500;
+    : 1000;

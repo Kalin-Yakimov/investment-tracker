@@ -89,16 +89,8 @@ class UserService {
       await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/logout`,
         {},
-        { withCredentials: true, skipAuthRefresh: true },
+        { withCredentials: true },
       );
-    } finally {
-      UserService.removeToken();
-    }
-  }
-
-  static async logoutAll() {
-    try {
-      await axios.post(`${UserService.BASE_URL}/api/v1/auth/logout-all`, {});
     } finally {
       UserService.removeToken();
     }
@@ -431,7 +423,6 @@ axios.interceptors.request.use((config) => {
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
     "/api/v1/auth/refresh",
-    "/api/v1/auth/logout",
   ].some((path) => url.includes(path));
 
   if (token && isBackendRequest && !isPublicAuthRequest && !config.headers?.Authorization) {

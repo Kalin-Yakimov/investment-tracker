@@ -108,7 +108,7 @@ function HomePinnedSparkline({ points, strokeColor }) {
   if (!points || points.length === 0) {
     return (
       <div
-        className="sparkline-chart-frame text-muted small"
+        className="sparkline-chart-frame sparkline-empty-label"
       >
         No data
       </div>
