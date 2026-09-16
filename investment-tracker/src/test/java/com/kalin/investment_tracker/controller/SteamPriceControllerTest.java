@@ -1,10 +1,12 @@
 package com.kalin.investment_tracker.controller;
 
-import com.kalin.investment_tracker.dto.PriceHistoryDto;
+import com.kalin.investment_tracker.dto.MarketPriceSnapshotDto;
 import com.kalin.investment_tracker.dto.SteamItemDto;
 import com.kalin.investment_tracker.model.Item;
+import com.kalin.investment_tracker.model.MarketPriceSnapshot;
 import com.kalin.investment_tracker.model.PriceHistory;
 import com.kalin.investment_tracker.repository.ItemRepository;
+import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
 import com.kalin.investment_tracker.service.SteamPriceService;
 import com.kalin.investment_tracker.user.User;
@@ -21,6 +23,7 @@ import org.springframework.core.task.TaskExecutor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +43,9 @@ class SteamPriceControllerTest {
     private PriceHistoryRepository priceHistoryRepository;
 
     @Mock
+    private MarketPriceSnapshotRepository marketPriceSnapshotRepository;
+
+    @Mock
     private ItemRepository itemRepository;
 
     @Mock
@@ -53,6 +59,7 @@ class SteamPriceControllerTest {
 
     private Item testItem;
     private PriceHistory testPriceHistory;
+    private MarketPriceSnapshot testMarketSnapshot;
     private User testUser;
 
     @BeforeEach
@@ -79,6 +86,17 @@ class SteamPriceControllerTest {
         testPriceHistory.setTotalPrice(new BigDecimal("50.00"));
         testPriceHistory.setDateAssigned(LocalDateTime.now());
         testPriceHistory.setDateExtracted(LocalDateTime.now());
+
+        testMarketSnapshot = new MarketPriceSnapshot(
+                testItem.getMarketHashName(),
+                MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
+                "feed-version-1",
+                Instant.now(),
+                new BigDecimal("54.35"),
+                new BigDecimal("0.92"),
+                new BigDecimal("50.00")
+        );
+        testMarketSnapshot.setId(10L);
     }
 
     @Test
@@ -94,6 +112,19 @@ class SteamPriceControllerTest {
         assertNotNull(response.getBody());
         assertEquals(1, response.getBody().size());
         assertEquals("AK-47 | Redline (Field-Tested)", response.getBody().get(0).getItemName());
+    }
+
+    @Test
+    void testGetAllItems_UsesFreshCachePriceAfterRestart() {
+        when(itemRepository.findSteamTrackedItemsByUserId(1)).thenReturn(List.of(testItem));
+        when(steamPriceService.getItemPriceData(testItem.getMarketHashName()))
+                .thenReturn(new SteamPriceService.ItemPriceData(new BigDecimal("52.75")));
+
+        ResponseEntity<List<SteamItemDto>> response = steamPriceController.getAllItems(testUser, false);
+
+        assertNotNull(response.getBody());
+        assertEquals(new BigDecimal("52.75"), response.getBody().getFirst().getPrice());
+        assertEquals(new BigDecimal("52.75"), response.getBody().getFirst().getPrice24h());
     }
 
     @Test
@@ -199,11 +230,14 @@ class SteamPriceControllerTest {
     void testGetPriceHistory_Success() {
         // Arrange
         when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.of(testItem));
-        when(priceHistoryRepository.findByItemIdOrderByDateExtractedDesc(1L))
-                .thenReturn(Arrays.asList(testPriceHistory));
+        when(marketPriceSnapshotRepository.findByMarketHashNameAndSourceAndObservedAtAfterOrderByObservedAtAsc(
+                eq(testItem.getMarketHashName()),
+                eq(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H),
+                any(Instant.class)
+        )).thenReturn(List.of(testMarketSnapshot));
 
         // Act
-        ResponseEntity<List<PriceHistoryDto>> response = steamPriceController.getPriceHistory(1L, testUser);
+        ResponseEntity<List<MarketPriceSnapshotDto>> response = steamPriceController.getPriceHistory(1L, testUser);
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -218,11 +252,12 @@ class SteamPriceControllerTest {
         when(itemRepository.findByIdAndUserId(1L, 1)).thenReturn(Optional.empty());
 
         // Act
-        ResponseEntity<List<PriceHistoryDto>> response = steamPriceController.getPriceHistory(1L, testUser);
+        ResponseEntity<List<MarketPriceSnapshotDto>> response = steamPriceController.getPriceHistory(1L, testUser);
 
         // Assert
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-        verify(priceHistoryRepository, never()).findByItemIdOrderByDateExtractedDesc(anyLong());
+        verify(marketPriceSnapshotRepository, never())
+                .findByMarketHashNameAndSourceAndObservedAtAfterOrderByObservedAtAsc(anyString(), anyString(), any());
     }
 
     @Test

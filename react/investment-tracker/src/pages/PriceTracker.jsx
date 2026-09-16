@@ -30,27 +30,12 @@ const formatCurrency = (value) => {
   return `€${Number(value).toFixed(2)}`;
 };
 
-/**
- * Formats timestamps cleanly:
- * - 24H and 7D: Includes time ("Jul 28, 20:54")
- * - 1M and 3M: Date only ("Jul 28, 2026")
- */
-/**
- * Formats timestamps strictly as DD/MM/YYYY (with optional HH:mm for 24H/7D)
- */
-const formatDateTime = (dateObj, timeframe = "1M") => {
+const formatDateTime = (dateObj) => {
   if (!dateObj || Number.isNaN(dateObj.getTime())) return "";
-  
+
   const day = String(dateObj.getDate()).padStart(2, "0");
   const month = String(dateObj.getMonth() + 1).padStart(2, "0");
   const year = dateObj.getFullYear();
-
-  if (timeframe === "24H" || timeframe === "7D") {
-    const hours = String(dateObj.getHours()).padStart(2, "0");
-    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-    return `${day}/${month}/${year} ${hours}:${minutes}`;
-  }
-
   return `${day}/${month}/${year}`;
 };
 
@@ -67,86 +52,33 @@ const formatDateDDMMYYYY = (dateStr) => {
 };
 
 /**
- * Builds chronological historical data points and performs smart date/time aggregation
+ * Builds one real, chronological point per day from stored CSGOTrader observations.
  */
-const getItemPoints = (item, history = [], timeframe = "1M") => {
-  const rawPoints = [];
+const getItemPoints = (history = [], timeframe = "7D") => {
   const now = new Date();
+  const periodDays = timeframe === "3M" ? 90 : timeframe === "1M" ? 30 : 7;
+  const cutoffTime = now.getTime() - periodDays * 24 * 60 * 60 * 1000;
 
-  const priceNow = item?.price != null ? Number(item.price) : (history[0]?.price != null ? Number(history[0].price) : 0);
-  const p24h = item?.price24h != null ? Number(item.price24h) : null;
-  const p7d = item?.price7d != null ? Number(item.price7d) : null;
-  const p30d = item?.price30d != null ? Number(item.price30d) : null;
-  const p90d = item?.price90d != null ? Number(item.price90d) : null;
+  const validPoints = (Array.isArray(history) ? history : [])
+    .filter((entry) => entry?.price != null && entry?.dateExtracted)
+    .map((entry) => ({
+      dateObj: new Date(entry.dateExtracted),
+      price: Number(entry.price),
+    }))
+    .filter((point) => !Number.isNaN(point.dateObj.getTime()) && point.dateObj.getTime() >= cutoffTime)
+    .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 
-  if (p90d !== null && timeframe === "3M") {
-    const d90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d90, price: p90d });
-  }
+  // If the provider publishes more than once in a day, use that day's latest observation.
+  const dailyMap = new Map();
+  validPoints.forEach((point) => {
+    const dateKey = `${point.dateObj.getFullYear()}-${String(point.dateObj.getMonth() + 1).padStart(2, "0")}-${String(point.dateObj.getDate()).padStart(2, "0")}`;
+    dailyMap.set(dateKey, point);
+  });
 
-  if (p30d !== null && (timeframe === "1M" || timeframe === "3M")) {
-    const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d30, price: p30d });
-  }
-
-  if (p7d !== null && (timeframe === "7D" || timeframe === "1M" || timeframe === "3M")) {
-    const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d7, price: p7d });
-  }
-
-  if (p24h !== null) {
-    const d24 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d24, price: p24h });
-  }
-
-  if (Array.isArray(history) && history.length > 0) {
-    history.forEach((h) => {
-      if (h?.price != null && h?.dateExtracted) {
-        const dt = new Date(h.dateExtracted);
-        if (!Number.isNaN(dt.getTime())) {
-          rawPoints.push({ dateObj: dt, price: Number(h.price) });
-        }
-      }
-    });
-  }
-
-  if (priceNow > 0) {
-    rawPoints.push({ dateObj: now, price: priceNow });
-  }
-
-  // Sort chronologically (oldest to newest)
-  rawPoints.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-
-  if (rawPoints.length === 0) return [];
-
-  // Filter based on timeframe cutoff
-  let cutoffMs = 0;
-  if (timeframe === "24H") cutoffMs = 24 * 60 * 60 * 1000;
-  else if (timeframe === "7D") cutoffMs = 7 * 24 * 60 * 60 * 1000;
-  else if (timeframe === "1M") cutoffMs = 30 * 24 * 60 * 60 * 1000;
-  else if (timeframe === "3M") cutoffMs = 90 * 24 * 60 * 60 * 1000;
-
-  let filtered = rawPoints;
-  if (cutoffMs > 0 && rawPoints.length > 2) {
-    const cutoffTime = now.getTime() - cutoffMs;
-    filtered = rawPoints.filter((p, idx) => idx === rawPoints.length - 1 || p.dateObj.getTime() >= cutoffTime);
-    if (filtered.length < 2) filtered = rawPoints;
-  }
-
-  // Aggregate daily points for 1M & 3M to prevent duplicate date labels
-  if (timeframe === "1M" || timeframe === "3M") {
-    const dailyMap = new Map();
-    filtered.forEach((p) => {
-      const dateKey = p.dateObj.toISOString().split("T")[0];
-      dailyMap.set(dateKey, p);
-    });
-    filtered = Array.from(dailyMap.values()).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-  }
-
-  return filtered.map((p) => ({
+  return Array.from(dailyMap.values()).map((p) => ({
     ...p,
     dateExtracted: p.dateObj.toISOString(),
-    label: formatDateTime(p.dateObj, timeframe),
+    label: formatDateTime(p.dateObj),
     price: p.price,
   }));
 };
@@ -156,14 +88,14 @@ const getItemPoints = (item, history = [], timeframe = "1M") => {
  */
 const getPeriodChange = (points) => {
   if (!points || points.length < 2) {
-    return { pct: 0, direction: "neutral" };
+    return { pct: null, direction: "neutral" };
   }
 
   const latest = points[points.length - 1].price;
   const first = points[0].price;
 
   if (!first || first === 0) {
-    return { pct: 0, direction: "neutral" };
+    return { pct: null, direction: "neutral" };
   }
 
   const pct = ((latest - first) / first) * 100;
@@ -196,7 +128,7 @@ function InteractiveSparkline({ points, strokeColor }) {
         borderColor: mainColor,
         borderWidth: 2,
         tension: 0.35,
-        pointRadius: 0,
+        pointRadius: points.length === 1 ? 3 : 0,
         pointHoverRadius: 5,
         pointHoverBackgroundColor: "#ffffff",
         pointHoverBorderColor: mainColor,
@@ -264,7 +196,9 @@ function InteractiveSparkline({ points, strokeColor }) {
  * Detailed Large Chart Component built with Chart.js
  */
 function DetailedInteractiveChart({ points }) {
-  if (!points || points.length === 0) return null;
+  if (!points || points.length === 0) {
+    return <div className="tracker-chart-empty text-center py-5">No price history yet</div>;
+  }
 
   const prices = points.map((p) => p.price);
   const minPrice = Math.min(...prices);
@@ -345,9 +279,6 @@ function DetailedInteractiveChart({ points }) {
 
   return (
     <div className="detailed-chart-wrapper mb-4">
-      <div className="d-flex justify-content-between align-items-center mb-2 px-1">
-        <span className="small text-muted">Hover chart line to view price timeline</span>
-      </div>
       <div className="detailed-chart-container p-2" style={{ height: "220px" }}>
         <Line data={data} options={options} />
       </div>
@@ -360,11 +291,10 @@ export default function PriceTracker() {
   const [searchResults, setSearchResults] = useState([]);
   const [selectedSearchItem, setSelectedSearchItem] = useState(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [trackedItems, setTrackedItems] = useState([]);
   const [priceHistories, setPriceHistories] = useState({});
 
-  const [selectedTimeframe, setSelectedTimeframe] = useState("1M");
+  const [selectedTimeframe, setSelectedTimeframe] = useState("7D");
   const [detailItem, setDetailItem] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
@@ -418,7 +348,7 @@ export default function PriceTracker() {
     const map = {};
     trackedItems.forEach((item) => {
       const history = priceHistories[item.id] || [];
-      map[item.id] = getItemPoints(item, history, selectedTimeframe);
+      map[item.id] = getItemPoints(history, selectedTimeframe);
     });
     return map;
   }, [trackedItems, priceHistories, selectedTimeframe]);
@@ -466,7 +396,6 @@ export default function PriceTracker() {
       return;
     }
 
-    setLoading(true);
     try {
       const payload = {
         itemName: csItem.name,
@@ -486,8 +415,6 @@ export default function PriceTracker() {
       } else {
         setError(serverErr || err.message || "Failed to add item to tracker.");
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -517,7 +444,7 @@ export default function PriceTracker() {
 
   const detailPoints = useMemo(() => {
     if (!detailItem) return [];
-    return getItemPoints(detailItem, priceHistories[detailItem.id] || [], selectedTimeframe);
+    return getItemPoints(priceHistories[detailItem.id] || [], selectedTimeframe);
   }, [detailItem, priceHistories, selectedTimeframe]);
 
   const detailTrend = useMemo(() => {
@@ -538,7 +465,7 @@ export default function PriceTracker() {
             📈 Steam Community Market Price Tracker
           </h2>
           <p className="text-secondary mb-0">
-            Track real-time market trends, historical price charts, and value changes for CS items.
+            Track CSGOTrader 24-hour average prices and their recorded history for CS items.
           </p>
         </div>
       </div>
@@ -610,7 +537,7 @@ export default function PriceTracker() {
           <span className="timeframe-bar-title">📊 Trend Period:</span>
         </div>
         <div className="btn-group timeframe-toggle-group" role="group">
-          {["24H", "7D", "1M", "3M"].map((tf) => (
+          {["7D", "1M", "3M"].map((tf) => (
             <button
               key={tf}
               type="button"
@@ -647,8 +574,9 @@ export default function PriceTracker() {
                 <div className="d-flex align-items-center gap-3 mt-2">
                   <span className="fs-4 fw-bold text-success">{formatCurrency(detailItem.price)}</span>
                   <span className={`badge ${detailTrend.direction === "positive" ? "bg-success" : detailTrend.direction === "negative" ? "bg-danger" : "bg-secondary"}`}>
-                    {detailTrend.direction === "positive" ? "▲ +" : detailTrend.direction === "negative" ? "▼ " : ""}
-                    {detailTrend.pct.toFixed(2)}% ({selectedTimeframe})
+                    {detailTrend.pct == null
+                      ? "—"
+                      : `${detailTrend.direction === "positive" ? "▲ +" : detailTrend.direction === "negative" ? "▼ " : ""}${detailTrend.pct.toFixed(2)}%`}
                   </span>
                 </div>
               </div>
@@ -661,7 +589,7 @@ export default function PriceTracker() {
               <h5 className="text-white fw-bold mb-3">📋 Historical Price Log</h5>
               {detailHistoryList.length === 0 ? (
                 <div className="text-muted small p-3 bg-dark rounded text-center">
-                  No historical price logs recorded yet. Automated price updates run hourly.
+                  No price history yet.
                 </div>
               ) : (
                 <div className="table-responsive rounded border border-secondary border-opacity-25" style={{ maxHeight: "250px", overflowY: "auto" }}>
@@ -704,7 +632,7 @@ export default function PriceTracker() {
           {trackedItems.length === 0 ? (
             <div className="p-5 text-center text-muted">
               <h5>No items tracked yet.</h5>
-              <p>Search and add CS items above to track real-time Steam Community Market prices.</p>
+              <p>Search and add CS items above to track CSGOTrader 24-hour average prices.</p>
             </div>
           ) : (
             <div className="table-responsive">
@@ -771,8 +699,9 @@ export default function PriceTracker() {
                                 : "bg-secondary"
                             }`}
                           >
-                            {trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}
-                            {trend.pct.toFixed(2)}%
+                            {trend.pct == null
+                              ? "—"
+                              : `${trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}${trend.pct.toFixed(2)}%`}
                           </span>
                         </td>
                         <td className="text-end" onClick={(e) => e.stopPropagation()}>

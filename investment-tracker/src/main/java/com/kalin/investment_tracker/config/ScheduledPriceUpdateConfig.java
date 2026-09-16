@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.config;
 
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
+import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.service.SteamPriceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ public class ScheduledPriceUpdateConfig {
 
     private final SteamPriceService steamPriceService;
     private final PriceHistoryRepository priceHistoryRepository;
+    private final MarketPriceSnapshotRepository marketPriceSnapshotRepository;
 
     /**
      * How many days of price history to retain.
@@ -28,15 +30,18 @@ public class ScheduledPriceUpdateConfig {
     @Value("${price.history.retention-days:90}")
     private int historyRetentionDays;
 
+    @Value("${price.snapshot.retention-days:120}")
+    private int snapshotRetentionDays;
+
     /**
      * Scheduled task: update prices for all tracked items.
      * Rate and initial delay are configurable via application.properties:
-     *   price.update.rate-ms        (default: 43 200 000 ms = 12 hours)
-     *   price.update.initial-delay-ms (default: 60 000 ms = 1 min)
+     *   price.update.rate-ms        (default: 7 200 000 ms = 2 hours)
+     *   price.update.initial-delay-ms (default: 5 000 ms = 5 sec)
      */
     @Scheduled(
-        fixedRateString  = "${price.update.rate-ms:43200000}",
-        initialDelayString = "${price.update.initial-delay-ms:60000}"
+        fixedDelayString = "${price.update.rate-ms:7200000}",
+        initialDelayString = "${price.update.initial-delay-ms:5000}"
     )
     public void scheduledPriceUpdate() {
         log.info("Starting scheduled price update for all tracked items");
@@ -61,7 +66,11 @@ public class ScheduledPriceUpdateConfig {
                 historyRetentionDays, cutoff);
         try {
             int deleted = priceHistoryRepository.deleteByDateExtractedBefore(cutoff);
-            log.info("PriceHistory prune completed — {} records deleted", deleted);
+            int deletedSnapshots = marketPriceSnapshotRepository.deleteByObservedAtBefore(
+                    java.time.Instant.now().minus(java.time.Duration.ofDays(snapshotRetentionDays))
+            );
+            log.info("Price history prune completed — {} legacy records and {} market snapshots deleted",
+                    deleted, deletedSnapshots);
         } catch (Exception e) {
             log.error("Error during PriceHistory prune: {}", e.getMessage(), e);
         }

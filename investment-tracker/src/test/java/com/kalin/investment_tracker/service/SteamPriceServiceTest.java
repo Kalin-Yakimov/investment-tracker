@@ -2,224 +2,198 @@ package com.kalin.investment_tracker.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.model.Item;
-import com.kalin.investment_tracker.model.PriceHistory;
+import com.kalin.investment_tracker.model.MarketPriceSnapshot;
 import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.repository.PriceHistoryRepository;
+import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.util.Optional;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class SteamPriceServiceTest {
+
+    private static final String ITEM_NAME = "AK-47 | Redline (Field-Tested)";
+    private static final String FEED_JSON = "{\"AK-47 | Redline (Field-Tested)\":{\"last_24h\":43.56," +
+            "\"last_7d\":42.80,\"last_30d\":43.51,\"last_90d\":43.91}}";
 
     @Mock
     private RestTemplate restTemplate;
 
     @Mock
-    private ObjectMapper objectMapper;
-
-    @Mock
-    private PriceHistoryRepository priceHistoryRepository;
+    private MarketPriceSnapshotRepository marketPriceSnapshotRepository;
 
     @Mock
     private ItemRepository itemRepository;
 
-    @InjectMocks
     private SteamPriceService steamPriceService;
-
     private Item testItem;
 
     @BeforeEach
     void setUp() {
+        steamPriceService = new SteamPriceService(
+                restTemplate,
+                new ObjectMapper(),
+                marketPriceSnapshotRepository,
+                itemRepository
+        );
+        ReflectionTestUtils.setField(steamPriceService, "feedCheckIntervalMs", 7_200_000L);
+
         testItem = new Item();
         testItem.setId(1L);
-        testItem.setItemName("AK-47 | Redline (Field-Tested)");
-        testItem.setMarketHashName("AK-47 | Redline (Field-Tested)");
+        testItem.setItemName(ITEM_NAME);
+        testItem.setMarketHashName(ITEM_NAME);
         testItem.setQuantity(1);
-        testItem.setPrice(new BigDecimal("50.00"));
-        testItem.setShowInDashboard(true);
+        testItem.setSteamFoundCheck(true);
     }
 
     @Test
-    void testFetchCurrentPrice_Success() throws Exception {
-        // Arrange
-        String mockResponse = "{\"success\":true,\"lowest_price\":\"$51.59\",\"median_price\":\"$52.00\"}";
-        ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
+    void loadsLast24hPriceAndStoresOneRealSnapshot() {
+        arrangeSuccessfulFeed(List.of(testItem), false);
 
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(responseEntity);
+        steamPriceService.refreshPriceCacheIfNeeded();
 
-        com.fasterxml.jackson.databind.JsonNode jsonNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
+        BigDecimal currentPrice = steamPriceService.fetchCurrentPrice(ITEM_NAME);
+        assertEquals(new BigDecimal("40.08"), currentPrice);
 
-        when(jsonNode.has("success")).thenReturn(true);
-        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(jsonNode.get("success")).thenReturn(successNode);
-        when(successNode.asBoolean()).thenReturn(true);
-        when(jsonNode.has("lowest_price")).thenReturn(true);
-        when(jsonNode.get("lowest_price")).thenReturn(mock(com.fasterxml.jackson.databind.node.TextNode.class));
-        when(jsonNode.get("lowest_price").asText()).thenReturn("$51.59");
-
-        // Act
-        BigDecimal price = steamPriceService.fetchCurrentPrice("AK-47 | Redline (Field-Tested)");
-
-        // Assert
-        assertNotNull(price);
-        assertEquals(new BigDecimal("47.46"), price);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<MarketPriceSnapshot>> snapshotsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(marketPriceSnapshotRepository).saveAll(snapshotsCaptor.capture());
+        MarketPriceSnapshot snapshot = snapshotsCaptor.getValue().getFirst();
+        assertEquals(ITEM_NAME, snapshot.getMarketHashName());
+        assertEquals(new BigDecimal("43.56"), snapshot.getPriceUsd());
+        assertEquals(new BigDecimal("40.08"), snapshot.getPriceEur());
+        assertEquals(Instant.parse("2026-09-16T08:10:59Z"), snapshot.getObservedAt());
+        assertEquals(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H, snapshot.getSource());
     }
 
     @Test
-    void testFetchCurrentPrice_ItemNotFound() throws Exception {
-        // Arrange
-        String mockResponse = "{\"success\":false}";
-        ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
+    void sendsConditionalHeadersAndDoesNotDuplicateAnUnchangedFeed() {
+        ReflectionTestUtils.setField(steamPriceService, "feedCheckIntervalMs", 0L);
+        ResponseEntity<byte[]> notModified = new ResponseEntity<>(null, new HttpHeaders(), HttpStatus.NOT_MODIFIED);
+        when(restTemplate.exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(byte[].class)
+        )).thenReturn(successfulFeedResponse(), notModified);
+        when(restTemplate.getForEntity("https://open.er-api.com/v6/latest/USD", String.class))
+                .thenReturn(ResponseEntity.ok("{\"rates\":{\"EUR\":0.92}}"));
+        when(itemRepository.findAllSteamTrackedItems()).thenReturn(List.of(testItem));
+        when(marketPriceSnapshotRepository.existsByMarketHashNameAndSourceAndSourceVersion(
+                ITEM_NAME,
+                MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
+                "feed-v1"
+        )).thenReturn(false);
 
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(responseEntity);
+        steamPriceService.refreshPriceCacheIfNeeded();
+        steamPriceService.refreshPriceCacheIfNeeded();
 
-        com.fasterxml.jackson.databind.JsonNode jsonNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
-
-        when(jsonNode.has("success")).thenReturn(true);
-        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(jsonNode.get("success")).thenReturn(successNode);
-        when(successNode.asBoolean()).thenReturn(false);
-
-        // Act & Assert
-        Exception exception = assertThrows(Exception.class, () -> {
-            steamPriceService.fetchCurrentPrice("Invalid Item");
-        });
-
-        assertTrue(exception.getMessage().contains("Item not found"));
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<HttpEntity> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate, times(2)).exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                requestCaptor.capture(),
+                eq(byte[].class)
+        );
+        HttpHeaders secondRequestHeaders = requestCaptor.getAllValues().get(1).getHeaders();
+        assertTrue(secondRequestHeaders.getIfNoneMatch().contains("\"feed-v1\""));
+        assertTrue(secondRequestHeaders.getIfModifiedSince() > 0);
+        verify(marketPriceSnapshotRepository, times(1)).saveAll(any());
     }
 
     @Test
-    void testFetchCurrentPrice_RateLimitError() {
-        // Arrange
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
-                .thenThrow(HttpClientErrorException.create(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", new org.springframework.http.HttpHeaders(), null, null));
+    void doesNotStoreDuplicateSnapshotForAnotherUserTrackingTheSameItem() {
+        Item secondUsersItem = new Item();
+        secondUsersItem.setId(2L);
+        secondUsersItem.setMarketHashName(ITEM_NAME);
+        secondUsersItem.setSteamFoundCheck(true);
+        arrangeSuccessfulFeed(List.of(testItem, secondUsersItem), true);
 
-        // Act & Assert
-        Exception exception = assertThrows(Exception.class, () -> {
-            steamPriceService.fetchCurrentPrice("AK-47 | Redline (Field-Tested)");
-        });
+        steamPriceService.refreshPriceCacheIfNeeded();
 
-        assertTrue(exception.getMessage().contains("Too many requests"));
+        verify(marketPriceSnapshotRepository, never()).saveAll(any());
+        verify(itemRepository).saveAll(any());
     }
 
     @Test
-    void testValidateItemOnSteam_Success() throws Exception {
-        // Arrange
-        String mockResponse = "{\"success\":true,\"lowest_price\":\"$51.59\"}";
-        ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
+    void missingItemDoesNotFallBackToSteam() {
+        arrangeSuccessfulFeed(List.of(), false);
 
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(responseEntity);
+        steamPriceService.refreshPriceCacheIfNeeded();
 
-        com.fasterxml.jackson.databind.JsonNode jsonNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
-
-        when(jsonNode.has("success")).thenReturn(true);
-        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(jsonNode.get("success")).thenReturn(successNode);
-        when(successNode.asBoolean()).thenReturn(true);
-        when(jsonNode.has("lowest_price")).thenReturn(true);
-        when(jsonNode.get("lowest_price")).thenReturn(mock(com.fasterxml.jackson.databind.node.TextNode.class));
-        when(jsonNode.get("lowest_price").asText()).thenReturn("$51.59");
-
-        // Act
-        boolean result = steamPriceService.validateItemOnSteam("AK-47 | Redline (Field-Tested)");
-
-        // Assert
-        assertTrue(result);
+        assertTrue(steamPriceService.tryFetchPrice("Unknown item").isEmpty());
+        assertFalse(steamPriceService.validateItemOnSteam("Unknown item"));
+        verify(restTemplate, times(1)).exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(byte[].class)
+        );
     }
 
     @Test
-    void testValidateItemOnSteam_Failure() throws Exception {
-        // Arrange
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
-                .thenThrow(new HttpClientErrorException(HttpStatus.TOO_MANY_REQUESTS));
+    void updatePricesUsesCached24hAverageWithoutWritingLegacyHistory() {
+        arrangeSuccessfulFeed(List.of(), false);
+        when(itemRepository.findAllById(List.of(1L))).thenReturn(List.of(testItem));
 
-        // Act
-        boolean result = steamPriceService.validateItemOnSteam("Invalid Item");
+        steamPriceService.refreshPriceCacheIfNeeded();
+        steamPriceService.updatePricesForItems(List.of(1L));
 
-        // Assert
-        assertFalse(result);
+        assertEquals(new BigDecimal("40.08"), testItem.getPrice());
+        verify(itemRepository).saveAll(List.of(testItem));
     }
 
-    @Test
-    void testUpdatePricesForItems_Success() throws Exception {
-        // Arrange
-        String mockResponse = "{\"success\":true,\"lowest_price\":\"$55.00\"}";
-        ResponseEntity<String> responseEntity = new ResponseEntity<>(mockResponse, HttpStatus.OK);
-
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(responseEntity);
-
-        com.fasterxml.jackson.databind.JsonNode jsonNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(objectMapper.readTree(mockResponse)).thenReturn(jsonNode);
-
-        when(jsonNode.has("success")).thenReturn(true);
-        com.fasterxml.jackson.databind.JsonNode successNode = mock(com.fasterxml.jackson.databind.JsonNode.class);
-        when(jsonNode.get("success")).thenReturn(successNode);
-        when(successNode.asBoolean()).thenReturn(true);
-        when(jsonNode.has("lowest_price")).thenReturn(true);
-        when(jsonNode.get("lowest_price")).thenReturn(mock(com.fasterxml.jackson.databind.node.TextNode.class));
-        when(jsonNode.get("lowest_price").asText()).thenReturn("$55.00");
-
-        when(itemRepository.findAllById(java.util.List.of(1L))).thenReturn(java.util.List.of(testItem));
-        when(itemRepository.saveAll(any())).thenReturn(java.util.List.of(testItem));
-        when(priceHistoryRepository.saveAll(any())).thenReturn(java.util.List.of(new PriceHistory()));
-
-        // Act
-        steamPriceService.updatePricesForItems(java.util.List.of(1L));
-
-        // Assert
-        verify(itemRepository, times(1)).saveAll(any());
-        verify(priceHistoryRepository, times(1)).saveAll(any());
+    private void arrangeSuccessfulFeed(List<Item> trackedItems, boolean snapshotAlreadyExists) {
+        when(restTemplate.exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(byte[].class)
+        )).thenReturn(successfulFeedResponse());
+        when(restTemplate.getForEntity("https://open.er-api.com/v6/latest/USD", String.class))
+                .thenReturn(ResponseEntity.ok("{\"rates\":{\"EUR\":0.92}}"));
+        when(itemRepository.findAllSteamTrackedItems()).thenReturn(trackedItems);
+        if (!trackedItems.isEmpty()) {
+            when(marketPriceSnapshotRepository.existsByMarketHashNameAndSourceAndSourceVersion(
+                    anyString(),
+                    eq(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H),
+                    eq("feed-v1")
+            )).thenReturn(snapshotAlreadyExists);
+        }
     }
 
-    @Test
-    void testUpdatePricesForItems_ItemNotFound() {
-        // Arrange
-        when(itemRepository.findAllById(java.util.List.of(1L))).thenReturn(java.util.List.of());
-
-        // Act
-        steamPriceService.updatePricesForItems(java.util.List.of(1L));
-
-        // Assert
-        verify(itemRepository, never()).saveAll(any());
-        verify(priceHistoryRepository, never()).saveAll(any());
-    }
-
-    @Test
-    void testUpdatePricesForItems_NoMarketHashName() {
-        // Arrange
-        testItem.setMarketHashName(null);
-        when(itemRepository.findAllById(java.util.List.of(1L))).thenReturn(java.util.List.of(testItem));
-
-        // Act
-        steamPriceService.updatePricesForItems(java.util.List.of(1L));
-
-        // Assert
-        verify(itemRepository, never()).saveAll(any());
-        verify(priceHistoryRepository, never()).saveAll(any());
+    private ResponseEntity<byte[]> successfulFeedResponse() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setETag("\"feed-v1\"");
+        headers.setLastModified(Instant.parse("2026-09-16T08:10:59Z").toEpochMilli());
+        return new ResponseEntity<>(FEED_JSON.getBytes(StandardCharsets.UTF_8), headers, HttpStatus.OK);
     }
 }

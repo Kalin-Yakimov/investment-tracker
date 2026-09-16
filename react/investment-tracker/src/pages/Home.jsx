@@ -33,27 +33,12 @@ const formatCurrency = (value) => {
   return `€${Number(value).toFixed(2)}`;
 };
 
-/**
- * Formats timestamps cleanly:
- * - 24H and 7D: Includes time ("Jul 28, 20:54")
- * - 1M and 3M: Date only ("Jul 28, 2026")
- */
-/**
- * Formats timestamps strictly as DD/MM/YYYY (with optional HH:mm for 24H/7D)
- */
-const formatDateTime = (dateObj, timeframe = "1M") => {
+const formatDateTime = (dateObj) => {
   if (!dateObj || Number.isNaN(dateObj.getTime())) return "";
-  
+
   const day = String(dateObj.getDate()).padStart(2, "0");
   const month = String(dateObj.getMonth() + 1).padStart(2, "0");
   const year = dateObj.getFullYear();
-
-  if (timeframe === "24H" || timeframe === "7D") {
-    const hours = String(dateObj.getHours()).padStart(2, "0");
-    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-    return `${day}/${month}/${year} ${hours}:${minutes}`;
-  }
-
   return `${day}/${month}/${year}`;
 };
 
@@ -67,87 +52,31 @@ const formatDateDDMMYYYY = (dateStr) => {
   return `${day}/${month}/${year}`;
 };
 
-/**
- * Builds chronological historical data points and performs smart date/time aggregation
- */
-const getItemPoints = (item, history = [], timeframe = "1M") => {
-  const rawPoints = [];
+const getItemPoints = (history = [], timeframe = "1M") => {
   const now = new Date();
+  const days = timeframe === "7D" ? 7 : timeframe === "3M" ? 90 : 30;
+  const cutoffTime = now.getTime() - days * 24 * 60 * 60 * 1000;
+  const dailyPoints = new Map();
 
-  const priceNow = item?.price != null ? Number(item.price) : (history[0]?.price != null ? Number(history[0].price) : 0);
-  const p24h = item?.price24h != null ? Number(item.price24h) : null;
-  const p7d = item?.price7d != null ? Number(item.price7d) : null;
-  const p30d = item?.price30d != null ? Number(item.price30d) : null;
-  const p90d = item?.price90d != null ? Number(item.price90d) : null;
+  (Array.isArray(history) ? history : []).forEach((entry) => {
+    if (entry?.price == null || !entry?.dateExtracted) return;
+    const dateObj = new Date(entry.dateExtracted);
+    const price = Number(entry.price);
+    if (Number.isNaN(dateObj.getTime()) || Number.isNaN(price) || dateObj.getTime() < cutoffTime) return;
 
-  if (p90d !== null && timeframe === "3M") {
-    const d90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d90, price: p90d });
-  }
+    const dayKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+    const existing = dailyPoints.get(dayKey);
+    if (!existing || dateObj.getTime() > existing.dateObj.getTime()) {
+      dailyPoints.set(dayKey, { dateObj, price });
+    }
+  });
 
-  if (p30d !== null && (timeframe === "1M" || timeframe === "3M")) {
-    const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d30, price: p30d });
-  }
-
-  if (p7d !== null && (timeframe === "7D" || timeframe === "1M" || timeframe === "3M")) {
-    const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d7, price: p7d });
-  }
-
-  if (p24h !== null) {
-    const d24 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    rawPoints.push({ dateObj: d24, price: p24h });
-  }
-
-  if (Array.isArray(history) && history.length > 0) {
-    history.forEach((h) => {
-      if (h?.price != null && h?.dateExtracted) {
-        const dt = new Date(h.dateExtracted);
-        if (!Number.isNaN(dt.getTime())) {
-          rawPoints.push({ dateObj: dt, price: Number(h.price) });
-        }
-      }
-    });
-  }
-
-  if (priceNow > 0) {
-    rawPoints.push({ dateObj: now, price: priceNow });
-  }
-
-  // Sort chronologically
-  rawPoints.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-
-  if (rawPoints.length === 0) return [];
-
-  // Filter based on timeframe cutoff
-  let cutoffMs = 0;
-  if (timeframe === "24H") cutoffMs = 24 * 60 * 60 * 1000;
-  else if (timeframe === "7D") cutoffMs = 7 * 24 * 60 * 60 * 1000;
-  else if (timeframe === "1M") cutoffMs = 30 * 24 * 60 * 60 * 1000;
-  else if (timeframe === "3M") cutoffMs = 90 * 24 * 60 * 60 * 1000;
-
-  let filtered = rawPoints;
-  if (cutoffMs > 0 && rawPoints.length > 2) {
-    const cutoffTime = now.getTime() - cutoffMs;
-    filtered = rawPoints.filter((p, idx) => idx === rawPoints.length - 1 || p.dateObj.getTime() >= cutoffTime);
-    if (filtered.length < 2) filtered = rawPoints;
-  }
-
-  // Aggregate daily points for 1M & 3M
-  if (timeframe === "1M" || timeframe === "3M") {
-    const dailyMap = new Map();
-    filtered.forEach((p) => {
-      const dateKey = p.dateObj.toISOString().split("T")[0];
-      dailyMap.set(dateKey, p);
-    });
-    filtered = Array.from(dailyMap.values()).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-  }
-
-  return filtered.map((p) => ({
+  return Array.from(dailyPoints.values())
+    .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
+    .map((p) => ({
     ...p,
     dateExtracted: p.dateObj.toISOString(),
-    label: formatDateTime(p.dateObj, timeframe),
+    label: formatDateTime(p.dateObj),
     price: p.price,
   }));
 };
@@ -157,14 +86,14 @@ const getItemPoints = (item, history = [], timeframe = "1M") => {
  */
 const getPeriodChange = (points) => {
   if (!points || points.length < 2) {
-    return { pct: 0, direction: "neutral" };
+    return { pct: null, direction: "neutral" };
   }
 
   const latest = points[points.length - 1].price;
   const first = points[0].price;
 
   if (!first || first === 0) {
-    return { pct: 0, direction: "neutral" };
+    return { pct: null, direction: "neutral" };
   }
 
   const pct = ((latest - first) / first) * 100;
@@ -323,7 +252,7 @@ export default function Home() {
   }, [items, filterSortOption]);
 
   // Pinned Items State & Selected Timeframe
-  const [selectedTimeframe, setSelectedTimeframe] = useState("1M");
+  const [selectedTimeframe, setSelectedTimeframe] = useState("7D");
   const [allPinnedItems, setAllPinnedItems] = useState([]);
   const [pinnedVisibleCount, setPinnedVisibleCount] = useState(10);
   const [pinnedHistories, setPinnedHistories] = useState({});
@@ -633,7 +562,7 @@ export default function Home() {
           
           {/* Trend Period Control Group in Header */}
           <div className="btn-group timeframe-toggle-group" role="group">
-            {["24H", "7D", "1M", "3M"].map((tf) => (
+            {["7D", "1M", "3M"].map((tf) => (
               <button
                 key={tf}
                 type="button"
@@ -666,7 +595,7 @@ export default function Home() {
               <tbody>
                 {visiblePinnedItems.map((item) => {
                   const history = pinnedHistories[item.id] || [];
-                  const points = getItemPoints(item, history, selectedTimeframe);
+                  const points = getItemPoints(history, selectedTimeframe);
                   const trend = getPeriodChange(points);
                   const strokeColor = trend.direction === "positive" ? "#10b981" : trend.direction === "negative" ? "#ef4444" : "#6b7280";
 
@@ -709,8 +638,9 @@ export default function Home() {
                               : "bg-secondary"
                           }`}
                         >
-                          {trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}
-                          {trend.pct.toFixed(2)}%
+                          {trend.pct == null
+                            ? "—"
+                            : `${trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}${trend.pct.toFixed(2)}%`}
                         </span>
                       </td>
                       <td>

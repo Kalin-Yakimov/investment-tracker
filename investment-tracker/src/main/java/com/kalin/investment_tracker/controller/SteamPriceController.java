@@ -1,11 +1,12 @@
 package com.kalin.investment_tracker.controller;
 
-import com.kalin.investment_tracker.dto.PriceHistoryDto;
+import com.kalin.investment_tracker.dto.MarketPriceSnapshotDto;
 import com.kalin.investment_tracker.dto.SteamItemDto;
 import com.kalin.investment_tracker.model.Item;
-import com.kalin.investment_tracker.model.PriceHistory;
+import com.kalin.investment_tracker.model.MarketPriceSnapshot;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
+import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
 import com.kalin.investment_tracker.service.SteamPriceService;
 import com.kalin.investment_tracker.user.User;
@@ -29,6 +30,7 @@ public class SteamPriceController {
 
     private final SteamPriceService steamPriceService;
     private final PriceHistoryRepository priceHistoryRepository;
+    private final MarketPriceSnapshotRepository marketPriceSnapshotRepository;
     private final ItemRepository itemRepository;
     private final CsItemRepository csItemRepository;
     private final TaskExecutor applicationTaskExecutor;
@@ -133,8 +135,7 @@ public class SteamPriceController {
             item.setSteamFoundCheck(true);
             item.setUser(user);
 
-            // Best-effort: try to fetch current price from Steam
-            // If Steam is rate-limiting or unavailable, save anyway — scheduler will retry in 30min
+            // Best-effort: use the latest CSGOTrader 24-hour average from the shared feed.
             java.util.Optional<java.math.BigDecimal> maybePriceOpt = steamPriceService.tryFetchPrice(item.getMarketHashName());
             maybePriceOpt.ifPresent(item::setPrice);
 
@@ -143,10 +144,9 @@ public class SteamPriceController {
                     savedItem.getMarketHashName(), user.getId(),
                     savedItem.getPrice() != null ? savedItem.getPrice() : "pending scheduler");
 
-            // Seed historical price data from the csgotrader cache (24h / 7d / 30d / 90d averages).
-            // This gives the chart meaningful data from day one instead of a single "now" point.
-            // seedHistoricalPriceData() is a no-op if the cache hasn't loaded yet (e.g. first startup).
-            steamPriceService.seedHistoricalPriceData(savedItem, priceHistoryRepository);
+            // Record only the actual feed observation available now. No rolling average
+            // is backdated and presented as a historical point.
+            steamPriceService.recordCurrentSnapshotForItem(savedItem);
 
             // Build response DTO and attach image from cs_items if available
             return ResponseEntity.ok(mapToSteamItemDto(savedItem));
@@ -207,30 +207,29 @@ public class SteamPriceController {
      * GET /api/price-history/{itemId} - Get price history for charts
      */
     @GetMapping("/price-history/{itemId}")
-    @org.springframework.cache.annotation.Cacheable(
-            value = com.kalin.investment_tracker.config.CacheConfig.PRICE_HISTORY_CHART_CACHE,
-            key = "#user.id + ':' + #itemId"
-    )
-    public ResponseEntity<List<PriceHistoryDto>> getPriceHistory(
+    public ResponseEntity<List<MarketPriceSnapshotDto>> getPriceHistory(
             @PathVariable Long itemId,
             @AuthenticationPrincipal User user) {
         try {
-            if (itemRepository.findByIdAndUserId(itemId, user.getId()).isEmpty()) {
+            Item item = itemRepository.findByIdAndUserId(itemId, user.getId()).orElse(null);
+            if (item == null) {
                 return ResponseEntity.notFound().build();
             }
 
-            List<PriceHistory> history = priceHistoryRepository.findByItemIdOrderByDateExtractedDesc(itemId);
+            java.time.Instant cutoff = java.time.Instant.now().minus(java.time.Duration.ofDays(120));
+            List<MarketPriceSnapshot> history = marketPriceSnapshotRepository
+                    .findByMarketHashNameAndSourceAndObservedAtAfterOrderByObservedAtAsc(
+                            item.getMarketHashName(),
+                            MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
+                            cutoff
+                    );
 
-            List<PriceHistoryDto> dtos = history.stream()
-                    .map(ph -> PriceHistoryDto.builder()
-                            .id(ph.getId())
-                            .itemId(ph.getItem().getId())
-                            .itemName(ph.getItem().getItemName())
-                            .price(ph.getPrice())
-                            .quantity(ph.getQuantity())
-                            .totalPrice(ph.getTotalPrice())
-                            .dateAssigned(ph.getDateAssigned())
-                            .dateExtracted(ph.getDateExtracted())
+            List<MarketPriceSnapshotDto> dtos = history.stream()
+                    .map(snapshot -> MarketPriceSnapshotDto.builder()
+                            .id(snapshot.getId())
+                            .price(snapshot.getPriceEur())
+                            .dateExtracted(snapshot.getObservedAt())
+                            .source(snapshot.getSource())
                             .build())
                     .collect(Collectors.toList());
 
@@ -381,14 +380,12 @@ public class SteamPriceController {
                 .steamFoundCheck(item.getSteamFoundCheck())
                 .image(imageUrl);
 
-        // Add historical trend data if available
+        // The current displayed value is the latest CSGOTrader 24-hour average.
         if (item.getMarketHashName() != null) {
             SteamPriceService.ItemPriceData priceData = steamPriceService.getItemPriceData(item.getMarketHashName());
             if (priceData != null) {
+                builder.price(priceData.currentPrice);
                 builder.price24h(priceData.price24h);
-                builder.price7d(priceData.price7d);
-                builder.price30d(priceData.price30d);
-                builder.price90d(priceData.price90d);
             }
         }
 
@@ -414,7 +411,10 @@ public class SteamPriceController {
             details.put("marketHashName", item.getMarketHashName());
             details.put("csItemId", item.getCsItemId());
             details.put("quantity", item.getQuantity());
-            details.put("price", item.getPrice());
+            SteamPriceService.ItemPriceData priceData = item.getMarketHashName() == null
+                    ? null
+                    : steamPriceService.getItemPriceData(item.getMarketHashName());
+            details.put("price", priceData != null ? priceData.currentPrice : item.getPrice());
             details.put("showInDashboard", item.getShowInDashboard());
             details.put("priceNotification", item.getPriceNotification());
             details.put("steamFoundCheck", item.getSteamFoundCheck());
