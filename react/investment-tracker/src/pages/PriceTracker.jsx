@@ -109,7 +109,13 @@ const getPeriodChange = (points) => {
  */
 function InteractiveSparkline({ points, strokeColor }) {
   if (!points || points.length === 0) {
-    return <span className="tracker-chart-empty">No data</span>;
+    return (
+      <div
+        className="sparkline-chart-frame tracker-chart-empty"
+      >
+        No data
+      </div>
+    );
   }
 
   const prices = points.map((p) => p.price);
@@ -187,7 +193,7 @@ function InteractiveSparkline({ points, strokeColor }) {
   };
 
   return (
-    <div className="sparkline-chartjs-wrapper" style={{ width: "180px", height: "44px" }}>
+    <div className="sparkline-chart-frame">
       <Line data={data} options={options} />
     </div>
   );

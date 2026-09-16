@@ -106,7 +106,13 @@ const getPeriodChange = (points) => {
  */
 function HomePinnedSparkline({ points, strokeColor }) {
   if (!points || points.length === 0) {
-    return <span className="text-muted small">No chart</span>;
+    return (
+      <div
+        className="sparkline-chart-frame text-muted small"
+      >
+        No data
+      </div>
+    );
   }
 
   const prices = points.map((p) => p.price);
@@ -126,7 +132,7 @@ function HomePinnedSparkline({ points, strokeColor }) {
         borderColor: mainColor,
         borderWidth: 2,
         tension: 0.35,
-        pointRadius: 0,
+        pointRadius: points.length === 1 ? 3 : 0,
         pointHoverRadius: 5,
         pointHoverBackgroundColor: "#ffffff",
         pointHoverBorderColor: mainColor,
@@ -184,7 +190,7 @@ function HomePinnedSparkline({ points, strokeColor }) {
   };
 
   return (
-    <div style={{ width: "180px", height: "44px" }}>
+    <div className="sparkline-chart-frame">
       <Line data={data} options={options} />
     </div>
   );
