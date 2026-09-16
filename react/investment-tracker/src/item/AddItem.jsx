@@ -5,6 +5,7 @@ import DatePicker from "react-datepicker";
 import { format } from "date-fns";
 import "react-datepicker/dist/react-datepicker.module.css";
 import "../styles/AddItem.css";
+import { ITEM_SEARCH_DEBOUNCE_MS } from "../config/uiConfig";
 
 export default function AddItem({ onItemAdded }) {
   const [item, setItem] = useState({
@@ -36,7 +37,7 @@ export default function AddItem({ onItemAdded }) {
         setCsItems([]);
         setShowDropdown(false);
       }
-    }, 1500);
+    }, ITEM_SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(delayDebounceFn);
   }, [itemName, csItemId]);

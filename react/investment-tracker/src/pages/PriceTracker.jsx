@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { ITEM_SEARCH_DEBOUNCE_MS } from "../config/uiConfig";
 import UserService from "../service/UserService";
 import "../styles/PriceTracker.css";
 import {
@@ -376,7 +377,7 @@ export default function PriceTracker() {
       } catch (err) {
         console.error("Search failed:", err);
       }
-    }, 1500);
+    }, ITEM_SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
   }, [query, selectedSearchItem]);

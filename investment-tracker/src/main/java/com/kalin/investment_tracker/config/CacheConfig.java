@@ -5,11 +5,12 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCache;
 import org.springframework.cache.support.SimpleCacheManager;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Configuration
 @EnableCaching
@@ -22,23 +23,36 @@ public class CacheConfig {
     public static final String INVENTORY_CALCULATOR_CACHE = "inventoryCalculatorCache";
 
     @Bean
-    public CacheManager cacheManager() {
+    public CacheManager cacheManager(
+            @Value("${cache.cs-items-search.ttl:12h}") Duration csItemsSearchTtl,
+            @Value("${cache.price-history-chart.ttl:15m}") Duration priceHistoryChartTtl,
+            @Value("${cache.portfolio-summary.ttl:15m}") Duration portfolioSummaryTtl,
+            @Value("${cache.tracked-items.ttl:15m}") Duration trackedItemsTtl,
+            @Value("${cache.inventory-calculator.ttl:15m}") Duration inventoryCalculatorTtl,
+            @Value("${cache.initial-capacity:100}") int initialCapacity,
+            @Value("${cache.maximum-size:1000}") long maximumSize
+    ) {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(List.of(
-                buildCache(CS_ITEMS_SEARCH_CACHE, 12, TimeUnit.HOURS),
-                buildCache(PRICE_HISTORY_CHART_CACHE, 15, TimeUnit.MINUTES),
-                buildCache(PORTFOLIO_SUMMARY_CACHE, 15, TimeUnit.MINUTES),
-                buildCache(TRACKED_ITEMS_CACHE, 15, TimeUnit.MINUTES),
-                buildCache(INVENTORY_CALCULATOR_CACHE, 15, TimeUnit.MINUTES)
+                buildCache(CS_ITEMS_SEARCH_CACHE, csItemsSearchTtl, initialCapacity, maximumSize),
+                buildCache(PRICE_HISTORY_CHART_CACHE, priceHistoryChartTtl, initialCapacity, maximumSize),
+                buildCache(PORTFOLIO_SUMMARY_CACHE, portfolioSummaryTtl, initialCapacity, maximumSize),
+                buildCache(TRACKED_ITEMS_CACHE, trackedItemsTtl, initialCapacity, maximumSize),
+                buildCache(INVENTORY_CALCULATOR_CACHE, inventoryCalculatorTtl, initialCapacity, maximumSize)
         ));
         return cacheManager;
     }
 
-    private CaffeineCache buildCache(String name, long duration, TimeUnit unit) {
+    private CaffeineCache buildCache(
+            String name,
+            Duration ttl,
+            int initialCapacity,
+            long maximumSize
+    ) {
         return new CaffeineCache(name, Caffeine.newBuilder()
-                .initialCapacity(100)
-                .maximumSize(1000)
-                .expireAfterWrite(duration, unit)
+                .initialCapacity(initialCapacity)
+                .maximumSize(maximumSize)
+                .expireAfterWrite(ttl)
                 .recordStats()
                 .build());
     }
