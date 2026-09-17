@@ -1,7 +1,10 @@
 package com.kalin.investment_tracker.service;
 
 import com.kalin.investment_tracker.admin.ActivityEventService;
+import com.kalin.investment_tracker.dto.ApiMessageResponse;
 import com.kalin.investment_tracker.dto.ItemResponseDto;
+import com.kalin.investment_tracker.dto.PortfolioItemRequest;
+import com.kalin.investment_tracker.dto.PortfolioSummaryDto;
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
 import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
@@ -9,42 +12,42 @@ import com.kalin.investment_tracker.model.ItemStatus;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.user.User;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
-import static com.kalin.investment_tracker.utils.StringUtils.formatString;
 import static com.kalin.investment_tracker.utils.StringUtils.normalizeString;
 
 @Service
+@RequiredArgsConstructor
 public class ItemService {
 
-    @Autowired
-    private ItemRepository itemRepository;
+    private final ItemRepository itemRepository;
+    private final CsItemRepository csItemRepository;
+    private final ActivityEventService activityEventService;
 
-    @Autowired
-    private CsItemRepository csItemRepository;
-
-    @Autowired
-    private ActivityEventService activityEventService;
-
-    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
-    public Item addItem(Item newItem, User user) {
+    @CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public ItemResponseDto addItem(PortfolioItemRequest request, User user) {
+        Item newItem = new Item();
         newItem.setUser(user);
+        newItem.setCsItemId(request.csItemId());
+        newItem.setItemStatus(request.itemStatus());
+        newItem.setDate(request.date());
+        newItem.setQuantity(request.quantity());
+        newItem.setPrice(request.price());
         
-        if (newItem.getCsItemId() != null) {
-            CsItem csItem = csItemRepository.findById(newItem.getCsItemId())
-                    .orElseThrow(() -> new RuntimeException("CS Item not found"));
+        if (request.csItemId() != null && !request.csItemId().isBlank()) {
+            CsItem csItem = findCatalogueItem(request.csItemId());
             newItem.setItemName(csItem.getName());
             newItem.setMarketHashName(csItem.getMarketHashName());
         } else {
-            newItem.setItemName(normalizeString(newItem.getItemName()));
+            newItem.setItemName(normalizeString(request.itemName()));
         }
-        
-        ItemStatus itemStatus = ItemStatus.valueOf(newItem.getItemStatus().toString());
-        newItem.setItemStatus(itemStatus);
+
         Item savedItem = itemRepository.save(newItem);
         activityEventService.recordUserAction(
                 user,
@@ -52,27 +55,28 @@ public class ItemService {
                 "Added portfolio record '" + savedItem.getItemName() + "'",
                 null
         );
-        return savedItem;
+        return mapToDto(savedItem);
     }
 
-    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
-    public Item updateItem(Long id, Item newItem, User user) {
+    @CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public ItemResponseDto updateItem(Long id, PortfolioItemRequest request, User user) {
         // IDOR protection: query DB for item matching BOTH id AND authenticated userId
         return itemRepository.findByIdAndUserId(id, user.getId())
                 .map(item -> {
-                    if (newItem.getCsItemId() != null) {
-                        CsItem csItem = csItemRepository.findById(newItem.getCsItemId())
-                                .orElseThrow(() -> new RuntimeException("CS Item not found"));
+                    if (request.csItemId() != null && !request.csItemId().isBlank()) {
+                        CsItem csItem = findCatalogueItem(request.csItemId());
                         item.setItemName(csItem.getName());
-                        item.setCsItemId(newItem.getCsItemId());
+                        item.setCsItemId(request.csItemId());
                         item.setMarketHashName(csItem.getMarketHashName());
                     } else {
-                        item.setItemName(normalizeString(newItem.getItemName()));
+                        item.setItemName(normalizeString(request.itemName()));
+                        item.setCsItemId(null);
+                        item.setMarketHashName(null);
                     }
-                    item.setItemStatus(newItem.getItemStatus());
-                    item.setDate(newItem.getDate());
-                    item.setQuantity(newItem.getQuantity());
-                    item.setPrice(newItem.getPrice());
+                    item.setItemStatus(request.itemStatus());
+                    item.setDate(request.date());
+                    item.setQuantity(request.quantity());
+                    item.setPrice(request.price());
                     Item savedItem = itemRepository.save(item);
                     activityEventService.recordUserAction(
                             user,
@@ -80,7 +84,7 @@ public class ItemService {
                             "Updated portfolio record '" + savedItem.getItemName() + "'",
                             null
                     );
-                    return savedItem;
+                    return mapToDto(savedItem);
                 })
                 .orElseThrow(() -> new ItemNotFoundException(id));
     }
@@ -118,15 +122,15 @@ public class ItemService {
         return mapPageToDtoBatch(items);
     }
 
-    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
-    public java.util.Map<String, Object> getPortfolioSummary(User user) {
+    @Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public PortfolioSummaryDto getPortfolioSummary(User user) {
         long count = itemRepository.countAllUserItems(user.getId());
         java.math.BigDecimal totalBought = itemRepository.sumTotalInvestmentValue(user.getId());
-        
-        java.util.Map<String, Object> summary = new java.util.HashMap<>();
-        summary.put("count", count);
-        summary.put("totalInvestmentValue", totalBought != null ? totalBought : java.math.BigDecimal.ZERO);
-        return summary;
+
+        return new PortfolioSummaryDto(
+                count,
+                totalBought != null ? totalBought : java.math.BigDecimal.ZERO
+        );
     }
 
     public ItemResponseDto getItemById(Long id, User user) {
@@ -142,8 +146,8 @@ public class ItemService {
         return mapPageToDtoBatch(items);
     }
 
-    @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
-    public String deleteItem(Long id, User user) {
+    @CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    public ApiMessageResponse deleteItem(Long id, User user) {
         // IDOR protection: verify ownership at DB level before deletion
         Item item = itemRepository.findByIdAndUserId(id, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(id));
@@ -155,7 +159,7 @@ public class ItemService {
                 "Deleted portfolio record '" + item.getItemName() + "'",
                 null
         );
-        return "Item with id " + id + " has been deleted successfully.";
+        return new ApiMessageResponse("Item with id " + id + " has been deleted successfully.");
     }
 
     private Page<ItemResponseDto> mapPageToDtoBatch(Page<Item> items) {
@@ -168,6 +172,7 @@ public class ItemService {
         java.util.Map<String, String> imageMap = new java.util.HashMap<>();
         if (!csItemIds.isEmpty()) {
             imageMap = csItemRepository.findAllById(csItemIds).stream()
+                    .filter(item -> item.getImage() != null)
                     .collect(java.util.stream.Collectors.toMap(CsItem::getId, CsItem::getImage, (a, b) -> a));
         }
 
@@ -202,5 +207,10 @@ public class ItemService {
                 .price(item.getPrice())
                 .image(imageUrl)
                 .build();
+    }
+
+    private CsItem findCatalogueItem(String id) {
+        return csItemRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("CS item was not found in the catalogue"));
     }
 }

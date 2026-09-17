@@ -459,7 +459,7 @@ export default function Home() {
       {/* Main Portfolio Table Card */}
       <div className="card portfolio-table-card shadow-lg p-4 mb-5">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-          <h3 className="portfolio-table-title mb-0">📁 Portfolio History</h3>
+          <h3 className="portfolio-table-title mb-0">Portfolio History</h3>
           
           {/* Dynamic Portfolio Filter Dropdown */}
           <div className="d-flex align-items-center gap-2">
@@ -564,7 +564,7 @@ export default function Home() {
       {/* Pinned Market Items Section (Infinite Scroll & Timeframe Selector) */}
       <div className="card portfolio-table-card shadow-lg p-4">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-          <h3 className="portfolio-table-title mb-0">⭐ Pinned Market Items</h3>
+          <h3 className="portfolio-table-title mb-0">Pinned Market Items</h3>
           
           {/* Trend Period Control Group in Header */}
           <div className="btn-group timeframe-toggle-group" role="group">

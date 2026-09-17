@@ -1,7 +1,9 @@
 package com.kalin.investment_tracker.handler;
 
 import com.kalin.investment_tracker.exeption.ExpiredTokenException;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
+import com.kalin.investment_tracker.exeption.PrivateSteamInventoryException;
 import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import jakarta.mail.MessagingException;
 import lombok.extern.slf4j.Slf4j;
@@ -84,6 +86,23 @@ public class GlobalExceptionHandler {
                 .body(ExceptionResponse.builder()
                         .error("The requested item was not found")
                         .build());
+    }
+
+    @ExceptionHandler(PrivateSteamInventoryException.class)
+    public ResponseEntity<ExceptionResponse> handleException(PrivateSteamInventoryException exp) {
+        return ResponseEntity
+                .status(BAD_REQUEST)
+                .body(ExceptionResponse.builder()
+                        .code("PRIVACY_PRIVATE")
+                        .error(exp.getMessage())
+                        .build());
+    }
+
+    @ExceptionHandler(ExternalServiceException.class)
+    public ResponseEntity<ExceptionResponse> handleException(ExternalServiceException exp) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ExceptionResponse.builder().error(exp.getMessage()).build());
     }
 
     @ExceptionHandler(InvalidRefreshTokenException.class)

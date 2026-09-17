@@ -142,7 +142,7 @@ export default function AddItem({ onItemAdded }) {
     <div className="container mt-4 mb-4">
       <div className="card add-item-card shadow-lg p-4">
         <div className="d-flex align-items-center justify-content-between mb-3">
-          <h3 className="add-item-title mb-0">📝 Register Portfolio Item</h3>
+          <h3 className="add-item-title mb-0">Register Portfolio Item</h3>
           <span className="text-white-50 small">Record CS items you bought or sold to track your portfolio</span>
         </div>
 
@@ -266,7 +266,7 @@ export default function AddItem({ onItemAdded }) {
                 Clear
               </button>
               <button type="submit" className="btn btn-primary px-4">
-                + Register Item
+                Register Item
               </button>
             </div>
           </div>

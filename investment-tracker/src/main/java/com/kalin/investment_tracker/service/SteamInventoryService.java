@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.config.CacheConfig;
 import com.kalin.investment_tracker.dto.SteamInventoryItemDto;
 import com.kalin.investment_tracker.dto.SteamInventoryResponseDto;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
+import com.kalin.investment_tracker.exeption.PrivateSteamInventoryException;
 import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import lombok.RequiredArgsConstructor;
@@ -58,16 +60,16 @@ public class SteamInventoryService {
             ResponseEntity<String> response = restTemplate.exchange(inventoryUrl, HttpMethod.GET, entity, String.class);
             jsonBody = response.getBody();
         } catch (HttpClientErrorException.Forbidden | HttpClientErrorException.Unauthorized e) {
-            throw new RuntimeException("PRIVACY_PRIVATE: Your Steam inventory is set to Private. Please go to Steam Profile -> Edit Profile -> Privacy Settings and set 'Inventory' to Public.");
+            throw new PrivateSteamInventoryException("Your Steam inventory is set to Private. Please go to Steam Profile -> Edit Profile -> Privacy Settings and set 'Inventory' to Public.");
         } catch (HttpClientErrorException.TooManyRequests e) {
-            throw new RuntimeException("Steam API rate limit reached. Please wait a few minutes and try again.");
+            throw new ExternalServiceException("Steam API rate limit reached. Please wait a few minutes and try again.");
         } catch (Exception e) {
             log.error("Failed to fetch Steam inventory for {}: {}", steamId64, e.getMessage());
-            throw new RuntimeException("Failed to reach Steam servers. Make sure the profile URL is valid and inventory is public.");
+            throw new ExternalServiceException("Failed to reach Steam servers. Make sure the profile URL is valid and inventory is public.");
         }
 
         if (jsonBody == null || jsonBody.isEmpty()) {
-            throw new RuntimeException("Empty response received from Steam. Make sure your inventory is set to Public.");
+            throw new ExternalServiceException("Empty response received from Steam. Make sure your inventory is set to Public.");
         }
 
         return parseAndCalculateInventory(steamId64, profileInfo, jsonBody);
@@ -216,9 +218,9 @@ public class SteamInventoryService {
             }
 
             // Pre-fetch images from cs_items database for all item names
-            List<CsItem> csItemsList = csItemRepository.findAll().stream()
-                    .filter(c -> itemQuantities.containsKey(c.getMarketHashName()) || itemQuantities.containsKey(c.getName()))
-                    .toList();
+            List<CsItem> csItemsList = itemQuantities.isEmpty()
+                    ? List.of()
+                    : csItemRepository.findCatalogueEntriesForMarketNames(itemQuantities.keySet());
             Map<String, String> dbImageMap = new HashMap<>();
             Map<String, String> csItemIdMap = new HashMap<>();
             for (CsItem c : csItemsList) {
@@ -310,7 +312,7 @@ public class SteamInventoryService {
 
         } catch (Exception e) {
             log.error("Error parsing inventory JSON for {}: {}", steamId64, e.getMessage());
-            throw new RuntimeException("Failed to process inventory data from Steam.");
+            throw new ExternalServiceException("Failed to process inventory data from Steam.");
         }
     }
 

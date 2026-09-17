@@ -29,7 +29,7 @@ public class AuthenticationController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public ResponseEntity<?> register(
+    public ResponseEntity<Void> register(
             @RequestBody @Valid RegistrationRequest request
     ) throws MessagingException {
         service.register(request);
@@ -50,7 +50,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<?> refresh(HttpServletRequest request) {
+    public ResponseEntity<AuthenticationResponse> refresh(HttpServletRequest request) {
         try {
             return withRefreshCookie(service.refresh(readRefreshToken(request)));
         } catch (InvalidRefreshTokenException exception) {
@@ -81,7 +81,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(
+    public ResponseEntity<Void> forgotPassword(
             @RequestBody @Valid ForgotPasswordRequest request
     ) throws MessagingException {
         service.forgotPassword(request);
@@ -89,7 +89,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(
+    public ResponseEntity<Void> resetPassword(
             @RequestBody @Valid ResetPasswordRequest request
     ) {
         service.resetPassword(request);
@@ -99,7 +99,7 @@ public class AuthenticationController {
     }
 
     @PatchMapping("/change-password")
-    public ResponseEntity<?> changePassword(
+    public ResponseEntity<Void> changePassword(
             @RequestBody @Valid ChangePasswordRequest request,
             Principal connectedUser
     ) {

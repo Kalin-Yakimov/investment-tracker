@@ -19,6 +19,7 @@ import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -26,10 +27,12 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,6 +43,13 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AdminSupportService {
+
+    private static final List<String> ADMINISTRATIVE_AUDIT_CATEGORIES = List.of(
+            ActivityEvent.ADMIN_ACTION,
+            ActivityEvent.SUPPORT_ACCESS,
+            ActivityEvent.SYSTEM
+    );
+    private static final int SUPPORT_ACCESS_GROUPING_MINUTES = 30;
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -101,9 +111,9 @@ public class AdminSupportService {
         activityEventService.recordSupportAccess(
                 actor,
                 target,
-                "VIEW_USER_PROFILE",
+                "SUPPORT_VIEW_OPENED",
                 reason,
-                "Opened the support profile summary",
+                "Opened the read-only support view",
                 ipAddress
         );
         return new AdminDtos.UserDetails(
@@ -122,14 +132,7 @@ public class AdminSupportService {
             String ipAddress
     ) {
         User target = requireAccessibleTarget(actor, userId);
-        activityEventService.recordSupportAccess(
-                actor,
-                target,
-                "VIEW_USER_PORTFOLIO",
-                reason,
-                "Viewed portfolio records",
-                ipAddress
-        );
+        recordSupportViewAccess(actor, target, reason, ipAddress);
         Pageable pageable = PageRequest.of(
                 Math.max(0, page),
                 Math.min(Math.max(1, size), 50),
@@ -157,14 +160,7 @@ public class AdminSupportService {
             String ipAddress
     ) {
         User target = requireAccessibleTarget(actor, userId);
-        activityEventService.recordSupportAccess(
-                actor,
-                target,
-                "VIEW_USER_TRACKED_ITEMS",
-                reason,
-                "Viewed PriceTracker items",
-                ipAddress
-        );
+        recordSupportViewAccess(actor, target, reason, ipAddress);
         List<Item> items = itemRepository.findSteamTrackedItemsByUserId(userId);
         Map<String, CsItem> catalogue = loadCatalogue(items);
         return items.stream()
@@ -192,14 +188,7 @@ public class AdminSupportService {
             String ipAddress
     ) {
         User target = requireAccessibleTarget(actor, userId);
-        activityEventService.recordSupportAccess(
-                actor,
-                target,
-                "VIEW_USER_SESSIONS",
-                reason,
-                "Viewed active authentication sessions",
-                ipAddress
-        );
+        recordSupportViewAccess(actor, target, reason, ipAddress);
         boolean actorIsAdmin = hasRole(actor, RoleNames.ADMIN);
         return authSessionRepository
                 .findByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(
@@ -229,14 +218,7 @@ public class AdminSupportService {
             String ipAddress
     ) {
         User target = requireAccessibleTarget(actor, userId);
-        activityEventService.recordSupportAccess(
-                actor,
-                target,
-                "VIEW_USER_ACTIVITY",
-                reason,
-                "Viewed the user's important activity history",
-                ipAddress
-        );
+        recordSupportViewAccess(actor, target, reason, ipAddress);
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 50));
         return activityEventRepository
                 .findByTargetUserIdOrderByCreatedAtDesc(target.getId(), pageable)
@@ -245,8 +227,16 @@ public class AdminSupportService {
 
     @Transactional(readOnly = true)
     public Page<AdminDtos.Activity> getAdministrativeAudit(int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
-        return activityEventRepository.findAllByOrderByCreatedAtDesc(pageable).map(this::toActivity);
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 100);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        List<AdminDtos.Activity> groupedEvents = groupAdministrativeAuditEvents(
+                activityEventRepository.findByCategoryInOrderByCreatedAtDesc(ADMINISTRATIVE_AUDIT_CATEGORIES)
+        ).stream().map(this::toActivity).toList();
+
+        int fromIndex = Math.min(safePage * safeSize, groupedEvents.size());
+        int toIndex = Math.min(fromIndex + safeSize, groupedEvents.size());
+        return new PageImpl<>(groupedEvents.subList(fromIndex, toIndex), pageable, groupedEvents.size());
     }
 
     @Transactional
@@ -426,6 +416,46 @@ public class AdminSupportService {
             throw new AccessDeniedException("Support accounts cannot inspect administrator accounts");
         }
         return target;
+    }
+
+    private void recordSupportViewAccess(User actor, User target, String reason, String ipAddress) {
+        activityEventService.recordSupportAccess(
+                actor,
+                target,
+                "SUPPORT_VIEW_OPENED",
+                reason,
+                "Opened the read-only support view",
+                ipAddress
+        );
+    }
+
+    private List<ActivityEvent> groupAdministrativeAuditEvents(List<ActivityEvent> events) {
+        Map<SupportAccessKey, LocalDateTime> latestAccessByCase = new HashMap<>();
+        List<ActivityEvent> groupedEvents = new ArrayList<>();
+
+        for (ActivityEvent event : events) {
+            if (!ActivityEvent.SUPPORT_ACCESS.equals(event.getCategory())) {
+                groupedEvents.add(event);
+                continue;
+            }
+
+            SupportAccessKey key = new SupportAccessKey(
+                    event.getActorUser() == null ? null : event.getActorUser().getId(),
+                    event.getTargetUser() == null ? null : event.getTargetUser().getId(),
+                    event.getReason()
+            );
+            LocalDateTime previousAccess = latestAccessByCase.put(key, event.getCreatedAt());
+            boolean belongsToExistingCase = previousAccess != null
+                    && Duration.between(event.getCreatedAt(), previousAccess).toMinutes()
+                    <= SUPPORT_ACCESS_GROUPING_MINUTES;
+            if (!belongsToExistingCase) {
+                groupedEvents.add(event);
+            }
+        }
+        return groupedEvents;
+    }
+
+    private record SupportAccessKey(Integer actorId, Integer targetId, String reason) {
     }
 
     private User requireUser(Integer userId) {

@@ -120,7 +120,7 @@ public class CsItemService {
                 log.info("Found {} items from API", rootNode.size());
                 
                 List<CsItem> csItems = new ArrayList<>();
-                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.fields();
+                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.properties().iterator();
                 while (fields.hasNext()) {
                     Map.Entry<String, JsonNode> entry = fields.next();
                     JsonNode node = entry.getValue();
@@ -168,7 +168,7 @@ public class CsItemService {
                 JsonNode rootNode = objectMapper.readTree(jsonBody);
                 List<CsItem> newItemsToSave = new ArrayList<>();
 
-                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.fields();
+                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.properties().iterator();
                 while (fields.hasNext()) {
                     Map.Entry<String, JsonNode> entry = fields.next();
                     JsonNode node = entry.getValue();
