@@ -31,6 +31,12 @@ function errorMessage(error) {
   );
 }
 
+function readableEventType(value) {
+  if (!value) return "Recorded action";
+  const text = value.replaceAll("_", " ").toLowerCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function StatusBadge({ children, tone = "neutral" }) {
   return <span className={`admin-status-badge ${tone}`}>{children}</span>;
 }
@@ -392,7 +398,7 @@ function UsersSection(props) {
       <div className="admin-users-layout">
         <div className="admin-table-card">
           <div className="admin-table-scroll">
-            <table className="admin-table">
+            <table className="admin-table admin-user-table">
               <thead><tr><th>User</th><th>Status</th><th>Roles</th><th>Records</th></tr></thead>
               <tbody>
                 {props.users.content.map((user) => (
@@ -468,59 +474,61 @@ function UserSupportView(props) {
       </div>
       <div className="admin-detail-tabs">
         {tabs.map(([key, label]) => (
-          <button key={key} className={props.userTab === key ? "active" : ""} onClick={() => props.loadUserTab(key)}>
+          <button type="button" key={key} className={props.userTab === key ? "active" : ""} onClick={() => props.loadUserTab(key)}>
             {label}
           </button>
         ))}
       </div>
 
-      {props.userTab === "profile" && (
-        <div className="admin-profile-content">
-          <dl className="admin-compact-list">
-            <div><dt>Registered</dt><dd>{formatDate(user.createdDate)}</dd></div>
-            <div><dt>Last session activity</dt><dd>{formatDate(props.userDetails.lastSessionActivity)}</dd></div>
-            <div><dt>Active sessions</dt><dd>{user.activeSessions}</dd></div>
-            <div><dt>Portfolio records</dt><dd>{user.portfolioItems}</dd></div>
-            <div><dt>Tracked items</dt><dd>{user.trackedItems}</dd></div>
-            <div><dt>Roles</dt><dd>{user.roles.join(", ")}</dd></div>
-          </dl>
-          <div className="admin-action-grid">
-            <button
-              type="button"
-              onClick={() => props.performUserAction(
-                () => AdminService.revokeSessions(user.id, props.supportReason),
-                `Sign out ${user.email} from every device?`,
-              )}
-            >Revoke all sessions</button>
-            {!user.enabled && (
-              <button type="button" onClick={() => props.performUserAction(
-                () => AdminService.resendActivation(user.id, props.supportReason),
-              )}>Resend activation</button>
-            )}
-            {props.isAdmin && !isTargetAdmin && (
-              <button type="button" onClick={() => props.performUserAction(
-                () => AdminService.setSupportRole(user.id, !isSupport, props.supportReason),
-                `${isSupport ? "Remove" : "Grant"} SUPPORT role for ${user.email}? Existing sessions will be revoked.`,
-              )}>{isSupport ? "Remove SUPPORT role" : "Grant SUPPORT role"}</button>
-            )}
-            {props.isAdmin && !isTargetAdmin && !isSelf && (
+      <div className="admin-support-tab-content">
+        {props.userTab === "profile" && (
+          <div className="admin-profile-content">
+            <dl className="admin-compact-list">
+              <div><dt>Registered</dt><dd>{formatDate(user.createdDate)}</dd></div>
+              <div><dt>Last session activity</dt><dd>{formatDate(props.userDetails.lastSessionActivity)}</dd></div>
+              <div><dt>Active sessions</dt><dd>{user.activeSessions}</dd></div>
+              <div><dt>Portfolio records</dt><dd>{user.portfolioItems}</dd></div>
+              <div><dt>Tracked items</dt><dd>{user.trackedItems}</dd></div>
+              <div><dt>Roles</dt><dd>{user.roles.join(", ")}</dd></div>
+            </dl>
+            <div className="admin-action-grid">
               <button
                 type="button"
-                className={user.locked ? "safe" : "danger"}
                 onClick={() => props.performUserAction(
-                  () => AdminService.setAccountLocked(user.id, !user.locked, props.supportReason),
-                  `${user.locked ? "Unlock" : "Lock"} ${user.email}?`,
+                  () => AdminService.revokeSessions(user.id, props.supportReason),
+                  `Sign out ${user.email} from every device?`,
                 )}
-              >{user.locked ? "Unlock account" : "Lock account"}</button>
-            )}
+              >Revoke all sessions</button>
+              {!user.enabled && (
+                <button type="button" onClick={() => props.performUserAction(
+                  () => AdminService.resendActivation(user.id, props.supportReason),
+                )}>Resend activation</button>
+              )}
+              {props.isAdmin && !isTargetAdmin && (
+                <button type="button" onClick={() => props.performUserAction(
+                  () => AdminService.setSupportRole(user.id, !isSupport, props.supportReason),
+                  `${isSupport ? "Remove" : "Grant"} SUPPORT role for ${user.email}? Existing sessions will be revoked.`,
+                )}>{isSupport ? "Remove SUPPORT role" : "Grant SUPPORT role"}</button>
+              )}
+              {props.isAdmin && !isTargetAdmin && !isSelf && (
+                <button
+                  type="button"
+                  className={user.locked ? "safe" : "danger"}
+                  onClick={() => props.performUserAction(
+                    () => AdminService.setAccountLocked(user.id, !user.locked, props.supportReason),
+                    `${user.locked ? "Unlock" : "Lock"} ${user.email}?`,
+                  )}
+                >{user.locked ? "Unlock account" : "Lock account"}</button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {props.userTab === "portfolio" && <PortfolioTable page={props.portfolio} loadPage={(page) => props.loadUserTab("portfolio", page)} />}
-      {props.userTab === "tracked" && <TrackedTable items={props.trackedItems} />}
-      {props.userTab === "sessions" && <SessionsTable sessions={props.sessions} />}
-      {props.userTab === "activity" && <ActivityTable page={props.activity} loadPage={(page) => props.loadUserTab("activity", page)} />}
+        {props.userTab === "portfolio" && <PortfolioTable page={props.portfolio} loadPage={(page) => props.loadUserTab("portfolio", page)} />}
+        {props.userTab === "tracked" && <TrackedTable items={props.trackedItems} />}
+        {props.userTab === "sessions" && <SessionsTable sessions={props.sessions} />}
+        {props.userTab === "activity" && <ActivityTable page={props.activity} loadPage={(page) => props.loadUserTab("activity", page)} />}
+      </div>
     </div>
   );
 }
@@ -610,7 +618,31 @@ function AuditSection({ audit, loadPage }) {
   return (
     <>
       <div className="admin-section-heading"><div><h2>Audit log</h2></div></div>
-      <ActivityTable page={audit} loadPage={loadPage} />
+      <div className="admin-table-card">
+        <div className="admin-table-scroll">
+          <table className="admin-table admin-audit-table">
+            <thead>
+              <tr><th>Time</th><th>Action</th><th>Affected user</th><th>Performed by</th><th>Reason</th></tr>
+            </thead>
+            <tbody>
+              {audit.content.map((event) => (
+                <tr key={event.id}>
+                  <td>{formatDate(event.createdAt)}</td>
+                  <td>
+                    <strong>{readableEventType(event.eventType)}</strong>
+                    <small>{event.category.replaceAll("_", " ")}</small>
+                  </td>
+                  <td>{event.target || "System"}</td>
+                  <td>{event.actor}{event.ipAddress && <small>IP {event.ipAddress}</small>}</td>
+                  <td>{event.reason || "—"}{event.details && <small>{event.details}</small>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {audit.content.length === 0 && <div className="admin-empty small">No administrative activity has been recorded.</div>}
+        <Pagination page={audit} onChange={loadPage} />
+      </div>
     </>
   );
 }

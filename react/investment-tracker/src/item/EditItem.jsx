@@ -41,8 +41,13 @@ export default function EditItem() {
       let item = result.data;
 
       if (item.date) {
-        const [day, month, year] = item.date.split(".");
-        item.date = new Date(`${year}-${month}-${day}`);
+        if (item.date.includes(".")) {
+          const [day, month, year] = item.date.split(".");
+          item.date = new Date(Number(year), Number(month) - 1, Number(day));
+        } else {
+          const [year, month, day] = item.date.split("-").map(Number);
+          item.date = new Date(year, month - 1, day);
+        }
       }
 
       setItem(item);
@@ -95,7 +100,7 @@ export default function EditItem() {
       <div className="row justify-content-center">
         <div className="col-12 col-md-8 col-lg-6">
           <div className="card shadow-lg p-4">
-            <h2 className="text-center mb-4 text-white">✏️ Edit Portfolio Item</h2>
+            <h2 className="text-center mb-4 text-white">Edit Portfolio Item</h2>
             {error && <div className="alert alert-danger mb-3">{error}</div>}
             <form onSubmit={onSubmit} className="d-flex flex-column gap-3">
               <div>
@@ -185,15 +190,15 @@ export default function EditItem() {
               </div>
 
               <div className="d-flex justify-content-end gap-2 mt-4">
+                <button type="submit" className="btn btn-primary px-4">
+                  Update Item
+                </button>
                 <button
                   type="button"
                   className="btn btn-secondary px-4"
                   onClick={() => navigate(`/viewItem/${id}`)}
                 >
                   Cancel
-                </button>
-                <button type="submit" className="btn btn-primary px-4">
-                  Update Item
                 </button>
               </div>
             </form>

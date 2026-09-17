@@ -7,6 +7,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -15,6 +16,7 @@ public class ActivityEventService {
 
     private static final int MAX_STORED_EVENTS = 100;
     private static final int DELETE_BATCH_SIZE = 500;
+    private static final int SUPPORT_ACCESS_GROUPING_MINUTES = 30;
 
     private final ActivityEventRepository repository;
 
@@ -37,12 +39,24 @@ public class ActivityEventService {
             String details,
             String ipAddress
     ) {
+        String cleanReason = requireReason(reason);
+        boolean recentMatchingAccess = repository
+                .existsByActorUserIdAndTargetUserIdAndCategoryAndReasonAndCreatedAtAfter(
+                        actor.getId(),
+                        target.getId(),
+                        ActivityEvent.SUPPORT_ACCESS,
+                        cleanReason,
+                        LocalDateTime.now().minusMinutes(SUPPORT_ACCESS_GROUPING_MINUTES)
+                );
+        if (recentMatchingAccess) {
+            return;
+        }
         saveAndApplyRetention(build(
                 actor,
                 target,
                 ActivityEvent.SUPPORT_ACCESS,
                 eventType,
-                requireReason(reason),
+                cleanReason,
                 details,
                 ipAddress
         ));

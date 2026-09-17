@@ -69,7 +69,6 @@ function LoginPage() {
           <span style={{ fontSize: "2.5rem" }}>📈</span>
         </div>
         <h2 className="auth-header">Sign In</h2>
-        <p className="auth-subtitle text-white-50">Welcome back to Investment Tracker</p>
 
         {infoMessage && <p className="alert alert-info py-2 small">{infoMessage}</p>}
         {error && <p className="error-message alert alert-danger py-2">{error}</p>}

@@ -83,9 +83,7 @@ function RegistrationPage() {
     <div className="auth-container-reg container">
       <div className="card auth-card-reg">
         <div className="text-center mb-3">
-          <span style={{ fontSize: "2.5rem" }}>🚀</span>
-          <h2 className="registration-header mt-2 text-white">Create Account</h2>
-          <p className="text-white-50 small">Join Investment Tracker to start monitoring your portfolio</p>
+          <h2 className="registration-header text-white">Create Account</h2>
         </div>
 
         {error && <p className="alert alert-danger py-2 text-center small">{error}</p>}

@@ -1,7 +1,9 @@
 package com.kalin.investment_tracker.service;
 
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
+import com.kalin.investment_tracker.dto.PortfolioItemRequest;
 import com.kalin.investment_tracker.model.Item;
+import com.kalin.investment_tracker.model.ItemStatus;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.user.User;
@@ -15,6 +17,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
 import java.util.Optional;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
@@ -60,7 +64,18 @@ class ItemServiceAuthorizationTest {
 
         assertThrows(
                 ItemNotFoundException.class,
-                () -> itemService.updateItem(42L, new Item(), authenticatedUser)
+                () -> itemService.updateItem(
+                        42L,
+                        new PortfolioItemRequest(
+                                "AK-47 | Redline",
+                                null,
+                                ItemStatus.BOUGHT,
+                                LocalDate.now(),
+                                1,
+                                BigDecimal.ONE
+                        ),
+                        authenticatedUser
+                )
         );
 
         verify(itemRepository, never()).save(org.mockito.ArgumentMatchers.any(Item.class));

@@ -170,10 +170,7 @@ export default function ViewItem() {
       <div className="card shadow-lg p-4">
         {/* Header Title */}
         <div className="d-flex align-items-center justify-content-between mb-4">
-          <h2 className="text-white mb-0">🔍 Item Details</h2>
-          <span className={`badge-status ${isBought ? "badge-bought" : "badge-sold"}`}>
-            {isBought ? "Bought Record" : "Sold Record"}
-          </span>
+          <h2 className="text-white mb-0">Item Details</h2>
         </div>
 
         {/* Thumbnail & Key Metrics Row */}
@@ -231,11 +228,11 @@ export default function ViewItem() {
 
             {/* Action Bar */}
             <div className="d-flex gap-2 mt-4">
-              <Link className="btn btn-primary px-4" to={`/editItem/${currentItem.id || id}`}>
-                ✏️ Edit Item
-              </Link>
               <Link className="btn btn-secondary px-4" to={"/"}>
                 ⬅️ Back to Portfolio
+              </Link>
+              <Link className="btn btn-primary px-4" to={`/editItem/${currentItem.id || id}`}>
+                Edit Item
               </Link>
               <button className="btn btn-danger px-4 ms-auto" onClick={deleteItem}>
                 🗑️ Delete Item
@@ -247,8 +244,7 @@ export default function ViewItem() {
         {/* Transaction History Section */}
         <div className="border-top pt-4 mt-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           <div className="d-flex align-items-center justify-content-between mb-3">
-            <h4 className="text-white mb-0">📜 Transaction History for {item.itemName}</h4>
-            <span className="text-white-50 small">Click any transaction row below to update the top details card</span>
+            <h4 className="text-white mb-0">Transaction History for {item.itemName}</h4>
           </div>
 
           {historyLoading ? (
