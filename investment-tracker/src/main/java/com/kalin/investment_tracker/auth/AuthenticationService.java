@@ -1,4 +1,5 @@
 package com.kalin.investment_tracker.auth;
+import com.kalin.investment_tracker.admin.ActivityEventService;
 import com.kalin.investment_tracker.email.EmailService;
 import com.kalin.investment_tracker.email.EmailTemplateName;
 import com.kalin.investment_tracker.role.RoleRepository;
@@ -35,6 +36,7 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final AuthSessionService authSessionService;
+    private final ActivityEventService activityEventService;
     @Value("${app.frontend.base-url:http://localhost:3000}")
     private String frontendBaseUrl;
 
@@ -57,6 +59,7 @@ public class AuthenticationService {
                 .roles(List.of(userRole))
                 .build();
         userRepository.save(user);
+        activityEventService.recordUserAction(user, "ACCOUNT_REGISTERED", "Created a new account", null);
         sendValidationEmail(user);
     }
 
@@ -125,6 +128,7 @@ public class AuthenticationService {
                 ipAddress
         );
         var session = issuedRefreshToken.session();
+        activityEventService.recordSecurityEvent(user, "LOGIN_SUCCESS", "Created a new authenticated session", ipAddress);
 
         return new AuthenticationResult(
                 buildAuthenticationResponse(user, session.getId()),
@@ -145,7 +149,9 @@ public class AuthenticationService {
     }
 
     public void logout(java.security.Principal connectedUser) {
-        authSessionService.revokeAllForUser(getAuthenticatedUser(connectedUser).getId());
+        User user = getAuthenticatedUser(connectedUser);
+        activityEventService.recordSecurityEvent(user, "SIGNED_OUT", "Revoked all active sessions", null);
+        authSessionService.revokeAllForUser(user.getId());
     }
 
     public void activateAccount(String token) throws MessagingException {
@@ -164,6 +170,7 @@ public class AuthenticationService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
         user.setEnabled(true);
         userRepository.save(user);
+        activityEventService.recordSecurityEvent(user, "ACCOUNT_ACTIVATED", "Activated the account", null);
         savedToken.setValidatedAt(LocalDateTime.now());
         tokenRepository.save(savedToken);
     }
@@ -209,6 +216,7 @@ public class AuthenticationService {
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        activityEventService.recordSecurityEvent(user, "PASSWORD_RESET", "Reset the account password", null);
 
         authSessionService.revokeAllForUser(user.getId());
 
@@ -255,6 +263,7 @@ public class AuthenticationService {
         // Save encoded new password
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        activityEventService.recordSecurityEvent(user, "PASSWORD_CHANGED", "Changed the account password", null);
         authSessionService.revokeAllForUser(user.getId());
     }
 
@@ -270,8 +279,15 @@ public class AuthenticationService {
             throw new IllegalStateException("Username is already taken by another account");
         }
 
+        String previousUsername = user.fullName();
         user.setUsername(newUsername);
         userRepository.save(user);
+        activityEventService.recordUserAction(
+                user,
+                "USERNAME_CHANGED",
+                "Changed username from '" + previousUsername + "' to '" + newUsername + "'",
+                null
+        );
 
         return buildAuthenticationResponse(user, sessionId);
     }
@@ -281,5 +297,12 @@ public class AuthenticationService {
                 .token(jwtService.generateAccessToken(user, sessionId))
                 .expiresInSeconds(jwtService.getAccessExpirationSeconds())
                 .build();
+    }
+
+    public void resendActivationFor(User user) throws MessagingException {
+        if (user.isEnabled()) {
+            throw new IllegalArgumentException("The account is already activated");
+        }
+        sendValidationEmail(user);
     }
 }

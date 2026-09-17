@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -107,6 +108,20 @@ public class GlobalExceptionHandler {
                                 .error("The email could not be sent. Please try again later.")
                                 .build()
                 );
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ExceptionResponse> handleException(IllegalArgumentException exp) {
+        return ResponseEntity
+                .status(BAD_REQUEST)
+                .body(ExceptionResponse.builder().error(exp.getMessage()).build());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ExceptionResponse> handleException(AccessDeniedException exp) {
+        return ResponseEntity
+                .status(FORBIDDEN)
+                .body(ExceptionResponse.builder().error("Access denied").build());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

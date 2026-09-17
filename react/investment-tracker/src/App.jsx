@@ -15,6 +15,8 @@ import ActivateAccountPage from "./auth/ActivateAccountPage";
 import ForgotPasswordPage from "./auth/ForgotPasswordPage";
 import ProtectedRoute from "./service/ProtectedRoutes";
 import UserService from "./service/UserService";
+import AdminRoute from "./service/AdminRoute";
+import AdminPanel from "./pages/AdminPanel";
 import { CookiesProvider } from "react-cookie";
 
 function App() {
@@ -107,6 +109,15 @@ function App() {
               <ProtectedRoute>
                 <InventoryCalculatorPage />
               </ProtectedRoute>
+            }
+          />
+          <Route
+            exact
+            path="/admin"
+            element={
+              <AdminRoute>
+                <AdminPanel />
+              </AdminRoute>
             }
           />
           <Route path="*" element={<NotFoundPage />} />

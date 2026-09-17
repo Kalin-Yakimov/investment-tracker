@@ -55,8 +55,10 @@ class JwtServiceTest {
     @Test
     void modifiedTokenIsRejected() {
         String token = jwtService.generateAccessToken(user, "session-123");
-        char replacement = token.endsWith("a") ? 'b' : 'a';
-        String modified = token.substring(0, token.length() - 1) + replacement;
+        String[] parts = token.split("\\.");
+        char replacement = parts[2].charAt(0) == 'a' ? 'b' : 'a';
+        parts[2] = replacement + parts[2].substring(1);
+        String modified = String.join(".", parts);
 
         assertThrows(JwtException.class, () -> jwtService.parseAndValidate(modified));
     }

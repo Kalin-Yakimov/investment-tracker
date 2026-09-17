@@ -1,5 +1,6 @@
 package com.kalin.investment_tracker.controller;
 
+import com.kalin.investment_tracker.admin.ActivityEventService;
 import com.kalin.investment_tracker.dto.MarketPriceSnapshotDto;
 import com.kalin.investment_tracker.dto.SteamItemDto;
 import com.kalin.investment_tracker.model.Item;
@@ -53,6 +54,9 @@ class SteamPriceControllerTest {
 
     @Mock
     private TaskExecutor applicationTaskExecutor;
+
+    @Mock
+    private ActivityEventService activityEventService;
 
     @InjectMocks
     private SteamPriceController steamPriceController;

@@ -25,6 +25,31 @@ class UserService {
     return Boolean(UserService.accessToken);
   }
 
+  static getCurrentUser() {
+    try {
+      const token = UserService.getToken();
+      if (!token) return null;
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      return {
+        id: payload.sub ? Number(payload.sub) : null,
+        email: payload.email || "",
+        name: payload.fullName || payload.email || "User Account",
+        authorities: Array.isArray(payload.authorities) ? payload.authorities : [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  static hasAuthority(authority) {
+    return UserService.getCurrentUser()?.authorities.includes(authority) || false;
+  }
+
+  static hasAnyAuthority(...authorities) {
+    const currentAuthorities = UserService.getCurrentUser()?.authorities || [];
+    return authorities.some((authority) => currentAuthorities.includes(authority));
+  }
+
   static subscribe(listener) {
     UserService.authListeners.add(listener);
     return () => UserService.authListeners.delete(listener);

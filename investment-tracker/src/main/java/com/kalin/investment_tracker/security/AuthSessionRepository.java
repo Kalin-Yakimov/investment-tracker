@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface AuthSessionRepository extends JpaRepository<AuthSession, String> {
 
@@ -31,4 +32,19 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, String
                 or (session.revokedAt is not null and session.revokedAt < :cutoff)
             """)
     int deleteInactiveBefore(@Param("cutoff") LocalDateTime cutoff);
+
+    long countByRevokedAtIsNullAndExpiresAtAfter(LocalDateTime now);
+
+    long countByUserIdAndRevokedAtIsNullAndExpiresAtAfter(Integer userId, LocalDateTime now);
+
+    List<AuthSession> findByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(
+            Integer userId,
+            LocalDateTime now
+    );
+
+    @Query("""
+            select max(session.lastUsedAt) from AuthSession session
+             where session.user.id = :userId
+            """)
+    LocalDateTime findLastActivityForUser(@Param("userId") Integer userId);
 }

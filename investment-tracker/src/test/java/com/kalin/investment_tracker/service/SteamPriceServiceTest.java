@@ -171,6 +171,21 @@ class SteamPriceServiceTest {
         verify(itemRepository).saveAll(List.of(testItem));
     }
 
+    @Test
+    void manualUpdateBypassesTheNormalFeedCheckInterval() {
+        arrangeSuccessfulFeed(List.of(testItem), false);
+
+        steamPriceService.refreshPriceCacheIfNeeded();
+        steamPriceService.forceUpdateAllTrackedItems();
+
+        verify(restTemplate, times(2)).exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(byte[].class)
+        );
+    }
+
     private void arrangeSuccessfulFeed(List<Item> trackedItems, boolean snapshotAlreadyExists) {
         when(restTemplate.exchange(
                 eq("https://prices.csgotrader.app/latest/steam.json"),

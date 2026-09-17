@@ -1,5 +1,6 @@
 package com.kalin.investment_tracker.service;
 
+import com.kalin.investment_tracker.admin.ActivityEventService;
 import com.kalin.investment_tracker.dto.ItemResponseDto;
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
 import com.kalin.investment_tracker.model.CsItem;
@@ -26,6 +27,9 @@ public class ItemService {
     @Autowired
     private CsItemRepository csItemRepository;
 
+    @Autowired
+    private ActivityEventService activityEventService;
+
     @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
     public Item addItem(Item newItem, User user) {
         newItem.setUser(user);
@@ -41,7 +45,14 @@ public class ItemService {
         
         ItemStatus itemStatus = ItemStatus.valueOf(newItem.getItemStatus().toString());
         newItem.setItemStatus(itemStatus);
-        return itemRepository.save(newItem);
+        Item savedItem = itemRepository.save(newItem);
+        activityEventService.recordUserAction(
+                user,
+                "PORTFOLIO_ITEM_ADDED",
+                "Added portfolio record '" + savedItem.getItemName() + "'",
+                null
+        );
+        return savedItem;
     }
 
     @org.springframework.cache.annotation.CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
@@ -62,7 +73,14 @@ public class ItemService {
                     item.setDate(newItem.getDate());
                     item.setQuantity(newItem.getQuantity());
                     item.setPrice(newItem.getPrice());
-                    return itemRepository.save(item);
+                    Item savedItem = itemRepository.save(item);
+                    activityEventService.recordUserAction(
+                            user,
+                            "PORTFOLIO_ITEM_UPDATED",
+                            "Updated portfolio record '" + savedItem.getItemName() + "'",
+                            null
+                    );
+                    return savedItem;
                 })
                 .orElseThrow(() -> new ItemNotFoundException(id));
     }
@@ -131,6 +149,12 @@ public class ItemService {
                 .orElseThrow(() -> new ItemNotFoundException(id));
         
         itemRepository.delete(item);
+        activityEventService.recordUserAction(
+                user,
+                "PORTFOLIO_ITEM_DELETED",
+                "Deleted portfolio record '" + item.getItemName() + "'",
+                null
+        );
         return "Item with id " + id + " has been deleted successfully.";
     }
 

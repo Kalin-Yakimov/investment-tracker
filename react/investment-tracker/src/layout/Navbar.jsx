@@ -38,17 +38,11 @@ export default function Navbar() {
   };
 
   const getUserInfo = () => {
-    try {
-      const token = UserService.getToken();
-      if (!token) return { name: "User Account", email: "user@account.com" };
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      return {
-        name: payload.fullName || payload.email || "User Account",
-        email: payload.email || "user@account.com",
-      };
-    } catch {
-      return { name: "User Account", email: "user@account.com" };
-    }
+    return UserService.getCurrentUser() || {
+      name: "User Account",
+      email: "user@account.com",
+      authorities: [],
+    };
   };
 
   const userInfo = getUserInfo();
@@ -118,6 +112,19 @@ export default function Navbar() {
                       </div>
 
                       <div className="d-flex flex-column gap-1">
+                        {UserService.hasAnyAuthority("ADMIN", "SUPPORT") && (
+                          <button
+                            className="popover-item-btn d-flex align-items-center gap-2 btn text-start w-100 py-2 px-3 text-white rounded-2"
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              navigate("/admin");
+                            }}
+                          >
+                            <span>⚙️</span>
+                            <span className="small fw-semibold">Support Panel</span>
+                          </button>
+                        )}
+
                         <button
                           className="popover-item-btn d-flex align-items-center gap-2 btn text-start w-100 py-2 px-3 text-white rounded-2"
                           onClick={() => {

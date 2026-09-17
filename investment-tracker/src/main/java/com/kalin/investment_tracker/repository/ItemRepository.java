@@ -65,4 +65,16 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     // Total investment value of all BOUGHT non-Steam items for a user
     @Query("SELECT COALESCE(SUM(i.price * i.quantity), 0) FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) AND i.itemStatus = com.kalin.investment_tracker.model.ItemStatus.BOUGHT")
     java.math.BigDecimal sumTotalInvestmentValue(@Param("userId") Integer userId);
+
+    @Query("SELECT COUNT(i) FROM Item i WHERE (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)")
+    long countAllPortfolioItems();
+
+    @Query("SELECT COUNT(i) FROM Item i WHERE i.steamFoundCheck = true")
+    long countAllTrackedItems();
+
+    @Query("SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId AND i.steamFoundCheck = true")
+    long countTrackedItemsByUserId(@Param("userId") Integer userId);
+
+    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)")
+    Page<Item> findPortfolioForAdministration(@Param("userId") Integer userId, Pageable pageable);
 }

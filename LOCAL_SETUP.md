@@ -11,6 +11,7 @@ DB_PASSWORD=your_mysql_password
 MAIL_USERNAME=your_gmail_address
 MAIL_PASSWORD=your_gmail_app_password
 JWT_SECRET=a_base64_encoded_secret_of_at_least_32_random_bytes
+ADMIN_EMAIL=the_email_of_the_initial_administrator
 ```
 
 Optional variables and examples are listed in `investment-tracker/.env.example`.
@@ -32,6 +33,14 @@ Copy the printed value into `JWT_SECRET`. Never commit it.
 3. In `react/investment-tracker`, run `npm start`.
 
 The default addresses are `http://localhost:8080` and `http://localhost:3000`.
+
+## Support Panel access
+
+Set `ADMIN_EMAIL` to the email address of an existing Investment Tracker account. On backend startup, that account receives the `ADMIN` role. Log out and sign in again after the first assignment so the newly issued access token contains the updated authority.
+
+The `ADMIN` role can grant or remove the `SUPPORT` role, lock or unlock accounts, revoke active sessions, inspect the audit log and start the available maintenance operations. The `SUPPORT` role has read-only access to user support information and can revoke sessions or resend account activation, but it cannot inspect administrators or change roles and account locks.
+
+Detailed access to a user's information requires a support reason. The application stores this reason in the audit log. Passwords, refresh tokens and other secrets are never displayed in the panel.
 
 ## Authentication behavior
 

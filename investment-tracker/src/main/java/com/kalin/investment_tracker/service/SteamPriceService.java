@@ -78,8 +78,21 @@ public class SteamPriceService {
      * Last-Modified value indicates a new version.
      */
     public void refreshPriceCacheIfNeeded() {
+        refreshPriceCache(false);
+    }
+
+    /**
+     * Immediately checks CSGOTrader, bypassing the local time interval while
+     * still using conditional HTTP headers to avoid downloading unchanged data.
+     */
+    public void forceRefreshPriceCache() {
+        refreshPriceCache(true);
+    }
+
+    private void refreshPriceCache(boolean forceRefresh) {
         Instant now = Instant.now();
-        if (lastCacheCheck != null
+        if (!forceRefresh
+                && lastCacheCheck != null
                 && now.toEpochMilli() - lastCacheCheck.toEpochMilli() < feedCheckIntervalMs
                 && !priceCache.isEmpty()) {
             return;
@@ -91,7 +104,8 @@ public class SteamPriceService {
 
         try {
             now = Instant.now();
-            if (lastCacheCheck != null
+            if (!forceRefresh
+                    && lastCacheCheck != null
                     && now.toEpochMilli() - lastCacheCheck.toEpochMilli() < feedCheckIntervalMs
                     && !priceCache.isEmpty()) {
                 return;
@@ -369,6 +383,10 @@ public class SteamPriceService {
 
     public void updateAllTrackedItems() {
         refreshPriceCacheIfNeeded();
+    }
+
+    public void forceUpdateAllTrackedItems() {
+        forceRefreshPriceCache();
     }
 
     public void updateAllDashboardItems() {

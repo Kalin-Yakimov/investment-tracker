@@ -1,5 +1,6 @@
 package com.kalin.investment_tracker.controller;
 
+import com.kalin.investment_tracker.admin.ActivityEventService;
 import com.kalin.investment_tracker.dto.MarketPriceSnapshotDto;
 import com.kalin.investment_tracker.dto.SteamItemDto;
 import com.kalin.investment_tracker.model.Item;
@@ -34,6 +35,7 @@ public class SteamPriceController {
     private final ItemRepository itemRepository;
     private final CsItemRepository csItemRepository;
     private final TaskExecutor applicationTaskExecutor;
+    private final ActivityEventService activityEventService;
 
     /**
      * GET /api/items - Get all items with Steam market data
@@ -140,6 +142,12 @@ public class SteamPriceController {
             maybePriceOpt.ifPresent(item::setPrice);
 
             Item savedItem = itemRepository.save(item);
+            activityEventService.recordUserAction(
+                    user,
+                    "TRACKED_ITEM_ADDED",
+                    "Started tracking '" + savedItem.getItemName() + "'",
+                    null
+            );
             log.info("Item '{}' saved for user {} (price={})",
                     savedItem.getMarketHashName(), user.getId(),
                     savedItem.getPrice() != null ? savedItem.getPrice() : "pending scheduler");
@@ -190,6 +198,13 @@ public class SteamPriceController {
                     log.error("Error in async price update: {}", e.getMessage());
                 }
             });
+
+            activityEventService.recordUserAction(
+                    user,
+                    "PRICE_UPDATE_REQUESTED",
+                    "Requested a price update for " + ownedItemIds.size() + " tracked item(s)",
+                    null
+            );
 
             return ResponseEntity.ok(Map.of(
                     "message", "Price update started for " + ownedItemIds.size() + " items",
@@ -263,6 +278,12 @@ public class SteamPriceController {
             }
 
             Item updatedItem = itemRepository.save(item);
+            activityEventService.recordUserAction(
+                    user,
+                    "TRACKED_ITEM_UPDATED",
+                    "Updated tracking settings for '" + updatedItem.getItemName() + "'",
+                    null
+            );
             return ResponseEntity.ok(mapToSteamItemDto(updatedItem));
 
         } catch (Exception e) {
@@ -287,6 +308,12 @@ public class SteamPriceController {
             // Toggle bookmark status
             item.setShowInDashboard(!Boolean.TRUE.equals(item.getShowInDashboard()));
             Item updatedItem = itemRepository.save(item);
+            activityEventService.recordUserAction(
+                    user,
+                    "TRACKED_ITEM_BOOKMARK_CHANGED",
+                    "Changed dashboard visibility for '" + updatedItem.getItemName() + "'",
+                    null
+            );
 
             return ResponseEntity.ok(Map.of(
                     "bookmarked", updatedItem.getShowInDashboard(),
@@ -318,6 +345,12 @@ public class SteamPriceController {
             
             // Then delete the item
             itemRepository.delete(item);
+            activityEventService.recordUserAction(
+                    user,
+                    "TRACKED_ITEM_DELETED",
+                    "Stopped tracking '" + item.getItemName() + "'",
+                    null
+            );
 
             return ResponseEntity.ok(Map.of("message", "Item deleted successfully"));
 

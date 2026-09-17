@@ -101,6 +101,10 @@ public class CsItemService {
         }
     }
 
+    @org.springframework.cache.annotation.CacheEvict(
+            value = com.kalin.investment_tracker.config.CacheConfig.CS_ITEMS_SEARCH_CACHE,
+            allEntries = true
+    )
     public void fetchAndSaveItems() {
         String url = "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/all.json";
         try {

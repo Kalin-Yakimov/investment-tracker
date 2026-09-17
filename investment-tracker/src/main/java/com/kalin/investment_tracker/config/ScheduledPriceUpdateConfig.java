@@ -1,5 +1,6 @@
 package com.kalin.investment_tracker.config;
 
+import com.kalin.investment_tracker.admin.SystemJobStatusService;
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
 import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.service.SteamPriceService;
@@ -22,6 +23,7 @@ public class ScheduledPriceUpdateConfig {
     private final SteamPriceService steamPriceService;
     private final PriceHistoryRepository priceHistoryRepository;
     private final MarketPriceSnapshotRepository marketPriceSnapshotRepository;
+    private final SystemJobStatusService jobStatusService;
 
     /**
      * How many days of price history to retain.
@@ -45,10 +47,16 @@ public class ScheduledPriceUpdateConfig {
     )
     public void scheduledPriceUpdate() {
         log.info("Starting scheduled price update for all tracked items");
+        jobStatusService.started(SystemJobStatusService.PRICE_UPDATE, "Scheduled price update is running");
         try {
             steamPriceService.updateAllTrackedItems();
+            jobStatusService.succeeded(
+                    SystemJobStatusService.PRICE_UPDATE,
+                    "Scheduled price update completed successfully"
+            );
             log.info("Scheduled price update completed successfully");
         } catch (Exception e) {
+            jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, e.getMessage());
             log.error("Error during scheduled price update: {}", e.getMessage(), e);
         }
     }

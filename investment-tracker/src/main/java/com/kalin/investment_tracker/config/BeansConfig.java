@@ -62,7 +62,8 @@ public class BeansConfig {
                 ORIGIN,
                 CONTENT_TYPE,
                 ACCEPT,
-                AUTHORIZATION
+                AUTHORIZATION,
+                "X-Support-Reason"
         ));
         config.setAllowedMethods(Arrays.asList(
                 "GET",

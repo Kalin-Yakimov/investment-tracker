@@ -28,4 +28,7 @@ public interface MarketPriceSnapshotRepository extends JpaRepository<MarketPrice
     @Modifying
     @Query("DELETE FROM MarketPriceSnapshot snapshot WHERE snapshot.observedAt < :cutoff")
     int deleteByObservedAtBefore(@Param("cutoff") Instant cutoff);
+
+    @Query("SELECT MAX(snapshot.observedAt) FROM MarketPriceSnapshot snapshot")
+    Instant findLatestObservedAt();
 }
