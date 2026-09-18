@@ -1,0 +1,32 @@
+.contact-us-modal-card {
+  max-width: 560px;
+}
+
+.contact-us-intro {
+  margin: 0 0 1.1rem;
+  color: #aab6c8;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.contact-us-modal-card .form-control {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0b1220;
+  color: #f8fafc;
+}
+
+.contact-us-modal-card .form-control:focus {
+  border-color: #3b82f6;
+  background: #0b1220;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+
+.contact-us-modal-card .form-control::placeholder {
+  color: #64748b;
+}
+
+.contact-us-message {
+  min-height: 165px;
+  resize: vertical;
+}

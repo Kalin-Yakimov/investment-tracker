@@ -34,7 +34,6 @@ public class ItemService {
     public ItemResponseDto addItem(PortfolioItemRequest request, User user) {
         Item newItem = new Item();
         newItem.setUser(user);
-        newItem.setCsItemId(request.csItemId());
         newItem.setItemStatus(request.itemStatus());
         newItem.setDate(request.date());
         newItem.setQuantity(request.quantity());
@@ -42,6 +41,7 @@ public class ItemService {
         
         if (request.csItemId() != null && !request.csItemId().isBlank()) {
             CsItem csItem = findCatalogueItem(request.csItemId());
+            newItem.setCatalogueItem(csItem);
             newItem.setItemName(csItem.getName());
             newItem.setMarketHashName(csItem.getMarketHashName());
         } else {
@@ -66,11 +66,11 @@ public class ItemService {
                     if (request.csItemId() != null && !request.csItemId().isBlank()) {
                         CsItem csItem = findCatalogueItem(request.csItemId());
                         item.setItemName(csItem.getName());
-                        item.setCsItemId(request.csItemId());
+                        item.setCatalogueItem(csItem);
                         item.setMarketHashName(csItem.getMarketHashName());
                     } else {
                         item.setItemName(normalizeString(request.itemName()));
-                        item.setCsItemId(null);
+                        item.setCatalogueItem(null);
                         item.setMarketHashName(null);
                     }
                     item.setItemStatus(request.itemStatus());
@@ -119,7 +119,7 @@ public class ItemService {
             items = itemRepository.findByUserIdAndOptionalStatus(user.getId(), statusFilter, pageable);
         }
         
-        return mapPageToDtoBatch(items);
+        return mapPageToDto(items);
     }
 
     @Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
@@ -143,7 +143,7 @@ public class ItemService {
         Pageable pageable = PageRequest.of(page, size);
         Page<Item> items = itemRepository.findByUserIdAndItemNameOrderByDateDesc(user.getId(), normalizeString(name), pageable);
         
-        return mapPageToDtoBatch(items);
+        return mapPageToDto(items);
     }
 
     @CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
@@ -162,50 +162,21 @@ public class ItemService {
         return new ApiMessageResponse("Item with id " + id + " has been deleted successfully.");
     }
 
-    private Page<ItemResponseDto> mapPageToDtoBatch(Page<Item> items) {
-        // Collect all CS item IDs on the page to fetch image URLs in a single query (prevents N+1)
-        java.util.Set<String> csItemIds = items.getContent().stream()
-                .map(Item::getCsItemId)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-
-        java.util.Map<String, String> imageMap = new java.util.HashMap<>();
-        if (!csItemIds.isEmpty()) {
-            imageMap = csItemRepository.findAllById(csItemIds).stream()
-                    .filter(item -> item.getImage() != null)
-                    .collect(java.util.stream.Collectors.toMap(CsItem::getId, CsItem::getImage, (a, b) -> a));
-        }
-
-        final java.util.Map<String, String> finalImageMap = imageMap;
-        return items.map(item -> ItemResponseDto.builder()
-                .id(item.getId())
-                .itemName(item.getItemName())
-                .csItemId(item.getCsItemId())
-                .itemStatus(item.getItemStatus())
-                .date(item.getDate())
-                .quantity(item.getQuantity())
-                .price(item.getPrice())
-                .image(item.getCsItemId() != null ? finalImageMap.get(item.getCsItemId()) : null)
-                .build());
+    private Page<ItemResponseDto> mapPageToDto(Page<Item> items) {
+        return items.map(this::mapToDto);
     }
 
     private ItemResponseDto mapToDto(Item item) {
-        String imageUrl = null;
-        if (item.getCsItemId() != null) {
-            imageUrl = csItemRepository.findById(item.getCsItemId())
-                    .map(CsItem::getImage)
-                    .orElse(null);
-        }
-        
+        CsItem catalogueItem = item.getCatalogueItem();
         return ItemResponseDto.builder()
                 .id(item.getId())
                 .itemName(item.getItemName())
-                .csItemId(item.getCsItemId())
+                .csItemId(catalogueItem != null ? catalogueItem.getId() : null)
                 .itemStatus(item.getItemStatus())
                 .date(item.getDate())
                 .quantity(item.getQuantity())
                 .price(item.getPrice())
-                .image(imageUrl)
+                .image(catalogueItem != null ? catalogueItem.getImage() : null)
                 .build();
     }
 

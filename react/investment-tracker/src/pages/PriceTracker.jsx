@@ -464,7 +464,7 @@ export default function PriceTracker() {
   }, [detailItem, priceHistories]);
 
   return (
-    <div className="tracker-page-container container-fluid py-4 px-md-5">
+    <div className="tracker-page-container container py-4 pb-5">
       {/* Page Header */}
       <div className="row mb-4 align-items-center">
         <div className="col-12">

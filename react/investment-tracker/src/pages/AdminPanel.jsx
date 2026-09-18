@@ -83,6 +83,9 @@ export default function AdminPanel() {
   const [sessions, setSessions] = useState([]);
   const [activity, setActivity] = useState(EMPTY_PAGE);
   const [audit, setAudit] = useState(EMPTY_PAGE);
+  const [tickets, setTickets] = useState(EMPTY_PAGE);
+  const [ticketStatus, setTicketStatus] = useState("");
+  const [newTicketCount, setNewTicketCount] = useState(0);
   const [systemReason, setSystemReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -131,15 +134,44 @@ export default function AdminPanel() {
     [isAdmin, showNotice],
   );
 
+  const loadTickets = useCallback(
+    async (page = 0, status = "") => {
+      try {
+        setLoading(true);
+        setTickets(await AdminService.getTickets(status, page, 15));
+      } catch (error) {
+        showNotice("error", errorMessage(error));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showNotice],
+  );
+
+  const loadNewTicketCount = useCallback(async () => {
+    try {
+      setNewTicketCount(await AdminService.getNewTicketCount());
+    } catch {
+      // The navigation indicator is supplementary; normal page errors are handled elsewhere.
+    }
+  }, []);
+
   useEffect(() => {
     loadOverview();
     loadUsers(0, "");
-  }, [loadOverview, loadUsers]);
+    loadNewTicketCount();
+  }, [loadOverview, loadUsers, loadNewTicketCount]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(loadNewTicketCount, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [loadNewTicketCount]);
 
   useEffect(() => {
     if (section === "audit") loadAudit(0);
+    if (section === "tickets") loadTickets(0, ticketStatus);
     if (section === "overview" || section === "system") loadOverview();
-  }, [section, loadAudit, loadOverview]);
+  }, [section, ticketStatus, loadAudit, loadOverview, loadTickets]);
 
   useEffect(() => {
     const hasRunningJob =
@@ -241,9 +273,45 @@ export default function AdminPanel() {
     }
   };
 
+  const changeTicketStatus = async (ticketId, status) => {
+    try {
+      setLoading(true);
+      await AdminService.updateTicketStatus(ticketId, status);
+      await Promise.all([
+        loadTickets(tickets.number, ticketStatus),
+        loadNewTicketCount(),
+      ]);
+    } catch (error) {
+      showNotice("error", errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeTicket = async (ticketId) => {
+    if (!window.confirm("Remove this contact request permanently?")) return;
+    try {
+      setLoading(true);
+      const result = await AdminService.removeTicket(ticketId);
+      showNotice("success", result.message);
+      const targetPage = tickets.content.length === 1 && tickets.number > 0
+        ? tickets.number - 1
+        : tickets.number;
+      await Promise.all([
+        loadTickets(targetPage, ticketStatus),
+        loadNewTicketCount(),
+      ]);
+    } catch (error) {
+      showNotice("error", errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const navigation = useMemo(
     () => [
       ["overview", "Overview"],
+      ["tickets", "Contact requests"],
       ["users", "User support"],
       ["system", "Catalogue & prices"],
       ...(isAdmin ? [["audit", "Audit log"]] : []),
@@ -273,7 +341,16 @@ export default function AdminPanel() {
               className={section === key ? "active" : ""}
               onClick={() => setSection(key)}
             >
-              {label}
+              <span>{label}</span>
+              {key === "tickets" && newTicketCount > 0 && (
+                <span
+                  className="admin-nav-alert"
+                  aria-label={`${newTicketCount} new contact request${newTicketCount === 1 ? "" : "s"}`}
+                  title={`${newTicketCount} new contact request${newTicketCount === 1 ? "" : "s"}`}
+                >
+                  !
+                </span>
+              )}
             </button>
           ))}
           <div className="admin-sidebar-note">
@@ -284,6 +361,16 @@ export default function AdminPanel() {
         <section className="admin-content">
           {loading && <div className="admin-loading-bar" />}
           {section === "overview" && <OverviewSection overview={overview} />}
+          {section === "tickets" && (
+            <TicketsSection
+              tickets={tickets}
+              status={ticketStatus}
+              setStatus={setTicketStatus}
+              loadPage={(page) => loadTickets(page, ticketStatus)}
+              changeStatus={changeTicketStatus}
+              removeTicket={removeTicket}
+            />
+          )}
           {section === "users" && (
             <UsersSection
               users={users}
@@ -368,6 +455,95 @@ function JobCard({ title, job }) {
       <h3>{title}</h3>
       <p>Last completed: <strong>{formatDate(job?.completedAt)}</strong></p>
     </article>
+  );
+}
+
+function ticketStatusLabel(status) {
+  if (status === "IN_PROGRESS") return "In progress";
+  if (status === "RESOLVED") return "Resolved";
+  return "New";
+}
+
+function ticketStatusTone(status) {
+  if (status === "IN_PROGRESS") return "warning";
+  if (status === "RESOLVED") return "success";
+  return "info";
+}
+
+function TicketsSection({ tickets, status, setStatus, loadPage, changeStatus, removeTicket }) {
+  return (
+    <>
+      <div className="admin-section-heading admin-ticket-heading">
+        <div>
+          <h2>Contact requests</h2>
+          <p>Messages submitted by signed-in users through the Contact Us form.</p>
+        </div>
+        <select
+          className="admin-ticket-filter"
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          aria-label="Filter contact requests by status"
+        >
+          <option value="">All statuses</option>
+          <option value="NEW">New</option>
+          <option value="IN_PROGRESS">In progress</option>
+          <option value="RESOLVED">Resolved</option>
+        </select>
+      </div>
+
+      <div className="admin-ticket-list">
+        {tickets.content.map((ticket) => (
+          <article className="admin-ticket-card" key={ticket.id}>
+            <div className="admin-ticket-card-header">
+              <div>
+                <h3>{ticket.accountUsername || "User account"}</h3>
+                <span className="admin-ticket-account">
+                  Account: {ticket.accountEmail}
+                  {ticket.userId != null && ` · User #${ticket.userId}`}
+                </span>
+              </div>
+              <StatusBadge tone={ticketStatusTone(ticket.status)}>
+                {ticketStatusLabel(ticket.status)}
+              </StatusBadge>
+            </div>
+
+            <p className="admin-ticket-message">{ticket.message}</p>
+
+            <div className="admin-ticket-footer">
+              <div className="admin-ticket-contact">
+                <span>Reply by email</span>
+                <a href={`mailto:${ticket.contactEmail}`}>{ticket.contactEmail}</a>
+                <small>
+                  Submitted {formatDate(ticket.createdAt)}
+                  {ticket.updatedAt !== ticket.createdAt && ` · Updated ${formatDate(ticket.updatedAt)}`}
+                </small>
+              </div>
+
+              <div className="admin-ticket-actions">
+                <label htmlFor={`ticket-status-${ticket.id}`}>Status</label>
+                <select
+                  id={`ticket-status-${ticket.id}`}
+                  value={ticket.status}
+                  onChange={(event) => changeStatus(ticket.id, event.target.value)}
+                >
+                  <option value="NEW">New</option>
+                  <option value="IN_PROGRESS">In progress</option>
+                  <option value="RESOLVED">Resolved</option>
+                </select>
+                <button type="button" onClick={() => removeTicket(ticket.id)}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {tickets.content.length === 0 && (
+        <div className="admin-empty">No contact requests match this status.</div>
+      )}
+      <Pagination page={tickets} onChange={loadPage} />
+    </>
   );
 }
 

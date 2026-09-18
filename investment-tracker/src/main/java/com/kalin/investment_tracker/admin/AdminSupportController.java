@@ -1,5 +1,8 @@
 package com.kalin.investment_tracker.admin;
 
+import com.kalin.investment_tracker.support.SupportTicketDtos;
+import com.kalin.investment_tracker.support.SupportTicketService;
+import com.kalin.investment_tracker.support.SupportTicketStatus;
 import com.kalin.investment_tracker.user.User;
 import jakarta.mail.MessagingException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +33,7 @@ public class AdminSupportController {
     public static final String SUPPORT_REASON_HEADER = "X-Support-Reason";
 
     private final AdminSupportService service;
+    private final SupportTicketService supportTicketService;
 
     @GetMapping("/overview")
     public ResponseEntity<AdminDtos.Overview> overview() {
@@ -109,6 +114,37 @@ public class AdminSupportController {
             @RequestParam(defaultValue = "50") int size
     ) {
         return ResponseEntity.ok(AdminDtos.PageResponse.from(service.getAdministrativeAudit(page, size)));
+    }
+
+    @GetMapping("/tickets")
+    public ResponseEntity<AdminDtos.PageResponse<SupportTicketDtos.TicketResponse>> tickets(
+            @RequestParam(required = false) SupportTicketStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(AdminDtos.PageResponse.from(
+                supportTicketService.findAll(status, page, size)
+        ));
+    }
+
+    @GetMapping("/tickets/new-count")
+    public ResponseEntity<SupportTicketDtos.CountResponse> newTicketCount() {
+        return ResponseEntity.ok(supportTicketService.countNew());
+    }
+
+    @PatchMapping("/tickets/{ticketId}/status")
+    public ResponseEntity<SupportTicketDtos.TicketResponse> ticketStatus(
+            @PathVariable Long ticketId,
+            @RequestBody @Valid SupportTicketDtos.StatusRequest body
+    ) {
+        return ResponseEntity.ok(supportTicketService.updateStatus(ticketId, body.status()));
+    }
+
+    @DeleteMapping("/tickets/{ticketId}")
+    public ResponseEntity<SupportTicketDtos.ActionResponse> removeTicket(
+            @PathVariable Long ticketId
+    ) {
+        return ResponseEntity.ok(supportTicketService.remove(ticketId));
     }
 
     @PatchMapping("/users/{userId}/support-role")
