@@ -1,0 +1,9 @@
+# Local secrets created at the repository root
+.env
+.env.*
+!.env.example
+
+# Local database exports and recovery files
+/backups/
+*.sql.gz
+*.dump
