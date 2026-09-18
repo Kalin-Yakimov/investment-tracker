@@ -70,6 +70,32 @@ class AdminService {
     ).data;
   }
 
+  static async getTickets(status = "", page = 0, size = 15) {
+    const params = { page, size };
+    if (status) params.status = status;
+    return (
+      await axios.get(`${AdminService.BASE_URL}/tickets`, { params })
+    ).data;
+  }
+
+  static async getNewTicketCount() {
+    return (
+      await axios.get(`${AdminService.BASE_URL}/tickets/new-count`)
+    ).data.count;
+  }
+
+  static async updateTicketStatus(ticketId, status) {
+    return (
+      await axios.patch(`${AdminService.BASE_URL}/tickets/${ticketId}/status`, { status })
+    ).data;
+  }
+
+  static async removeTicket(ticketId) {
+    return (
+      await axios.delete(`${AdminService.BASE_URL}/tickets/${ticketId}`)
+    ).data;
+  }
+
   static async setSupportRole(userId, enabled, reason) {
     return (
       await axios.patch(`${AdminService.BASE_URL}/users/${userId}/support-role`, {

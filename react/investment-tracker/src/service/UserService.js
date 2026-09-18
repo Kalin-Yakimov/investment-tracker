@@ -210,6 +210,18 @@ class UserService {
     }
   }
 
+  static async createContactTicket(email, message) {
+    try {
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/contact`,
+        { email, message },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
   static async getUserItems(page = 0, size = 10, filter = "newest_date") {
     try {
       const token = UserService.getToken();

@@ -1,7 +1,6 @@
 package com.kalin.investment_tracker.admin;
 
 import com.kalin.investment_tracker.auth.AuthenticationService;
-import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
@@ -30,15 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -139,17 +133,19 @@ public class AdminSupportService {
                 Sort.by(Sort.Direction.DESC, "date")
         );
         Page<Item> items = itemRepository.findPortfolioForAdministration(userId, pageable);
-        Map<String, CsItem> catalogue = loadCatalogue(items.getContent());
-        return items.map(item -> new AdminDtos.PortfolioItem(
-                item.getId(),
-                item.getItemName(),
-                item.getCsItemId(),
-                item.getItemStatus(),
-                item.getDate(),
-                item.getQuantity(),
-                item.getPrice(),
-                catalogue.containsKey(item.getCsItemId()) ? catalogue.get(item.getCsItemId()).getImage() : null
-        ));
+        return items.map(item -> {
+            var catalogueItem = item.getCatalogueItem();
+            return new AdminDtos.PortfolioItem(
+                    item.getId(),
+                    item.getItemName(),
+                    catalogueItem != null ? catalogueItem.getId() : null,
+                    item.getItemStatus(),
+                    item.getDate(),
+                    item.getQuantity(),
+                    item.getPrice(),
+                    catalogueItem != null ? catalogueItem.getImage() : null
+            );
+        });
     }
 
     @Transactional
@@ -162,21 +158,21 @@ public class AdminSupportService {
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
         List<Item> items = itemRepository.findSteamTrackedItemsByUserId(userId);
-        Map<String, CsItem> catalogue = loadCatalogue(items);
         return items.stream()
-                .map(item -> new AdminDtos.TrackedItem(
-                        item.getId(),
-                        item.getItemName(),
-                        item.getMarketHashName(),
-                        item.getCsItemId(),
-                        item.getQuantity(),
-                        item.getPrice(),
-                        item.getShowInDashboard(),
-                        item.getPriceNotification(),
-                        catalogue.containsKey(item.getCsItemId())
-                                ? catalogue.get(item.getCsItemId()).getImage()
-                                : null
-                ))
+                .map(item -> {
+                    var catalogueItem = item.getCatalogueItem();
+                    return new AdminDtos.TrackedItem(
+                            item.getId(),
+                            item.getItemName(),
+                            item.getMarketHashName(),
+                            catalogueItem != null ? catalogueItem.getId() : null,
+                            item.getQuantity(),
+                            item.getPrice(),
+                            item.getShowInDashboard(),
+                            item.getPriceNotification(),
+                            catalogueItem != null ? catalogueItem.getImage() : null
+                    );
+                })
                 .toList();
     }
 
@@ -507,15 +503,6 @@ public class AdminSupportService {
                 event.getIpAddress(),
                 event.getCreatedAt()
         );
-    }
-
-    private Map<String, CsItem> loadCatalogue(Collection<Item> items) {
-        Set<String> ids = items.stream()
-                .map(Item::getCsItemId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        return csItemRepository.findAllById(ids).stream()
-                .collect(Collectors.toMap(CsItem::getId, Function.identity(), (first, ignored) -> first));
     }
 
     private String safeMessage(Exception exception) {

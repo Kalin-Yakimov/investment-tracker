@@ -29,10 +29,6 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -57,9 +53,8 @@ public class TrackedItemService {
                     .toList();
         }
 
-        Map<String, String> imagesByCatalogueId = loadImages(items);
         return items.stream()
-                .map(item -> toDto(item, imagesByCatalogueId.get(item.getCsItemId())))
+                .map(this::toDto)
                 .toList();
     }
 
@@ -75,7 +70,7 @@ public class TrackedItemService {
         Item item = new Item();
         item.setItemName(resolved.itemName());
         item.setMarketHashName(marketHashName);
-        item.setCsItemId(resolved.csItemId());
+        item.setCatalogueItem(resolved.catalogueItem());
         item.setQuantity(request.quantity() > 0 ? request.quantity() : 1);
         item.setShowInDashboard(Boolean.TRUE.equals(request.showInDashboard()));
         item.setPriceNotification(request.priceNotification());
@@ -96,7 +91,7 @@ public class TrackedItemService {
         log.info("Item '{}' saved for user {} (price={})",
                 savedItem.getMarketHashName(), user.getId(),
                 savedItem.getPrice() != null ? savedItem.getPrice() : "pending scheduler");
-        return toDto(savedItem, findImage(savedItem.getCsItemId()));
+        return toDto(savedItem);
     }
 
     public PriceUpdateResponse requestPriceUpdate(List<Long> requestedIds, User user) {
@@ -167,7 +162,7 @@ public class TrackedItemService {
                 "Updated tracking settings for '" + updatedItem.getItemName() + "'",
                 null
         );
-        return toDto(updatedItem, findImage(updatedItem.getCsItemId()));
+        return toDto(updatedItem);
     }
 
     @Transactional
@@ -185,7 +180,7 @@ public class TrackedItemService {
 
         return new BookmarkResponse(
                 Boolean.TRUE.equals(updatedItem.getShowInDashboard()),
-                toDto(updatedItem, findImage(updatedItem.getCsItemId()))
+                toDto(updatedItem)
         );
     }
 
@@ -213,7 +208,7 @@ public class TrackedItemService {
 
     public SteamItemDto getTrackedItemDetails(Long id, User user) {
         Item item = findOwnedItem(id, user);
-        return toDto(item, findImage(item.getCsItemId()));
+        return toDto(item);
     }
 
     private ResolvedCatalogueItem resolveCatalogueItem(TrackedItemCreateRequest request) {
@@ -221,7 +216,7 @@ public class TrackedItemService {
             CsItem catalogueItem = csItemRepository.findById(request.csItemId())
                     .orElseThrow(() -> new IllegalArgumentException("CS item was not found in the catalogue"));
             return new ResolvedCatalogueItem(
-                    catalogueItem.getId(),
+                    catalogueItem,
                     catalogueItem.getName(),
                     catalogueItem.getMarketHashName()
             );
@@ -235,7 +230,7 @@ public class TrackedItemService {
             if (!matches.isEmpty()) {
                 CsItem catalogueItem = matches.getFirst();
                 return new ResolvedCatalogueItem(
-                        catalogueItem.getId(),
+                        catalogueItem,
                         catalogueItem.getName(),
                         catalogueItem.getMarketHashName()
                 );
@@ -255,27 +250,8 @@ public class TrackedItemService {
                 .orElseThrow(() -> new ItemNotFoundException(itemId));
     }
 
-    private Map<String, String> loadImages(List<Item> items) {
-        Set<String> catalogueIds = items.stream()
-                .map(Item::getCsItemId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        if (catalogueIds.isEmpty()) {
-            return Map.of();
-        }
-        return csItemRepository.findAllById(catalogueIds).stream()
-                .filter(item -> item.getImage() != null)
-                .collect(Collectors.toMap(CsItem::getId, CsItem::getImage, (first, ignored) -> first));
-    }
-
-    private String findImage(String csItemId) {
-        if (csItemId == null) {
-            return null;
-        }
-        return csItemRepository.findById(csItemId).map(CsItem::getImage).orElse(null);
-    }
-
-    private SteamItemDto toDto(Item item, String imageUrl) {
+    private SteamItemDto toDto(Item item) {
+        CsItem catalogueItem = item.getCatalogueItem();
         BigDecimal currentPrice = item.getPrice();
         BigDecimal price24h = null;
         if (hasText(item.getMarketHashName())) {
@@ -290,7 +266,7 @@ public class TrackedItemService {
                 .id(item.getId())
                 .itemName(item.getItemName())
                 .marketHashName(item.getMarketHashName())
-                .csItemId(item.getCsItemId())
+                .csItemId(catalogueItem != null ? catalogueItem.getId() : null)
                 .quantity(item.getQuantity())
                 .price(currentPrice)
                 .boughtPrice(item.getBoughtPrice())
@@ -298,7 +274,7 @@ public class TrackedItemService {
                 .showInDashboard(item.getShowInDashboard())
                 .priceNotification(item.getPriceNotification())
                 .steamFoundCheck(item.getSteamFoundCheck())
-                .image(imageUrl)
+                .image(catalogueItem != null ? catalogueItem.getImage() : null)
                 .price24h(price24h)
                 .build();
     }
@@ -307,6 +283,6 @@ public class TrackedItemService {
         return value != null && !value.isBlank();
     }
 
-    private record ResolvedCatalogueItem(String csItemId, String itemName, String marketHashName) {
+    private record ResolvedCatalogueItem(CsItem catalogueItem, String itemName, String marketHashName) {
     }
 }

@@ -4,12 +4,14 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import UserService from "../service/UserService";
 import ChangePasswordModal from "../auth/ChangePasswordModal";
 import ChangeUsernameModal from "../auth/ChangeUsernameModal";
+import ContactUsModal from "../auth/ContactUsModal";
 
 export default function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassModal, setShowChangePassModal] = useState(false);
   const [showChangeUserModal, setShowChangeUserModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [refreshUser, setRefreshUser] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -120,7 +122,6 @@ export default function Navbar() {
                               navigate("/admin");
                             }}
                           >
-                            <span>⚙️</span>
                             <span className="small fw-semibold">Support Panel</span>
                           </button>
                         )}
@@ -132,7 +133,6 @@ export default function Navbar() {
                             setShowChangeUserModal(true);
                           }}
                         >
-                          <span>✏️</span>
                           <span className="small fw-semibold">Change Username</span>
                         </button>
 
@@ -143,8 +143,17 @@ export default function Navbar() {
                             setShowChangePassModal(true);
                           }}
                         >
-                          <span>🔒</span>
                           <span className="small fw-semibold">Change Password</span>
+                        </button>
+
+                        <button
+                          className="popover-item-btn d-flex align-items-center btn text-start w-100 py-2 px-3 text-white rounded-2"
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            setShowContactModal(true);
+                          }}
+                        >
+                          <span className="small fw-semibold">Contact Us</span>
                         </button>
 
                         <div className="border-top border-secondary-subtle my-1"></div>
@@ -153,7 +162,6 @@ export default function Navbar() {
                           className="popover-item-btn text-danger d-flex align-items-center gap-2 btn text-start w-100 py-2 px-3 rounded-2"
                           onClick={handleLogout}
                         >
-                          <span>🚪</span>
                           <span className="small fw-semibold">Sign Out</span>
                         </button>
                       </div>
@@ -180,6 +188,12 @@ export default function Navbar() {
       <ChangePasswordModal
         show={showChangePassModal}
         onClose={() => setShowChangePassModal(false)}
+      />
+
+      <ContactUsModal
+        show={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        defaultEmail={userInfo.email}
       />
     </>
   );

@@ -57,7 +57,10 @@ class TrackedItemServiceTest {
         trackedItem.setId(42L);
         trackedItem.setItemName("AK-47 | Redline (Field-Tested)");
         trackedItem.setMarketHashName("AK-47 | Redline (Field-Tested)");
-        trackedItem.setCsItemId("skin-42");
+        trackedItem.setCatalogueItem(CsItem.builder()
+                .id("skin-42")
+                .image("image-url")
+                .build());
         trackedItem.setQuantity(1);
         trackedItem.setPrice(new BigDecimal("45.00"));
         trackedItem.setSteamFoundCheck(true);
@@ -67,7 +70,6 @@ class TrackedItemServiceTest {
     @Test
     void trackedItemsAreAlwaysLoadedForAuthenticatedUser() {
         when(itemRepository.findSteamTrackedItemsByUserId(7)).thenReturn(List.of(trackedItem));
-        when(csItemRepository.findAllById(any())).thenReturn(List.of());
 
         var result = service.getTrackedItems(user, false);
 
@@ -79,7 +81,6 @@ class TrackedItemServiceTest {
     @Test
     void currentFeedPriceOverridesStoredDisplayPrice() {
         when(itemRepository.findSteamTrackedItemsByUserId(7)).thenReturn(List.of(trackedItem));
-        when(csItemRepository.findAllById(any())).thenReturn(List.of());
         when(steamPriceService.getItemPriceData(trackedItem.getMarketHashName()))
                 .thenReturn(new SteamPriceService.ItemPriceData(new BigDecimal("52.75")));
 

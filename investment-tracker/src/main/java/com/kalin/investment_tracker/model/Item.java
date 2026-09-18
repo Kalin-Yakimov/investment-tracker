@@ -2,8 +2,11 @@ package com.kalin.investment_tracker.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.kalin.investment_tracker.user.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,6 +14,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "item", indexes = {
     @Index(name = "idx_item_user_id", columnList = "user_id"),
+    @Index(name = "idx_item_cs_item_id", columnList = "cs_item_id"),
     @Index(name = "idx_item_market_hash", columnList = "marketHashName"),
     @Index(name = "idx_item_steam_found", columnList = "steamFoundCheck")
 })
@@ -22,7 +26,15 @@ public class Item {
 
     private String itemName;
 
-    private String csItemId; // Changed to String to match CsItem ID type
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(
+            name = "cs_item_id",
+            nullable = true,
+            foreignKey = @ForeignKey(name = "fk_item_cs_item")
+    )
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    @JsonIgnore
+    private CsItem catalogueItem;
 
     @Enumerated(EnumType.STRING)
     private ItemStatus itemStatus;
@@ -104,12 +116,12 @@ public class Item {
         this.itemName = itemName;
     }
 
-    public String getCsItemId() {
-        return csItemId;
+    public CsItem getCatalogueItem() {
+        return catalogueItem;
     }
 
-    public void setCsItemId(String csItemId) {
-        this.csItemId = csItemId;
+    public void setCatalogueItem(CsItem catalogueItem) {
+        this.catalogueItem = catalogueItem;
     }
 
     public User getUser() {
