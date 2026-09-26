@@ -49,12 +49,14 @@ public class ScheduledPriceUpdateConfig {
         log.info("Starting scheduled price update for all tracked items");
         jobStatusService.started(SystemJobStatusService.PRICE_UPDATE, "Scheduled price update is running");
         try {
-            steamPriceService.updateAllTrackedItems();
+            int recordedSnapshots = steamPriceService.updateAllTrackedItems();
             jobStatusService.succeeded(
                     SystemJobStatusService.PRICE_UPDATE,
-                    "Scheduled price update completed successfully"
+                    recordedSnapshots > 0
+                            ? "Recorded " + recordedSnapshots + " new price observations"
+                            : "No new price observations were available from CSGOTrader"
             );
-            log.info("Scheduled price update completed successfully");
+            log.info("Scheduled price update completed; {} new observations", recordedSnapshots);
         } catch (Exception e) {
             jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, e.getMessage());
             log.error("Error during scheduled price update: {}", e.getMessage(), e);

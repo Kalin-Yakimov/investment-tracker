@@ -394,10 +394,12 @@ public class AdminSupportService {
         jobStatusService.started(SystemJobStatusService.PRICE_UPDATE, "Manual price update is running");
         applicationTaskExecutor.execute(() -> {
             try {
-                steamPriceService.forceUpdateAllTrackedItems();
+                int recordedSnapshots = steamPriceService.forceUpdateAllTrackedItems();
                 jobStatusService.succeeded(
                         SystemJobStatusService.PRICE_UPDATE,
-                        "Tracked prices were updated successfully"
+                        recordedSnapshots > 0
+                                ? "Recorded " + recordedSnapshots + " new price observations"
+                                : "No new price observations were available from CSGOTrader"
                 );
             } catch (Exception exception) {
                 jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, safeMessage(exception));

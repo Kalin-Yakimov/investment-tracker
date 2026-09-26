@@ -73,33 +73,30 @@ public class SteamPriceService {
         }
     }
 
-    /**
-     * Checks the shared CSGOTrader feed and loads it only when its ETag or
-     * Last-Modified value indicates a new version.
-     */
+    /** Checks the shared CSGOTrader feed for a newly published observation. */
     public void refreshPriceCacheIfNeeded() {
-        refreshPriceCache(false);
+        refreshPriceCache(false, false);
     }
 
-    /**
-     * Immediately checks CSGOTrader, bypassing the local time interval while
-     * still using conditional HTTP headers to avoid downloading unchanged data.
-     */
-    public void forceRefreshPriceCache() {
-        refreshPriceCache(true);
+    /** Immediately downloads the feed, bypassing both the interval and HTTP validators. */
+    public int forceRefreshPriceCache() {
+        return refreshPriceCache(true, true);
     }
 
-    private void refreshPriceCache(boolean forceRefresh) {
+    private int refreshPriceCache(boolean forceRefresh, boolean reportFailure) {
         Instant now = Instant.now();
         if (!forceRefresh
                 && lastCacheCheck != null
                 && now.toEpochMilli() - lastCacheCheck.toEpochMilli() < feedCheckIntervalMs
                 && !priceCache.isEmpty()) {
-            return;
+            return 0;
         }
 
         if (!isRefreshingCache.compareAndSet(false, true)) {
-            return;
+            if (reportFailure) {
+                throw new IllegalStateException("A price feed refresh is already running");
+            }
+            return 0;
         }
 
         try {
@@ -108,17 +105,19 @@ public class SteamPriceService {
                     && lastCacheCheck != null
                     && now.toEpochMilli() - lastCacheCheck.toEpochMilli() < feedCheckIntervalMs
                     && !priceCache.isEmpty()) {
-                return;
+                return 0;
             }
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("User-Agent", "InvestmentTracker/1.0");
             headers.set("Accept", "application/json");
-            if (lastFeedEtag != null && !lastFeedEtag.isBlank()) {
-                headers.setIfNoneMatch(lastFeedEtag);
-            }
-            if (lastFeedModifiedMillis > 0) {
+            // ETag can remain identical when the provider republishes the same
+            // 24-hour values. If-None-Match would hide the newer publication date.
+            // A manual refresh always checks the complete response.
+            if (!forceRefresh && lastFeedModifiedMillis > 0) {
                 headers.setIfModifiedSince(lastFeedModifiedMillis);
+            } else if (!forceRefresh && lastFeedEtag != null && !lastFeedEtag.isBlank()) {
+                headers.setIfNoneMatch(lastFeedEtag);
             }
 
             ResponseEntity<byte[]> response = restTemplate.exchange(
@@ -128,23 +127,23 @@ public class SteamPriceService {
                     byte[].class
             );
 
-            lastCacheCheck = Instant.now();
             if (response.getStatusCode() == HttpStatus.NOT_MODIFIED) {
+                lastCacheCheck = Instant.now();
                 log.debug("CSGOTrader feed has not changed");
-                return;
+                return 0;
             }
 
             byte[] body = response.getBody();
             if (!response.getStatusCode().is2xxSuccessful() || body == null || body.length == 0) {
-                log.warn("CSGOTrader feed returned status {} without usable data", response.getStatusCode());
-                return;
+                throw new IllegalStateException(
+                        "CSGOTrader feed returned status " + response.getStatusCode() + " without usable data"
+                );
             }
 
             String json = decodeBody(body);
             Map<String, ItemPriceData> newPrices = parsePrices(json);
             if (newPrices.isEmpty()) {
-                log.warn("CSGOTrader feed was valid JSON but contained no usable 24-hour prices");
-                return;
+                throw new IllegalStateException("CSGOTrader feed contains no usable 24-hour prices");
             }
 
             BigDecimal eurRate = fetchFreshUsdToEurRate();
@@ -155,6 +154,7 @@ public class SteamPriceService {
             String etag = response.getHeaders().getETag();
             String version = buildSourceVersion(etag, modifiedMillis, body);
 
+            int recordedSnapshots = persistTrackedSnapshots(newPrices, eurRate, version, observedAt);
             priceCache.clear();
             priceCache.putAll(newPrices);
             cachedEurRate = eurRate;
@@ -162,13 +162,17 @@ public class SteamPriceService {
             lastFeedModifiedMillis = modifiedMillis;
             lastFeedObservedAt = observedAt;
             lastFeedVersion = version;
-
-            persistTrackedSnapshots(newPrices, eurRate, version, observedAt);
-            log.info("Loaded {} CSGOTrader 24-hour prices (version {}, observed {})",
-                    newPrices.size(), version, observedAt);
-        } catch (Exception e) {
             lastCacheCheck = Instant.now();
+
+            log.info("Loaded {} CSGOTrader 24-hour prices (version {}, observed {}); recorded {} new snapshots",
+                    newPrices.size(), version, observedAt, recordedSnapshots);
+            return recordedSnapshots;
+        } catch (Exception e) {
             log.error("Failed to refresh the CSGOTrader price feed: {}", e.getMessage(), e);
+            if (reportFailure) {
+                throw new IllegalStateException("Price feed refresh failed: " + e.getMessage(), e);
+            }
+            return 0;
         } finally {
             isRefreshingCache.set(false);
         }
@@ -200,11 +204,21 @@ public class SteamPriceService {
     }
 
     private String buildSourceVersion(String etag, long modifiedMillis, byte[] body) throws Exception {
+        // The publication date is part of the observation identity. The provider
+        // may upload the same values again with a new Last-Modified date but the
+        // same ETag; that is a new observation, not a changed price.
+        if (modifiedMillis > 0) {
+            String contentIdentity = etag != null && !etag.isBlank()
+                    ? etag
+                    : HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
+            String identityHash = HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256")
+                            .digest(contentIdentity.getBytes(StandardCharsets.UTF_8))
+            );
+            return "published-" + modifiedMillis + "-" + identityHash;
+        }
         if (etag != null && !etag.isBlank()) {
             return etag.replace("W/", "").replace("\"", "");
-        }
-        if (modifiedMillis > 0) {
-            return "last-modified-" + modifiedMillis;
         }
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
     }
@@ -239,7 +253,7 @@ public class SteamPriceService {
         return usdPrice.multiply(rate).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private void persistTrackedSnapshots(
+    private int persistTrackedSnapshots(
             Map<String, ItemPriceData> prices,
             BigDecimal eurRate,
             String sourceVersion,
@@ -248,7 +262,7 @@ public class SteamPriceService {
         synchronized (snapshotWriteLock) {
             List<Item> trackedItems = itemRepository.findAllSteamTrackedItems();
             if (trackedItems.isEmpty()) {
-                return;
+                return 0;
             }
 
             List<Item> itemsToUpdate = new ArrayList<>();
@@ -291,6 +305,7 @@ public class SteamPriceService {
             if (!snapshots.isEmpty()) {
                 marketPriceSnapshotRepository.saveAll(snapshots);
             }
+            return snapshots.size();
         }
     }
 
@@ -381,12 +396,12 @@ public class SteamPriceService {
         log.info("Updated {} tracked items from the current CSGOTrader feed", modifiedItems.size());
     }
 
-    public void updateAllTrackedItems() {
-        refreshPriceCacheIfNeeded();
+    public int updateAllTrackedItems() {
+        return refreshPriceCache(false, true);
     }
 
-    public void forceUpdateAllTrackedItems() {
-        forceRefreshPriceCache();
+    public int forceUpdateAllTrackedItems() {
+        return forceRefreshPriceCache();
     }
 
     public void updateAllDashboardItems() {

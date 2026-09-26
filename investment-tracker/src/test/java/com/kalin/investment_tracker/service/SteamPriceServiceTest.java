@@ -27,6 +27,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -90,11 +92,12 @@ class SteamPriceServiceTest {
         assertEquals(new BigDecimal("43.56"), snapshot.getPriceUsd());
         assertEquals(new BigDecimal("40.08"), snapshot.getPriceEur());
         assertEquals(Instant.parse("2026-09-16T08:10:59Z"), snapshot.getObservedAt());
+        assertTrue(snapshot.getSourceVersion().startsWith("published-1789546259000-"));
         assertEquals(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H, snapshot.getSource());
     }
 
     @Test
-    void sendsConditionalHeadersAndDoesNotDuplicateAnUnchangedFeed() {
+    void checksPublicationDateAndDoesNotDuplicateAnUnchangedFeed() {
         ReflectionTestUtils.setField(steamPriceService, "feedCheckIntervalMs", 0L);
         ResponseEntity<byte[]> notModified = new ResponseEntity<>(null, new HttpHeaders(), HttpStatus.NOT_MODIFIED);
         when(restTemplate.exchange(
@@ -107,9 +110,9 @@ class SteamPriceServiceTest {
                 .thenReturn(ResponseEntity.ok("{\"rates\":{\"EUR\":0.92}}"));
         when(itemRepository.findAllSteamTrackedItems()).thenReturn(List.of(testItem));
         when(marketPriceSnapshotRepository.existsByMarketHashNameAndSourceAndSourceVersion(
-                ITEM_NAME,
-                MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
-                "feed-v1"
+                eq(ITEM_NAME),
+                eq(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H),
+                anyString()
         )).thenReturn(false);
 
         steamPriceService.refreshPriceCacheIfNeeded();
@@ -124,9 +127,94 @@ class SteamPriceServiceTest {
                 eq(byte[].class)
         );
         HttpHeaders secondRequestHeaders = requestCaptor.getAllValues().get(1).getHeaders();
-        assertTrue(secondRequestHeaders.getIfNoneMatch().contains("\"feed-v1\""));
+        assertTrue(secondRequestHeaders.getIfNoneMatch().isEmpty());
         assertTrue(secondRequestHeaders.getIfModifiedSince() > 0);
         verify(marketPriceSnapshotRepository, times(1)).saveAll(any());
+    }
+
+    @Test
+    void recordsNewObservationWhenUnchangedPricesAreRepublishedOnAnotherDay() {
+        ResponseEntity<byte[]> original = successfulFeedResponse();
+        HttpHeaders laterHeaders = new HttpHeaders();
+        laterHeaders.setETag("\"feed-v1\"");
+        laterHeaders.setLastModified(Instant.parse("2026-09-17T08:10:59Z").toEpochMilli());
+        ResponseEntity<byte[]> republished = new ResponseEntity<>(
+                FEED_JSON.getBytes(StandardCharsets.UTF_8), laterHeaders, HttpStatus.OK
+        );
+        when(restTemplate.exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(byte[].class)
+        )).thenReturn(original, republished);
+        when(restTemplate.getForEntity("https://open.er-api.com/v6/latest/USD", String.class))
+                .thenReturn(ResponseEntity.ok("{\"rates\":{\"EUR\":0.92}}"));
+        when(itemRepository.findAllSteamTrackedItems()).thenReturn(List.of(testItem));
+
+        steamPriceService.refreshPriceCacheIfNeeded();
+        steamPriceService.forceUpdateAllTrackedItems();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<MarketPriceSnapshot>> snapshotsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(marketPriceSnapshotRepository, times(2)).saveAll(snapshotsCaptor.capture());
+        MarketPriceSnapshot first = snapshotsCaptor.getAllValues().get(0).getFirst();
+        MarketPriceSnapshot second = snapshotsCaptor.getAllValues().get(1).getFirst();
+        assertEquals(first.getPriceUsd(), second.getPriceUsd());
+        assertNotEquals(first.getSourceVersion(), second.getSourceVersion());
+        assertEquals(Instant.parse("2026-09-17T08:10:59Z"), second.getObservedAt());
+
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<HttpEntity> requests = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate, times(2)).exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                requests.capture(),
+                eq(byte[].class)
+        );
+        HttpHeaders manualHeaders = requests.getAllValues().get(1).getHeaders();
+        assertTrue(manualHeaders.getIfNoneMatch().isEmpty());
+        assertEquals(-1, manualHeaders.getIfModifiedSince());
+    }
+
+    @Test
+    void manualRefreshDoesNotDuplicateTheSamePublication() {
+        when(restTemplate.exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(byte[].class)
+        )).thenReturn(successfulFeedResponse());
+        when(restTemplate.getForEntity("https://open.er-api.com/v6/latest/USD", String.class))
+                .thenReturn(ResponseEntity.ok("{\"rates\":{\"EUR\":0.92}}"));
+        when(itemRepository.findAllSteamTrackedItems()).thenReturn(List.of(testItem));
+        when(marketPriceSnapshotRepository.existsByMarketHashNameAndSourceAndSourceVersion(
+                eq(ITEM_NAME),
+                eq(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H),
+                anyString()
+        )).thenReturn(false, true);
+
+        steamPriceService.refreshPriceCacheIfNeeded();
+        steamPriceService.forceUpdateAllTrackedItems();
+
+        verify(marketPriceSnapshotRepository, times(1)).saveAll(any());
+    }
+
+    @Test
+    void manualRefreshReportsAProviderFailure() {
+        when(restTemplate.exchange(
+                eq("https://prices.csgotrader.app/latest/steam.json"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(byte[].class)
+        )).thenThrow(new IllegalStateException("Provider unavailable"));
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                steamPriceService::forceUpdateAllTrackedItems
+        );
+
+        assertTrue(error.getMessage().contains("Provider unavailable"));
+        verify(marketPriceSnapshotRepository, never()).saveAll(any());
     }
 
     @Test
@@ -200,7 +288,7 @@ class SteamPriceServiceTest {
             when(marketPriceSnapshotRepository.existsByMarketHashNameAndSourceAndSourceVersion(
                     anyString(),
                     eq(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H),
-                    eq("feed-v1")
+                    anyString()
             )).thenReturn(snapshotAlreadyExists);
         }
     }
