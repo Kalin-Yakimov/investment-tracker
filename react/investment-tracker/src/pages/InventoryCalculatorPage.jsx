@@ -1,28 +1,41 @@
 import React, { useState } from "react";
 import UserService from "../service/UserService";
+import {
+  loadInventoryCalculatorSession,
+  saveInventoryCalculatorSession,
+} from "../service/InventoryCalculatorSession";
 import "../styles/InventoryCalculatorPage.css";
 
 function InventoryCalculatorPage() {
-  const [steamUrl, setSteamUrl] = useState("");
+  const [savedCalculation] = useState(() =>
+    loadInventoryCalculatorSession(UserService.getCurrentUser()?.id)
+  );
+  const [steamUrl, setSteamUrl] = useState(savedCalculation?.steamUrl || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [privacyError, setPrivacyError] = useState(false);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(savedCalculation?.result || null);
 
   const [activeCategory, setActiveCategory] = useState("All");
 
   const handleCalculate = async (e) => {
     if (e) e.preventDefault();
-    if (!steamUrl.trim()) return;
+    const requestedSteamUrl = steamUrl.trim();
+    if (!requestedSteamUrl) return;
+    const userId = UserService.getCurrentUser()?.id;
 
     setLoading(true);
     setError(null);
     setPrivacyError(false);
 
     try {
-      const data = await UserService.calculateSteamInventory(steamUrl.trim());
+      const data = await UserService.calculateSteamInventory(requestedSteamUrl);
+      if (UserService.getCurrentUser()?.id !== userId) return;
       setResult(data);
+      setActiveCategory("All");
+      saveInventoryCalculatorSession(userId, requestedSteamUrl, data);
     } catch (err) {
+      if (UserService.getCurrentUser()?.id !== userId) return;
       console.error("Error calculating inventory:", err);
       const errMsg = err.error || err.message || "Failed to calculate inventory value";
       
@@ -32,7 +45,6 @@ function InventoryCalculatorPage() {
       } else {
         setError(errMsg);
       }
-      setResult(null);
     } finally {
       setLoading(false);
     }
@@ -65,7 +77,7 @@ function InventoryCalculatorPage() {
             CS2 Steam Inventory Calculator
           </h2>
           <p className="calc-subtitle">
-            Paste any Steam profile link or SteamID to instantly calculate the live market value of a CS2 inventory.
+            Paste a Steam profile link or SteamID to estimate the value of a public CS2 inventory.
           </p>
         </div>
 
@@ -120,6 +132,11 @@ function InventoryCalculatorPage() {
                 {privacyError ? "Steam Inventory is Private" : "Calculation Error"}
               </h5>
               <p className="text-white-50 mb-0 small">{error}</p>
+              {result && (
+                <p className="text-white-50 mb-0 small mt-1">
+                  The previous successful result is still shown below.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -132,7 +149,7 @@ function InventoryCalculatorPage() {
             <span className="visually-hidden">Loading...</span>
           </div>
           <h5 className="text-white font-medium">Fetching CS2 Inventory from Steam...</h5>
-          <p className="text-white-50 small">Matching item quantities with live market prices from database.</p>
+          <p className="text-white-50 small">Matching item quantities with stored market prices.</p>
         </div>
       )}
 

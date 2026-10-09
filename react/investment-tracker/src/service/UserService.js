@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearInventoryCalculatorSession } from "./InventoryCalculatorSession";
 
 let refreshPromise = null;
 
@@ -18,6 +19,7 @@ class UserService {
 
   static removeToken() {
     UserService.accessToken = null;
+    clearInventoryCalculatorSession();
     UserService.notifyAuthChanged();
   }
 

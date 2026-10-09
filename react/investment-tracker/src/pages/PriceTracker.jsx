@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ITEM_SEARCH_DEBOUNCE_MS } from "../config/uiConfig";
+import useChartPointTooltip from "../hooks/useChartPointTooltip";
 import UserService from "../service/UserService";
 import "../styles/PriceTracker.css";
 import {
@@ -108,6 +109,8 @@ const getPeriodChange = (points) => {
  * Chart.js Sparkline Component for Table Rows
  */
 function InteractiveSparkline({ points, strokeColor }) {
+  const showPointTooltip = useChartPointTooltip(points, formatCurrency);
+
   if (!points || points.length === 0) {
     return (
       <div
@@ -160,21 +163,10 @@ function InteractiveSparkline({ points, strokeColor }) {
     plugins: {
       legend: { display: false },
       tooltip: {
-        enabled: true,
+        enabled: false,
         mode: "index",
         intersect: false,
-        backgroundColor: "rgba(15, 23, 42, 0.9)",
-        titleColor: "#94a3b8",
-        bodyColor: "#f8fafc",
-        titleFont: { size: 11, weight: "500" },
-        bodyFont: { size: 12, weight: "bold" },
-        borderColor: "rgba(255, 255, 255, 0.1)",
-        borderWidth: 1,
-        padding: 8,
-        displayColors: false,
-        callbacks: {
-          label: (context) => formatCurrency(context.parsed.y),
-        },
+        external: showPointTooltip,
       },
     },
     scales: {
@@ -203,6 +195,8 @@ function InteractiveSparkline({ points, strokeColor }) {
  * Detailed Large Chart Component built with Chart.js
  */
 function DetailedInteractiveChart({ points }) {
+  const showPointTooltip = useChartPointTooltip(points, formatCurrency, true);
+
   if (!points || points.length === 0) {
     return <div className="tracker-chart-empty text-center py-5">No price history yet</div>;
   }
@@ -249,21 +243,10 @@ function DetailedInteractiveChart({ points }) {
     plugins: {
       legend: { display: false },
       tooltip: {
-        enabled: true,
+        enabled: false,
         mode: "index",
         intersect: false,
-        backgroundColor: "rgba(15, 23, 42, 0.95)",
-        titleColor: "#94a3b8",
-        bodyColor: "#f8fafc",
-        titleFont: { size: 12 },
-        bodyFont: { size: 14, weight: "bold" },
-        borderColor: "rgba(255, 255, 255, 0.12)",
-        borderWidth: 1,
-        padding: 10,
-        displayColors: false,
-        callbacks: {
-          label: (context) => `Price: ${formatCurrency(context.parsed.y)}`,
-        },
+        external: showPointTooltip,
       },
     },
     scales: {

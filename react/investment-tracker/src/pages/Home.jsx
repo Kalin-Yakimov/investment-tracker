@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import UserService from "../service/UserService";
+import useChartPointTooltip from "../hooks/useChartPointTooltip";
 import { Table } from "react-bootstrap";
 import "../styles/Home.css";
 import "../styles/PriceTracker.css";
@@ -105,6 +106,8 @@ const getPeriodChange = (points) => {
  * Compact Sparkline Component for Home Pinned Items Table
  */
 function HomePinnedSparkline({ points, strokeColor }) {
+  const showPointTooltip = useChartPointTooltip(points, formatCurrency);
+
   if (!points || points.length === 0) {
     return (
       <div
@@ -157,21 +160,10 @@ function HomePinnedSparkline({ points, strokeColor }) {
     plugins: {
       legend: { display: false },
       tooltip: {
-        enabled: true,
+        enabled: false,
         mode: "index",
         intersect: false,
-        backgroundColor: "rgba(15, 23, 42, 0.9)",
-        titleColor: "#94a3b8",
-        bodyColor: "#f8fafc",
-        titleFont: { size: 11, weight: "500" },
-        bodyFont: { size: 12, weight: "bold" },
-        borderColor: "rgba(255, 255, 255, 0.1)",
-        borderWidth: 1,
-        padding: 8,
-        displayColors: false,
-        callbacks: {
-          label: (context) => formatCurrency(context.parsed.y),
-        },
+        external: showPointTooltip,
       },
     },
     scales: {
