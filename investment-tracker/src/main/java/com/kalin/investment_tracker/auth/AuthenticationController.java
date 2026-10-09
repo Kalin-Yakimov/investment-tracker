@@ -26,12 +26,15 @@ public class AuthenticationController {
 
     private final AuthenticationService service;
     private final AuthSessionProperties authSessionProperties;
+    private final AuthRateLimitService rateLimits;
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ResponseEntity<Void> register(
-            @RequestBody @Valid RegistrationRequest request
+            @RequestBody @Valid RegistrationRequest request,
+            HttpServletRequest httpRequest
     ) throws MessagingException {
+        rateLimits.checkIp(AuthRateLimitService.Operation.REGISTER, httpRequest.getRemoteAddr());
         service.register(request);
         return ResponseEntity.accepted().build();
     }
@@ -41,6 +44,7 @@ public class AuthenticationController {
             @RequestBody @Valid AuthenticationRequest request,
             HttpServletRequest httpRequest
     ) {
+        rateLimits.checkIp(AuthRateLimitService.Operation.LOGIN, httpRequest.getRemoteAddr());
         AuthenticationResult result = service.authenticate(
                 request,
                 httpRequest.getHeader(HttpHeaders.USER_AGENT),
@@ -68,11 +72,13 @@ public class AuthenticationController {
                 .build();
     }
 
-    @GetMapping("/activate-account")
+    @PostMapping("/activate-account")
     public void confirm(
-            @RequestParam String token
-    ) throws MessagingException {
-        service.activateAccount(token);
+            @RequestBody @Valid ActivationRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        rateLimits.checkIp(AuthRateLimitService.Operation.VERIFY_CODE, httpRequest.getRemoteAddr());
+        service.activateAccount(request);
     }
 
     @GetMapping("/validate-token")
@@ -82,20 +88,34 @@ public class AuthenticationController {
 
     @PostMapping("/forgot-password")
     public ResponseEntity<Void> forgotPassword(
-            @RequestBody @Valid ForgotPasswordRequest request
+            @RequestBody @Valid ForgotPasswordRequest request,
+            HttpServletRequest httpRequest
     ) throws MessagingException {
+        rateLimits.checkIp(AuthRateLimitService.Operation.REQUEST_CODE, httpRequest.getRemoteAddr());
         service.forgotPassword(request);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<Void> resetPassword(
-            @RequestBody @Valid ResetPasswordRequest request
+            @RequestBody @Valid ResetPasswordRequest request,
+            HttpServletRequest httpRequest
     ) {
+        rateLimits.checkIp(AuthRateLimitService.Operation.VERIFY_CODE, httpRequest.getRemoteAddr());
         service.resetPassword(request);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
                 .build();
+    }
+
+    @PostMapping("/resend-activation")
+    public ResponseEntity<Void> resendActivation(
+            @RequestBody @Valid ForgotPasswordRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        rateLimits.checkIp(AuthRateLimitService.Operation.REQUEST_CODE, httpRequest.getRemoteAddr());
+        service.resendActivation(request);
+        return ResponseEntity.ok().build();
     }
 
     @PatchMapping("/change-password")

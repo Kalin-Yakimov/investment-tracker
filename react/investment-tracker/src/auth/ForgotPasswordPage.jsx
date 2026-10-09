@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import UserService from "../service/UserService";
 import "../styles/ForgotPasswordPage.css";
+import { authErrorMessage } from "./authFeedback";
 
 const EyeOpenIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -28,33 +29,33 @@ function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const busy = useRef(false);
 
   const navigate = useNavigate();
 
   const handleRequestCode = async (e) => {
     e.preventDefault();
+    if (busy.current) return;
+    busy.current = true;
     setError("");
     setMessage("");
     setLoading(true);
 
     try {
       await UserService.forgotPassword(email);
-      setMessage("Reset code sent! Please check your email for the 6-digit code.");
+      setMessage("If an account exists for this email, a reset code has been requested. Check your inbox and spam folder.");
       setStep(2);
     } catch (err) {
-      console.error("Forgot password request error:", err);
-      setError(
-        typeof err === "string"
-          ? err
-          : err.message || "Failed to send reset code. Please check your email."
-      );
+      setError(authErrorMessage(err, "Could not request a reset code. Please try again later."));
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   };
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
+    if (busy.current) return;
     setError("");
     setMessage("");
 
@@ -68,6 +69,7 @@ function ForgotPasswordPage() {
       return;
     }
 
+    busy.current = true;
     setLoading(true);
 
     try {
@@ -75,13 +77,9 @@ function ForgotPasswordPage() {
       setMessage("Your password has been successfully reset!");
       setStep(3);
     } catch (err) {
-      console.error("Reset password error:", err);
-      setError(
-        typeof err === "string"
-          ? err
-          : err.message || "Failed to reset password. Please check your reset code."
-      );
+      setError(authErrorMessage(err, "Failed to reset password. Please check your email and code."));
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   };
@@ -236,6 +234,7 @@ function ForgotPasswordPage() {
                 type="button"
                 className="btn btn-secondary py-2"
                 onClick={() => setStep(1)}
+                disabled={loading}
               >
                 Change Email / Resend Code
               </button>

@@ -349,7 +349,7 @@ public class AdminSupportService {
                 "Requested a new account activation code",
                 ipAddress
         );
-        return new AdminDtos.ActionResult("A new activation code was sent");
+        return new AdminDtos.ActionResult("A new activation code was requested");
     }
 
     public AdminDtos.ActionResult startCatalogueSync(User actor, String reason, String ipAddress) {

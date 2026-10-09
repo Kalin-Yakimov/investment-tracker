@@ -7,6 +7,8 @@ The repository contains both parts of the application:
 - `investment-tracker/` — Spring Boot REST API and database access;
 - `react/investment-tracker/` — React web interface;
 - `LOCAL_SETUP.md` — complete setup, backup and recovery instructions.
+- `docs/DATABASE_MIGRATIONS.md` — safeguards for introducing controlled schema migrations.
+- `docs/AUTH_SECURITY.md` — verification-code safeguards, limits and deployment boundaries.
 
 ## Main functionality
 
@@ -90,6 +92,8 @@ An internet connection is required for catalogue synchronization, price updates,
 ## Database persistence
 
 The database is local and is not part of the Git repository. Cloning the code onto another computer creates a new empty installation unless a MySQL backup is restored. See the backup and recovery section in [LOCAL_SETUP.md](LOCAL_SETUP.md).
+
+Migration tooling is currently prepared but **disabled**; it does not change the existing local schema behavior. Before any real schema change, follow [the backup, restore-test and baseline checklist](docs/DATABASE_MIGRATIONS.md). A Windows backup helper is available at `scripts/Backup-LocalDatabase.ps1`; never commit the private exports it produces.
 
 ## Deployment status
 

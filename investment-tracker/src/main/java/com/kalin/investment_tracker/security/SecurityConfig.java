@@ -34,6 +34,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/authenticate",
                                 "/api/v1/auth/activate-account",
+                                "/api/v1/auth/resend-activation",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
                                 "/api/v1/auth/refresh"

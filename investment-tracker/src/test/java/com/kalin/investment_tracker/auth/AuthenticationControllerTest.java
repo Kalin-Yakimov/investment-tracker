@@ -5,6 +5,13 @@ import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.kalin.investment_tracker.handler.GlobalExceptionHandler;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.http.MediaType;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.Mockito.doThrow;
 
 import java.security.Principal;
 import java.time.LocalDateTime;
@@ -21,6 +28,7 @@ class AuthenticationControllerTest {
 
     private AuthenticationService authenticationService;
     private AuthenticationController controller;
+    private AuthRateLimitService limits;
 
     @BeforeEach
     void setUp() {
@@ -28,7 +36,8 @@ class AuthenticationControllerTest {
         AuthSessionProperties properties = new AuthSessionProperties();
         properties.setCookieSecure(true);
         properties.setCookieSameSite("Strict");
-        controller = new AuthenticationController(authenticationService, properties);
+        limits = mock(AuthRateLimitService.class);
+        controller = new AuthenticationController(authenticationService, properties, limits);
     }
 
     @Test
@@ -91,5 +100,45 @@ class AuthenticationControllerTest {
         assertEquals(204, response.getStatusCode().value());
         assertNotNull(cookie);
         assertTrue(cookie.contains("Max-Age=0"));
+    }
+
+    @Test
+    void activationRequiresPostWithEmailAndSixDigitsInsteadOfUrlToken() throws Exception {
+        var mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(get("/api/v1/auth/activate-account").param("token", "123456"))
+                .andExpect(status().isMethodNotAllowed());
+        mvc.perform(post("/api/v1/auth/activate-account").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"person@example.com\",\"code\":\"012345\"}"))
+                .andExpect(status().isOk());
+        verify(authenticationService).activateAccount(new ActivationRequest("person@example.com", "012345"));
+    }
+
+    @Test
+    void malformedCodeIsRejectedBeforeCallingAuthenticationService() throws Exception {
+        var mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(post("/api/v1/auth/activate-account").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"person@example.com\",\"code\":\"12345\"}"))
+                .andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(authenticationService);
+    }
+
+    @Test
+    void rateLimitResponseIncludesRetryAfterAndDoesNotIssueCode() throws Exception {
+        doThrow(new AuthRateLimitException(60)).when(limits)
+                .checkIp(AuthRateLimitService.Operation.REQUEST_CODE, "127.0.0.1");
+        var mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(post("/api/v1/auth/resend-activation").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"person@example.com\"}"))
+                .andExpect(status().isTooManyRequests()).andExpect(header().string("Retry-After", "60"));
+        org.mockito.Mockito.verifyNoInteractions(authenticationService);
+    }
+
+    @Test
+    void malformedJsonGetsSafeBadRequestWithoutExposingInput() throws Exception {
+        var mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(post("/api/v1/auth/activate-account").contentType(MediaType.APPLICATION_JSON)
+                .content("{broken-json"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("Invalid request body."));
+        org.mockito.Mockito.verifyNoInteractions(authenticationService);
     }
 }

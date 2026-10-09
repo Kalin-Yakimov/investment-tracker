@@ -131,19 +131,31 @@ class UserService {
       );
       return response.data;
     } catch (error) {
-      throw error.response.data;
+      throw error.response?.data || error;
     }
   }
 
-  static async confirm(token) {
+  static async confirm(code, email) {
     try {
-      const response = await axios.get(
+      const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/activate-account`,
-        { params: { token } },
+        { email: email.trim(), code },
       );
       return response.data;
     } catch (error) {
-      throw error.response.data;
+      throw error.response?.data || error;
+    }
+  }
+
+  static async resendActivation(email) {
+    try {
+      const response = await axios.post(
+        `${UserService.BASE_URL}/api/v1/auth/resend-activation`,
+        { email: email.trim() },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
     }
   }
 
@@ -459,6 +471,7 @@ axios.interceptors.request.use((config) => {
     "/api/v1/auth/authenticate",
     "/api/v1/auth/register",
     "/api/v1/auth/activate-account",
+    "/api/v1/auth/resend-activation",
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
     "/api/v1/auth/refresh",

@@ -247,6 +247,19 @@ Store the export in an encrypted backup location. A database export can contain 
 
 ### Command-line method
 
+For Windows PowerShell, the repository also provides a helper that prompts for
+the password and creates a uniquely named file in the ignored `backups/database`
+folder. Run it from the repository root with your actual database username:
+
+```powershell
+.\scripts\Backup-LocalDatabase.ps1 -Username investment_app
+```
+
+Add `-WhatIf` to preview the destination without connecting to MySQL. See
+[DATABASE_MIGRATIONS.md](docs/DATABASE_MIGRATIONS.md) for restore verification and
+the safeguards required before activating schema migrations. Flyway is not
+activated by this setup guide.
+
 Run this in **Command Prompt**, not PowerShell, and enter the database password when requested:
 
 ```bat

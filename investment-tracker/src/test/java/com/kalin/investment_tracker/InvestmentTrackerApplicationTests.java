@@ -1,9 +1,14 @@
 package com.kalin.investment_tracker;
 
 import com.kalin.investment_tracker.service.CsItemService;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(properties = {
 		"spring.datasource.url=jdbc:h2:mem:context-test;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -23,8 +28,15 @@ class InvestmentTrackerApplicationTests {
 	@MockitoBean
 	private CsItemService csItemService;
 
+	@Autowired
+	private ApplicationContext applicationContext;
+
 	@Test
 	void contextLoads() {
+		assertTrue(applicationContext.getBeansOfType(Flyway.class).isEmpty(),
+				"Stage 1 must not enable Flyway during ordinary application startup");
+		assertTrue(applicationContext.containsBean("applicationTaskExecutor"),
+				"The separate verification mail executor must not replace normal application tasks");
 	}
 
 }

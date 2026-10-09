@@ -5,6 +5,11 @@ import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
 import com.kalin.investment_tracker.exeption.PrivateSteamInventoryException;
 import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
+import com.kalin.investment_tracker.auth.AuthRateLimitException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import jakarta.mail.MessagingException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -26,6 +31,35 @@ import static org.springframework.http.HttpStatus.*;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ExceptionResponse> handleUnsupportedMethod(HttpRequestMethodNotSupportedException exception) {
+        var response = ResponseEntity.status(METHOD_NOT_ALLOWED);
+        if (exception.getSupportedMethods() != null) {
+            response.header(HttpHeaders.ALLOW, String.join(", ", exception.getSupportedMethods()));
+        }
+        return response.body(ExceptionResponse.builder().error("This HTTP method is not supported.").build());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ExceptionResponse> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        // Parsing exceptions may contain fragments of passwords or codes.
+        return ResponseEntity.badRequest()
+                .body(ExceptionResponse.builder().error("Invalid request body.").build());
+    }
+
+    @ExceptionHandler(AuthRateLimitException.class)
+    public ResponseEntity<ExceptionResponse> handleAuthLimit(AuthRateLimitException exception) {
+        return ResponseEntity.status(TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.getRetryAfterSeconds()))
+                .body(ExceptionResponse.builder().error(exception.getMessage()).build());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ExceptionResponse> handleConflict(DataIntegrityViolationException exception) {
+        return ResponseEntity.status(CONFLICT)
+                .body(ExceptionResponse.builder().error("The change conflicts with an existing record.").build());
+    }
 
     @ExceptionHandler(LockedException.class)
     public ResponseEntity<ExceptionResponse> handleException(LockedException exp) {

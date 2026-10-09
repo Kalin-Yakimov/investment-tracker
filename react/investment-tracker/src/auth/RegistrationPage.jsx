@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import UserService from "../service/UserService";
 import { useNavigate, Link } from "react-router-dom";
 import "../styles/RegistrationPage.css";
+import { authErrorMessage, rememberActivationEmail } from "./authFeedback";
 
 const EyeOpenIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -30,6 +31,8 @@ function RegistrationPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const busy = useRef(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -38,6 +41,7 @@ function RegistrationPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (busy.current) return;
 
     if (formData.username.trim().length < 3) {
       setError("Username must be at least 3 characters long.");
@@ -54,10 +58,13 @@ function RegistrationPage() {
       return;
     }
 
+    busy.current = true;
+    setLoading(true);
+    const activationEmail = formData.email.trim();
     try {
       await UserService.register({
         username: formData.username.trim(),
-        email: formData.email.trim(),
+        email: activationEmail,
         password: formData.password,
       });
 
@@ -68,14 +75,13 @@ function RegistrationPage() {
         confirmPassword: "",
       });
       setError("");
-      navigate("/activate-account");
+      rememberActivationEmail(activationEmail);
+      navigate("/activate-account", { state: { email: activationEmail } });
     } catch (err) {
-      console.error("Error registering user:", err);
-      setError(
-        typeof err === "string"
-          ? err
-          : err.message || "An error occurred while registering. Please try again."
-      );
+      setError(authErrorMessage(err, "An error occurred while registering. Please try again."));
+    } finally {
+      busy.current = false;
+      setLoading(false);
     }
   };
 
@@ -180,8 +186,8 @@ function RegistrationPage() {
           </div>
 
           <div className="d-grid gap-2">
-            <button className="btn btn-primary py-2 fw-semibold" type="submit">
-              Register Account
+            <button className="btn btn-primary py-2 fw-semibold" type="submit" disabled={loading}>
+              {loading ? "Registering..." : "Register Account"}
             </button>
             <Link to="/login" className="btn btn-secondary py-2 text-center">
               Already have an account? Sign In

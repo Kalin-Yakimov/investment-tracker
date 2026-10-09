@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import UserService from "../service/UserService";
 import "../styles/LoginPage.css";
+import { authErrorMessage } from "./authFeedback";
 
 // Modern SVG Eye Icons
 const EyeOpenIcon = () => (
@@ -25,6 +26,8 @@ function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const busy = useRef(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,6 +43,10 @@ function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (busy.current) return;
+    busy.current = true;
+    setLoading(true);
+    setError("");
 
     try {
       const userData = await UserService.login(email, password, rememberMe);
@@ -49,12 +56,10 @@ function LoginPage() {
         setError("Failed to login. Please check your credentials.");
       }
     } catch (error) {
-      console.log(error);
-      setError(
-        typeof error === "string"
-          ? error
-          : error.message || "Wrong email or password. Please try again."
-      );
+      setError(authErrorMessage(error, "Wrong email or password. Please try again."));
+    } finally {
+      busy.current = false;
+      setLoading(false);
     }
   };
 
@@ -136,8 +141,8 @@ function LoginPage() {
           </div>
 
           <div className="d-grid gap-2">
-            <button className="login-button btn btn-primary" type="submit">
-              Sign In
+            <button className="login-button btn btn-primary" type="submit" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </button>
             <button
               className="register-button btn btn-secondary"
@@ -148,6 +153,9 @@ function LoginPage() {
             </button>
           </div>
         </form>
+        <Link to="/activate-account" state={{ email }} className="d-block mt-3 small">
+          Activate an account / Request a new activation code
+        </Link>
       </div>
     </div>
   );
