@@ -20,6 +20,7 @@ public class SteamInventoryResponseDto {
     private BigDecimal totalValue;
     private int totalItemCount;
     private int uniqueItemsCount;
+    private int unpricedItemCount;
     private List<SteamInventoryItemDto> items;
     private Map<String, Integer> categoryCounts;
     private Map<String, BigDecimal> categoryValues;

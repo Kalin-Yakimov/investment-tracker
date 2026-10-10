@@ -40,3 +40,13 @@ test("clears the calculation on sign-out", () => {
 
   expect(loadInventoryCalculatorSession(42)).toBeNull();
 });
+
+test("discards legacy valuations instead of showing old zero-price and quantity mistakes", () => {
+  window.sessionStorage.setItem("investment-tracker.inventory-calculator.v1", JSON.stringify({
+    ownerId: "42", steamUrl: "profile-a", result,
+  }));
+  expect(loadInventoryCalculatorSession(42)).toBeNull();
+  expect(window.sessionStorage.getItem("investment-tracker.inventory-calculator.v1")).toBeNull();
+  saveInventoryCalculatorSession(42, "profile-a", result);
+  expect(loadInventoryCalculatorSession(42)?.result).toEqual(result);
+});

@@ -20,5 +20,7 @@ public class SteamInventoryItemDto {
     private BigDecimal totalPrice;
     private String csItemId;
     private boolean tradable;
+    private int tradableQuantity;
+    private int nonTradableQuantity;
     private String typeCategory; // Skins, Cases, Stickers, Capsules, Souvenirs, Other
 }

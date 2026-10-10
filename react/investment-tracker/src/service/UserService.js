@@ -1,15 +1,25 @@
 import axios from "axios";
 import { clearInventoryCalculatorSession } from "./InventoryCalculatorSession";
+import { AUTH_REFRESH_TIMEOUT_MS } from "../config/uiConfig";
 
 let refreshPromise = null;
+let refreshVersion = null;
 
 class UserService {
   static BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080";
   static accessToken = null;
   static authListeners = new Set();
+  static sessionVersion = 0;
+  static sessionChanges = 0;
+
+  static getSessionVersion() {
+    return UserService.sessionVersion;
+  }
 
   static saveToken(token) {
+    const previousUser = UserService.getCurrentUser()?.id;
     UserService.accessToken = token || null;
+    if (previousUser !== UserService.getCurrentUser()?.id) UserService.sessionVersion += 1;
     UserService.notifyAuthChanged();
   }
 
@@ -18,6 +28,7 @@ class UserService {
   }
 
   static removeToken() {
+    UserService.sessionVersion += 1;
     UserService.accessToken = null;
     clearInventoryCalculatorSession();
     UserService.notifyAuthChanged();
@@ -67,22 +78,32 @@ class UserService {
   }
 
   static async refreshAccessToken() {
+    if (UserService.sessionChanges > 0) return false;
+    if (refreshPromise && refreshVersion !== UserService.sessionVersion) {
+      await refreshPromise;
+      return UserService.refreshAccessToken();
+    }
     if (!refreshPromise) {
-      const requestNewToken = () =>
-        axios
+      const version = UserService.sessionVersion;
+      refreshVersion = version;
+      const requestNewToken = () => {
+        if (version !== UserService.sessionVersion || UserService.sessionChanges > 0) return Promise.resolve(false);
+        return axios
           .post(
             `${UserService.BASE_URL}/api/v1/auth/refresh`,
             {},
-            { withCredentials: true, skipAuthRefresh: true },
+            { withCredentials: true, skipAuthRefresh: true, timeout: AUTH_REFRESH_TIMEOUT_MS },
           )
           .then((response) => {
+            if (version !== UserService.sessionVersion || UserService.sessionChanges > 0) return false;
             UserService.saveToken(response.data.token);
             return true;
           })
           .catch(() => {
-            UserService.removeToken();
+            if (version === UserService.sessionVersion && UserService.sessionChanges === 0) UserService.removeToken();
             return false;
           });
+      };
 
       const guardedRequest =
         typeof navigator !== "undefined" && navigator.locks
@@ -97,29 +118,41 @@ class UserService {
   }
 
   static async login(email, password, rememberMe = true) {
+    const version = ++UserService.sessionVersion;
+    UserService.sessionChanges += 1;
     try {
+      if (refreshPromise) await refreshPromise;
+      if (version !== UserService.sessionVersion) throw new axios.CanceledError("Session changed");
       const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/authenticate`,
         { email, password, rememberMe },
         { withCredentials: true, skipAuthRefresh: true },
       );
       const { token } = response.data;
+      if (version !== UserService.sessionVersion) throw new axios.CanceledError("Session changed");
       UserService.saveToken(token);
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
+    } finally {
+      UserService.sessionChanges -= 1;
     }
   }
 
   static async logout() {
+    const version = ++UserService.sessionVersion;
+    UserService.sessionChanges += 1;
     try {
+      if (refreshPromise) await refreshPromise;
+      if (version !== UserService.sessionVersion) return;
       await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/logout`,
         {},
-        { withCredentials: true },
+        { withCredentials: true, skipAuthRefresh: true },
       );
     } finally {
-      UserService.removeToken();
+      if (version === UserService.sessionVersion) UserService.removeToken();
+      UserService.sessionChanges -= 1;
     }
   }
 
@@ -172,12 +205,13 @@ class UserService {
   }
 
   static async resetPassword(email, code, newPassword) {
+    const version = UserService.sessionVersion;
     try {
       const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/auth/reset-password`,
         { email, code, newPassword },
       );
-      UserService.removeToken();
+      if (version === UserService.sessionVersion) UserService.removeToken();
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
@@ -185,6 +219,7 @@ class UserService {
   }
 
   static async changePassword(passwordsData) {
+    const version = UserService.sessionVersion;
     try {
       const token = UserService.getToken();
       const response = await axios.patch(
@@ -196,6 +231,7 @@ class UserService {
           },
         },
       );
+      if (version !== UserService.sessionVersion) throw new axios.CanceledError("Session changed");
       UserService.removeToken();
       return response.data;
     } catch (error) {
@@ -204,6 +240,7 @@ class UserService {
   }
 
   static async changeUsername(newUsername) {
+    const version = UserService.sessionVersion;
     try {
       const token = UserService.getToken();
       const response = await axios.patch(
@@ -215,6 +252,7 @@ class UserService {
           },
         },
       );
+      if (version !== UserService.sessionVersion) throw new axios.CanceledError("Session changed");
       if (response.data && response.data.token) {
         UserService.saveToken(response.data.token);
       }
@@ -236,7 +274,7 @@ class UserService {
     }
   }
 
-  static async getUserItems(page = 0, size = 10, filter = "newest_date") {
+  static async getUserItems(page = 0, size = 10, filter = "newest_date", config = {}) {
     try {
       const token = UserService.getToken();
       const response = await axios.get(
@@ -250,6 +288,7 @@ class UserService {
             size,
             filter,
           },
+          signal: config.signal,
         },
       );
       return response.data;
@@ -258,12 +297,13 @@ class UserService {
     }
   }
 
-  static async getPortfolioSummary() {
+  static async getPortfolioSummary(config = {}) {
     try {
       const token = UserService.getToken();
       const response = await axios.get(
         `${UserService.BASE_URL}/portfolio-summary`,
         {
+          signal: config.signal,
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -275,10 +315,11 @@ class UserService {
     }
   }
 
-  static async getItemByName(name, page = 0, size = 10) {
+  static async getItemByName(name, page = 0, size = 10, config = {}) {
     try {
       const token = UserService.getToken();
       const response = await axios.get(`${UserService.BASE_URL}/item/history`, {
+        signal: config.signal,
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -290,7 +331,7 @@ class UserService {
       });
       return response.data;
     } catch (error) {
-      throw error.response.data;
+      throw error.response?.data || error;
     }
   }
 
@@ -315,10 +356,11 @@ class UserService {
     }
   }
 
-  static async getTrackedItems() {
+  static async getTrackedItems(config = {}) {
     try {
       const token = UserService.getToken();
       const response = await axios.get(`${UserService.BASE_URL}/api/items`, {
+        signal: config.signal,
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -369,12 +411,13 @@ class UserService {
     return UserService.addSteamTrackerItem(itemData);
   }
 
-  static async getPriceHistoryByItem(itemId) {
+  static async getPriceHistoryByItem(itemId, config = {}) {
     try {
       const token = UserService.getToken();
       const response = await axios.get(
         `${UserService.BASE_URL}/api/price-history/${itemId}`,
         {
+          signal: config.signal,
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -386,8 +429,8 @@ class UserService {
     }
   }
 
-  static async getPriceHistory(itemId) {
-    return UserService.getPriceHistoryByItem(itemId);
+  static async getPriceHistory(itemId, config = {}) {
+    return UserService.getPriceHistoryByItem(itemId, config);
   }
 
   static async toggleBookmark(itemId) {
@@ -442,7 +485,7 @@ class UserService {
     }
   }
 
-  static async calculateSteamInventory(steamUrl) {
+  static async calculateSteamInventory(steamUrl, config = {}) {
     try {
       const token = UserService.getToken();
       const headers = {};
@@ -452,7 +495,7 @@ class UserService {
       const response = await axios.post(
         `${UserService.BASE_URL}/api/v1/inventory/calculate`,
         { steamUrl },
-        { headers }
+        { headers, signal: config.signal }
       );
       return response.data;
     } catch (error) {
@@ -466,7 +509,10 @@ axios.defaults.withCredentials = true;
 axios.interceptors.request.use((config) => {
   const token = UserService.getToken();
   const url = config.url || "";
-  const isBackendRequest = url.startsWith(UserService.BASE_URL) || url.startsWith("/");
+  let isBackendRequest = false;
+  try {
+    isBackendRequest = new URL(url, UserService.BASE_URL).origin === new URL(UserService.BASE_URL).origin;
+  } catch { /* Invalid URLs must never receive credentials. */ }
   const isPublicAuthRequest = [
     "/api/v1/auth/authenticate",
     "/api/v1/auth/register",
@@ -477,27 +523,50 @@ axios.interceptors.request.use((config) => {
     "/api/v1/auth/refresh",
   ].some((path) => url.includes(path));
 
-  if (token && isBackendRequest && !isPublicAuthRequest && !config.headers?.Authorization) {
+  if (isPublicAuthRequest) config.skipAuthRefresh = true;
+  if (isBackendRequest && !isPublicAuthRequest) {
+    if (config._sessionVersion !== undefined && config._sessionVersion !== UserService.sessionVersion) {
+      throw new axios.CanceledError("Session changed");
+    }
+    config._sessionVersion = UserService.sessionVersion;
     config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${token}`;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    else delete config.headers.Authorization;
   }
   return config;
 });
 
 axios.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const version = response.config?._sessionVersion;
+    if (version !== undefined && version !== UserService.sessionVersion) {
+      throw new axios.CanceledError("Session changed");
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const status = error.response?.status;
+    const isSessionRequest = originalRequest?._sessionVersion !== undefined;
+    if (
+      axios.isCancel(error) || originalRequest?.signal?.aborted ||
+      (isSessionRequest && (originalRequest._sessionVersion !== UserService.sessionVersion || UserService.sessionChanges > 0))
+    ) {
+      return Promise.reject(new axios.CanceledError("Request no longer belongs to the active session"));
+    }
 
     if (
       status === 401 &&
+      isSessionRequest &&
       originalRequest &&
       !originalRequest._retry &&
       !originalRequest.skipAuthRefresh
     ) {
       originalRequest._retry = true;
       const refreshed = await UserService.refreshAccessToken();
+      if (originalRequest.signal?.aborted || originalRequest._sessionVersion !== UserService.sessionVersion) {
+        return Promise.reject(new axios.CanceledError("Session changed"));
+      }
       if (refreshed) {
         originalRequest.headers = originalRequest.headers || {};
         originalRequest.headers.Authorization = `Bearer ${UserService.getToken()}`;
@@ -505,7 +574,7 @@ axios.interceptors.response.use(
       }
     }
 
-    if (status === 401 && !originalRequest?.skipAuthRefresh) {
+    if (status === 401 && isSessionRequest && !originalRequest?.skipAuthRefresh) {
       UserService.removeToken();
       const publicPaths = ["/login", "/registration", "/forgot-password", "/activate-account"];
       if (!publicPaths.includes(window.location.pathname)) {

@@ -2,11 +2,13 @@ import React, { useEffect, useState, useRef } from "react";
 import "../styles/Navbar.css";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
 import ChangePasswordModal from "../auth/ChangePasswordModal";
 import ChangeUsernameModal from "../auth/ChangeUsernameModal";
 import ContactUsModal from "../auth/ContactUsModal";
 
 export default function Navbar() {
+  const scope = useRequestScope({ guardSession: false });
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassModal, setShowChangePassModal] = useState(false);
@@ -16,6 +18,7 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const menuRef = useRef(null);
+  const previousOwner = useRef(null);
 
   useEffect(() => {
     const updateLoginState = () => setIsLoggedIn(UserService.isAuthenticated());
@@ -34,9 +37,20 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = async () => {
+    const request = scope.begin("logout", { replace: false, abortable: false });
+    if (!request) return;
     setShowProfileMenu(false);
-    await UserService.logout();
-    navigate("/login");
+    setShowChangePassModal(false);
+    setShowChangeUserModal(false);
+    setShowContactModal(false);
+    try {
+      await UserService.logout();
+    } catch (error) {
+      console.error("Sign out failed; local credentials have been cleared:", error);
+    } finally {
+      if (request.isCurrent() && !UserService.isAuthenticated()) navigate("/login");
+      request.finish();
+    }
   };
 
   const getUserInfo = () => {
@@ -48,6 +62,18 @@ export default function Navbar() {
   };
 
   const userInfo = getUserInfo();
+
+  useEffect(() => {
+    if (previousOwner.current !== userInfo.id) {
+      setShowProfileMenu(false);
+      setShowChangeUserModal(false);
+      setShowContactModal(false);
+      // Password-change success briefly remains visible after its own logout.
+      // A new account must never inherit the previous account's modal or timer.
+      if (userInfo.id != null) setShowChangePassModal(false);
+    }
+    previousOwner.current = userInfo.id;
+  }, [userInfo.id]);
 
   return (
     <>

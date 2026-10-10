@@ -1,41 +1,50 @@
 import React, { useState } from "react";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import {
   loadInventoryCalculatorSession,
   saveInventoryCalculatorSession,
 } from "../service/InventoryCalculatorSession";
 import "../styles/InventoryCalculatorPage.css";
 
+const formatPrice = (value) =>
+  value != null && value !== "" && Number.isFinite(Number(value))
+    ? `€${Number(value).toFixed(2)}`
+    : "N/A";
+
 function InventoryCalculatorPage() {
+  const scope = useRequestScope();
   const [savedCalculation] = useState(() =>
     loadInventoryCalculatorSession(UserService.getCurrentUser()?.id)
   );
   const [steamUrl, setSteamUrl] = useState(savedCalculation?.steamUrl || "");
-  const [loading, setLoading] = useState(false);
+  const loading = scope.isPending("calculate");
   const [error, setError] = useState(null);
   const [privacyError, setPrivacyError] = useState(false);
   const [result, setResult] = useState(savedCalculation?.result || null);
 
   const [activeCategory, setActiveCategory] = useState("All");
+  const hasUnpricedItems = (result?.unpricedItemCount || 0) > 0;
 
   const handleCalculate = async (e) => {
     if (e) e.preventDefault();
     const requestedSteamUrl = steamUrl.trim();
     if (!requestedSteamUrl) return;
     const userId = UserService.getCurrentUser()?.id;
-
-    setLoading(true);
+    const request = scope.begin("calculate", { replace: false });
+    if (!request) return;
     setError(null);
     setPrivacyError(false);
 
     try {
-      const data = await UserService.calculateSteamInventory(requestedSteamUrl);
-      if (UserService.getCurrentUser()?.id !== userId) return;
+      const data = await UserService.calculateSteamInventory(requestedSteamUrl, { signal: request.signal });
+      if (!request.isCurrent()) return;
       setResult(data);
       setActiveCategory("All");
       saveInventoryCalculatorSession(userId, requestedSteamUrl, data);
     } catch (err) {
-      if (UserService.getCurrentUser()?.id !== userId) return;
+      if (!request.isCurrent() || isRequestCanceled(err)) return;
       console.error("Error calculating inventory:", err);
       const errMsg = err.error || err.message || "Failed to calculate inventory value";
       
@@ -46,7 +55,7 @@ function InventoryCalculatorPage() {
         setError(errMsg);
       }
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
@@ -175,19 +184,27 @@ function InventoryCalculatorPage() {
 
               <div className="text-end">
                 <span className="badge bg-success bg-gradient fs-6 px-3 py-2">
-                  Total Value: €{Number(result.totalValue).toFixed(2)}
+                  {hasUnpricedItems ? "Known Value" : "Total Value"}: {formatPrice(result.totalValue)}
                 </span>
               </div>
             </div>
           </div>
 
           {/* 4 Summary Metric Cards */}
+          {hasUnpricedItems && (
+            <p className="text-white-50 small mb-3" role="status">
+              Prices are unavailable for {result.unpricedItemCount} of {result.totalItemCount} items.
+              The total includes only items with available prices.
+            </p>
+          )}
           <div className="row g-3 mb-4">
             <div className="col-12 col-sm-6 col-md-3">
               <div className="calc-stat-card">
-                <span className="calc-stat-label">💰 Estimated Inventory Value</span>
+                <span className="calc-stat-label">
+                  💰 {hasUnpricedItems ? "Estimated Value (priced items)" : "Estimated Inventory Value"}
+                </span>
                 <div className="calc-stat-value text-success">
-                  €{Number(result.totalValue).toFixed(2)}
+                  {formatPrice(result.totalValue)}
                 </div>
               </div>
             </div>
@@ -218,7 +235,7 @@ function InventoryCalculatorPage() {
                     <>
                       <div>{result.mostValuableItem.itemName}</div>
                       <span className="text-success small fw-bold">
-                        €{Number(result.mostValuableItem.unitPrice).toFixed(2)}
+                        {formatPrice(result.mostValuableItem.unitPrice)}
                       </span>
                     </>
                   ) : (
@@ -279,9 +296,9 @@ function InventoryCalculatorPage() {
                           <span className="category-badge">{item.typeCategory}</span>
                         </td>
                         <td className="text-center font-mono text-white fw-bold">{item.quantity}</td>
-                        <td className="text-end font-mono text-white">€{Number(item.unitPrice).toFixed(2)}</td>
+                        <td className="text-end font-mono text-white">{formatPrice(item.unitPrice)}</td>
                         <td className="text-end font-mono text-success fw-bold">
-                          €{Number(item.totalPrice).toFixed(2)}
+                          {formatPrice(item.totalPrice)}
                         </td>
                       </tr>
                     ))}
@@ -290,7 +307,9 @@ function InventoryCalculatorPage() {
               </div>
             ) : (
               <div className="text-center py-4 text-white-50">
-                No items found matching category "{activeCategory}".
+                {result.totalItemCount === 0
+                  ? "This public CS2 inventory contains no items."
+                  : 'No items found matching category "' + activeCategory + '".'}
               </div>
             )}
           </div>

@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
 import UserService from "../service/UserService";
+import useModalRequestScope from "../hooks/useModalRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 
 function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
+  const scope = useModalRequestScope(show);
   const [newUsername, setNewUsername] = useState("");
-  const [loading, setLoading] = useState(false);
+  const loading = scope.isPending("submit");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -12,6 +15,13 @@ function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
       setNewUsername(currentUsername);
     }
   }, [currentUsername, show]);
+
+  useEffect(() => {
+    if (!show) { setSuccess(""); setError(""); }
+    if (!show || !success) return undefined;
+    const timer = setTimeout(() => { setSuccess(""); onClose(); }, 1500);
+    return () => clearTimeout(timer);
+  }, [show, success, onClose]);
 
   if (!show) return null;
 
@@ -25,18 +35,16 @@ function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
       return;
     }
 
-    setLoading(true);
-
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     try {
       await UserService.changeUsername(newUsername.trim());
+      if (!request.isCurrent()) return;
       setSuccess("Username updated successfully!");
       if (onSuccess) onSuccess();
 
-      setTimeout(() => {
-        setSuccess("");
-        onClose();
-      }, 1500);
     } catch (err) {
+      if (!request.isCurrent() || isRequestCanceled(err)) return;
       console.error("Change username error:", err);
       setError(
         typeof err === "string"
@@ -44,7 +52,7 @@ function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
           : err.message || "Failed to update username. Please try another username."
       );
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
@@ -80,6 +88,7 @@ function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
               className="form-control"
               placeholder="e.g. Kalin99"
               value={newUsername}
+              disabled={loading}
               onChange={(e) => setNewUsername(e.target.value)}
               required
             />

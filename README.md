@@ -11,6 +11,9 @@ The repository contains both parts of the application:
 - `docs/AUTH_SECURITY.md` — verification-code safeguards, limits and deployment boundaries.
 - `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
 - `docs/EXTERNAL_SERVICES.md` — external HTTP limits, atomic price refreshes and background-job policies.
+- `docs/DAILY_PRICE_HISTORY.md` — daily price observations, stale-publication protection and existing-database adoption.
+- `docs/INVENTORY_CALCULATOR.md` — bounded Steam inventory loading, quantity/price semantics and verification.
+- `docs/FRONTEND_REQUEST_LIFECYCLE.md` — request cancellation, stale-response guards, polling and frontend verification.
 
 ## Main functionality
 

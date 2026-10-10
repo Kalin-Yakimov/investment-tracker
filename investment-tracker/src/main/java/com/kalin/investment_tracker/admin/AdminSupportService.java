@@ -371,8 +371,8 @@ public class AdminSupportService {
         submitSystemJob(actor, reason, ipAddress, SystemJobStatusService.PRICE_UPDATE,
                 "PRICE_UPDATE_STARTED", "Started a manual update for all tracked prices", () -> {
             int count = steamPriceService.forceUpdateAllTrackedItems();
-            return count > 0 ? "Recorded " + count + " new price observations"
-                    : "No new price observations were available from CSGOTrader";
+            return count > 0 ? "Stored " + count + " daily price observations"
+                    : "No newer price observations were available from CSGOTrader";
         });
         return new AdminDtos.ActionResult("Price update started");
     }

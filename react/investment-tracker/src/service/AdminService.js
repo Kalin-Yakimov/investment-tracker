@@ -4,14 +4,15 @@ import UserService from "./UserService";
 class AdminService {
   static BASE_URL = `${UserService.BASE_URL}/api/admin`;
 
-  static async getOverview() {
-    return (await axios.get(`${AdminService.BASE_URL}/overview`)).data;
+  static async getOverview(config = {}) {
+    return (await axios.get(`${AdminService.BASE_URL}/overview`, { signal: config.signal })).data;
   }
 
-  static async searchUsers(query = "", page = 0, size = 20) {
+  static async searchUsers(query = "", page = 0, size = 20, config = {}) {
     return (
       await axios.get(`${AdminService.BASE_URL}/users`, {
         params: { query, page, size },
+        signal: config.signal,
       })
     ).data;
   }
@@ -20,67 +21,73 @@ class AdminService {
     return { "X-Support-Reason": reason };
   }
 
-  static async getUserDetails(userId, reason) {
+  static async getUserDetails(userId, reason, config = {}) {
     return (
       await axios.get(`${AdminService.BASE_URL}/users/${userId}`, {
+        signal: config.signal,
         headers: AdminService.supportHeaders(reason),
       })
     ).data;
   }
 
-  static async getPortfolio(userId, reason, page = 0, size = 20) {
+  static async getPortfolio(userId, reason, page = 0, size = 20, config = {}) {
     return (
       await axios.get(`${AdminService.BASE_URL}/users/${userId}/portfolio`, {
+        signal: config.signal,
         headers: AdminService.supportHeaders(reason),
         params: { page, size },
       })
     ).data;
   }
 
-  static async getTrackedItems(userId, reason) {
+  static async getTrackedItems(userId, reason, config = {}) {
     return (
       await axios.get(`${AdminService.BASE_URL}/users/${userId}/tracked-items`, {
+        signal: config.signal,
         headers: AdminService.supportHeaders(reason),
       })
     ).data;
   }
 
-  static async getSessions(userId, reason) {
+  static async getSessions(userId, reason, config = {}) {
     return (
       await axios.get(`${AdminService.BASE_URL}/users/${userId}/sessions`, {
+        signal: config.signal,
         headers: AdminService.supportHeaders(reason),
       })
     ).data;
   }
 
-  static async getActivity(userId, reason, page = 0, size = 30) {
+  static async getActivity(userId, reason, page = 0, size = 30, config = {}) {
     return (
       await axios.get(`${AdminService.BASE_URL}/users/${userId}/activity`, {
+        signal: config.signal,
         headers: AdminService.supportHeaders(reason),
         params: { page, size },
       })
     ).data;
   }
 
-  static async getAudit(page = 0, size = 25) {
+  static async getAudit(page = 0, size = 25, config = {}) {
     return (
       await axios.get(`${AdminService.BASE_URL}/audit`, {
         params: { page, size },
+        signal: config.signal,
       })
     ).data;
   }
 
-  static async getTickets(status = "", page = 0, size = 15) {
+  static async getTickets(status = "", page = 0, size = 15, config = {}) {
     const params = { page, size };
     if (status) params.status = status;
     return (
-      await axios.get(`${AdminService.BASE_URL}/tickets`, { params })
+      await axios.get(`${AdminService.BASE_URL}/tickets`, { params, signal: config.signal })
     ).data;
   }
 
-  static async getNewTicketCount() {
+  static async getNewTicketCount(config = {}) {
     return (
-      await axios.get(`${AdminService.BASE_URL}/tickets/new-count`)
+      await axios.get(`${AdminService.BASE_URL}/tickets/new-count`, { signal: config.signal })
     ).data.count;
   }
 

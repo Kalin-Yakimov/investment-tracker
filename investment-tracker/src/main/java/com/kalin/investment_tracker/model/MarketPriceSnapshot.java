@@ -6,11 +6,15 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 
 /**
  * A price value that was actually published by an external market-data feed.
@@ -29,6 +33,10 @@ import java.time.Instant;
                 @UniqueConstraint(
                         name = "uk_mps_market_source_version",
                         columnNames = {"market_hash_name", "source", "source_version"}
+                ),
+                @UniqueConstraint(
+                        name = "uk_mps_market_source_day",
+                        columnNames = {"market_hash_name", "source", "observation_date"}
                 )
         }
 )
@@ -51,6 +59,9 @@ public class MarketPriceSnapshot {
 
     @Column(name = "observed_at", nullable = false)
     private Instant observedAt;
+
+    @Column(name = "observation_date", nullable = false)
+    private LocalDate observationDate;
 
     @Column(name = "price_usd", nullable = false, precision = 18, scale = 4)
     private BigDecimal priceUsd;
@@ -79,7 +90,7 @@ public class MarketPriceSnapshot {
         this.marketHashName = marketHashName;
         this.source = source;
         this.sourceVersion = sourceVersion;
-        this.observedAt = observedAt;
+        setObservedAt(observedAt);
         this.priceUsd = priceUsd;
         this.usdToEurRate = usdToEurRate;
         this.priceEur = priceEur;
@@ -124,6 +135,17 @@ public class MarketPriceSnapshot {
 
     public void setObservedAt(Instant observedAt) {
         this.observedAt = observedAt;
+        this.observationDate = observedAt == null ? null : observedAt.atOffset(ZoneOffset.UTC).toLocalDate();
+    }
+
+    public LocalDate getObservationDate() {
+        return observationDate;
+    }
+
+    @PrePersist
+    @PreUpdate
+    private void alignObservationDate() {
+        setObservedAt(observedAt);
     }
 
     public BigDecimal getPriceUsd() {

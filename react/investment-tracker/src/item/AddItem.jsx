@@ -1,13 +1,16 @@
 import axios from "axios";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import UserService from "../service/UserService";
 import DatePicker from "react-datepicker";
 import { format } from "date-fns";
 import "react-datepicker/dist/react-datepicker.module.css";
 import "../styles/AddItem.css";
-import { ITEM_SEARCH_DEBOUNCE_MS } from "../config/uiConfig";
+import useCatalogueSearch from "../hooks/useCatalogueSearch";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 
 export default function AddItem({ onItemAdded }) {
+  const scope = useRequestScope();
   const [item, setItem] = useState({
     itemName: "",
     csItemId: null,
@@ -17,51 +20,12 @@ export default function AddItem({ onItemAdded }) {
     price: "",
   });
 
-  const [csItems, setCsItems] = useState([]);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [error, setError] = useState("");
   const { itemName, csItemId, itemStatus, date, quantity, price } = item;
 
-  useEffect(() => {
-    // If an item is already selected, don't trigger auto-complete search again
-    if (csItemId) {
-      setShowDropdown(false);
-      setCsItems([]);
-      return;
-    }
-
-    const delayDebounceFn = setTimeout(() => {
-      if (itemName && itemName.length > 1) {
-        fetchCsItems(itemName);
-      } else {
-        setCsItems([]);
-        setShowDropdown(false);
-      }
-    }, ITEM_SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [itemName, csItemId]);
-
-  const fetchCsItems = async (query) => {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(
-        `${UserService.BASE_URL}/cs-items/search`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          params: {
-            query: query,
-          },
-        },
-      );
-      setCsItems(response.data);
-      setShowDropdown(true);
-    } catch (error) {
-      console.error("Error fetching CS items:", error);
-    }
-  };
+  const csItems = useCatalogueSearch(itemName, !csItemId, 2);
+  const showDropdown = !csItemId && csItems.length > 0;
+  const submitting = scope.isPending("submit");
 
   const onInputChange = (e) => {
     const { name, value } = e.target;
@@ -79,8 +43,6 @@ export default function AddItem({ onItemAdded }) {
       itemName: selectedItem.name,
       csItemId: selectedItem.id,
     }));
-    setShowDropdown(false);
-    setCsItems([]);
   };
 
   const handleDateChange = (date) => {
@@ -101,8 +63,6 @@ export default function AddItem({ onItemAdded }) {
       price: "",
     });
     setError("");
-    setCsItems([]);
-    setShowDropdown(false);
   };
 
   const onSubmit = async (e) => {
@@ -118,6 +78,8 @@ export default function AddItem({ onItemAdded }) {
       return;
     }
 
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     try {
       const formattedDate = format(date, "dd.MM.yyyy");
       const token = UserService.getToken();
@@ -131,10 +93,16 @@ export default function AddItem({ onItemAdded }) {
           },
         },
       );
+      if (!request.isCurrent()) return;
       clearForm();
       if (onItemAdded) onItemAdded();
     } catch (error) {
-      console.error("There was an error submitting the form!", error);
+      if (request.isCurrent() && !isRequestCanceled(error)) {
+        console.error("There was an error submitting the form!", error);
+        setError(error.response?.data?.error || "The item could not be registered. Please try again.");
+      }
+    } finally {
+      request.finish();
     }
   };
 
@@ -149,7 +117,7 @@ export default function AddItem({ onItemAdded }) {
         {error && <div className="alert alert-danger py-2">{error}</div>}
 
         <form onSubmit={onSubmit}>
-          <div className="row g-3 align-items-end">
+          <fieldset className="row g-3 align-items-end" disabled={submitting}>
             {/* Item Name Input with Auto-complete Dropdown */}
             <div className="col-12 col-md-4 position-relative">
               <label htmlFor="itemName" className="form-label text-white small fw-semibold">
@@ -269,7 +237,7 @@ export default function AddItem({ onItemAdded }) {
                 Register Item
               </button>
             </div>
-          </div>
+          </fieldset>
         </form>
       </div>
     </div>

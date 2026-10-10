@@ -53,10 +53,10 @@ public class ScheduledPriceUpdateConfig {
             jobStatusService.succeeded(
                     SystemJobStatusService.PRICE_UPDATE,
                     recordedSnapshots > 0
-                            ? "Recorded " + recordedSnapshots + " new price observations"
-                            : "No new price observations were available from CSGOTrader"
+                            ? "Stored " + recordedSnapshots + " daily price observations"
+                            : "No newer price observations were available from CSGOTrader"
             );
-            log.info("Scheduled price update completed; {} new observations", recordedSnapshots);
+            log.info("Scheduled price update completed; {} daily observations stored", recordedSnapshots);
         } catch (Exception e) {
             jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, "Scheduled price update failed; try again later");
             log.warn("Scheduled price update failed ({})", e.getClass().getSimpleName());

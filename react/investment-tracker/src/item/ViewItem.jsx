@@ -2,10 +2,13 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import { Table } from "react-bootstrap";
 import Card from "../utils/Card";
 
 export default function ViewItem() {
+  const scope = useRequestScope();
   const [item, setItem] = useState({
     itemName: "",
     itemStatus: "",
@@ -25,55 +28,74 @@ export default function ViewItem() {
   const itemsPerPage = 10;
 
   const loadItem = useCallback(async () => {
+    const request = scope.begin("item");
+    if (!request) return;
+    setLoading(true);
+    setError("");
+    scope.cancel("history");
     try {
       const token = UserService.getToken();
       const result = await axios.get(`${UserService.BASE_URL}/item/${id}`, {
+        signal: request.signal,
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+      if (!request.isCurrent()) return;
       setItem(result.data);
       setActiveItem(result.data);
     } catch (error) {
-      console.error("Error fetching item:", error);
-      setError("Item not found");
+      if (request.isCurrent() && !isRequestCanceled(error)) {
+        console.error("Error fetching item:", error);
+        setError("Item not found");
+      }
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
+      request.finish();
     }
-  }, [id]);
+  }, [id, scope]);
 
   const loadItemHistory = useCallback(
     async (page = 0) => {
+      const request = scope.begin("history");
+      if (!request) return;
       setHistoryLoading(true);
       try {
         const result = await UserService.getItemByName(
           item.itemName,
           page,
           itemsPerPage,
+          { signal: request.signal },
         );
+        if (!request.isCurrent()) return;
         setHistory(result.content || []);
         setHistoryTotalPages(result.totalPages || 0);
         setCurrentPage(page);
       } catch (error) {
-        console.error("Error fetching item history:", error);
+        if (request.isCurrent() && !isRequestCanceled(error)) console.error("Error fetching item history:", error);
       } finally {
-        setHistoryLoading(false);
+        if (request.isCurrent()) setHistoryLoading(false);
+        request.finish();
       }
     },
-    [item.itemName, itemsPerPage],
+    [item.itemName, itemsPerPage, scope],
   );
 
   useEffect(() => {
     loadItem();
-  }, [loadItem]);
+    return () => scope.cancel("item");
+  }, [loadItem, scope]);
 
   useEffect(() => {
     if (item.itemName) {
       loadItemHistory();
     }
-  }, [item.itemName, loadItemHistory]);
+    return () => scope.cancel("history");
+  }, [item.itemName, loadItemHistory, scope]);
 
   const deleteItem = async () => {
+    const request = scope.begin("delete", { replace: false, abortable: false });
+    if (!request) return;
     try {
       const token = UserService.getToken();
       const targetId = activeItem?.id || id;
@@ -82,10 +104,10 @@ export default function ViewItem() {
           Authorization: `Bearer ${token}`,
         },
       });
-      window.location.href = "/";
+      if (request.isCurrent()) window.location.href = "/";
     } catch (error) {
-      console.error("Error deleting item:", error);
-    }
+      if (request.isCurrent() && !isRequestCanceled(error)) console.error("Error deleting item:", error);
+    } finally { request.finish(); }
   };
 
   const handleHistoryPageChange = (page) => {

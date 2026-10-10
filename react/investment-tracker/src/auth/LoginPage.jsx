@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import "../styles/LoginPage.css";
 import { authErrorMessage } from "./authFeedback";
 
@@ -20,6 +22,7 @@ const EyeOffIcon = () => (
 );
 
 function LoginPage() {
+  const scope = useRequestScope({ guardSession: false });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -44,22 +47,26 @@ function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (busy.current) return;
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     busy.current = true;
     setLoading(true);
     setError("");
 
     try {
       const userData = await UserService.login(email, password, rememberMe);
+      if (!request.isCurrent()) return;
       if (userData.token) {
         navigate("/");
       } else {
         setError("Failed to login. Please check your credentials.");
       }
     } catch (error) {
-      setError(authErrorMessage(error, "Wrong email or password. Please try again."));
+      if (request.isCurrent() && !isRequestCanceled(error)) setError(authErrorMessage(error, "Wrong email or password. Please try again."));
     } finally {
       busy.current = false;
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
+      request.finish();
     }
   };
 

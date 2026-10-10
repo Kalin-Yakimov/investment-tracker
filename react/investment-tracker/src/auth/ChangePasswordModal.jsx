@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import UserService from "../service/UserService";
+import useModalRequestScope from "../hooks/useModalRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import "../styles/ChangePasswordModal.css";
 
 const EyeOpenIcon = () => (
@@ -17,15 +19,31 @@ const EyeOffIcon = () => (
 );
 
 function ChangePasswordModal({ show, onClose }) {
+  // Success intentionally ends the session; guard that transition in UserService.
+  const scope = useModalRequestScope(show, { guardSession: false });
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmationPassword, setConfirmationPassword] = useState("");
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const loading = scope.isPending("submit");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    if (!show) {
+      setCurrentPassword(""); setNewPassword(""); setConfirmationPassword("");
+      setError(""); setSuccess("");
+    }
+    if (!show || !success) return undefined;
+    const timer = setTimeout(() => {
+      setSuccess("");
+      onClose();
+      window.location.href = "/login?passwordChanged=true";
+    }, 1800);
+    return () => clearTimeout(timer);
+  }, [show, success, onClose]);
 
   if (!show) return null;
 
@@ -44,26 +62,22 @@ function ChangePasswordModal({ show, onClose }) {
       return;
     }
 
-    setLoading(true);
-
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     try {
       await UserService.changePassword({
         currentPassword,
         newPassword,
         confirmationPassword,
       });
-
+      if (!request.isCurrent()) return;
       setSuccess("Password updated successfully!");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmationPassword("");
 
-      setTimeout(() => {
-        setSuccess("");
-        onClose();
-        window.location.href = "/login?passwordChanged=true";
-      }, 1800);
     } catch (err) {
+      if (!request.isCurrent() || isRequestCanceled(err)) return;
       console.error("Change password error:", err);
       setError(
         typeof err === "string"
@@ -71,7 +85,7 @@ function ChangePasswordModal({ show, onClose }) {
           : err.message || "Failed to update password. Please check your current password."
       );
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
@@ -108,6 +122,7 @@ function ChangePasswordModal({ show, onClose }) {
                 className="form-control"
                 placeholder="••••••••"
                 value={currentPassword}
+                disabled={loading || Boolean(success)}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 autoComplete="current-password"
                 required
@@ -133,6 +148,7 @@ function ChangePasswordModal({ show, onClose }) {
                 className="form-control"
                 placeholder="••••••••"
                 value={newPassword}
+                disabled={loading || Boolean(success)}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
                 required
@@ -158,6 +174,7 @@ function ChangePasswordModal({ show, onClose }) {
                 className="form-control"
                 placeholder="••••••••"
                 value={confirmationPassword}
+                disabled={loading || Boolean(success)}
                 onChange={(e) => setConfirmationPassword(e.target.value)}
                 autoComplete="new-password"
                 required
@@ -184,7 +201,7 @@ function ChangePasswordModal({ show, onClose }) {
             <button
               type="submit"
               className="btn btn-primary px-4"
-              disabled={loading}
+              disabled={loading || Boolean(success)}
             >
               {loading ? "Updating..." : "Update Password"}
             </button>

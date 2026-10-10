@@ -98,3 +98,32 @@ Stage 4 external HTTP limits, price-publication/cache transaction boundaries,
 background-job guards and catalogue synchronization are documented in
 [EXTERNAL_SERVICES.md](EXTERNAL_SERVICES.md). This stage does not change the
 database schema or frontend. Earlier totals remain historical checkpoints.
+
+## Separately approved Stage 5 checkpoint
+
+Stage 5 public Steam inventory loading, stack quantities, unavailable-price
+handling and canonical-profile caching are documented in
+[INVENTORY_CALCULATOR.md](INVENTORY_CALCULATOR.md). Database schema and real
+MySQL data are unchanged. Frontend changes are limited to valuation correctness
+and discarding legacy browser results once. Earlier totals remain historical
+checkpoints; publication/merging is a separate user decision.
+
+## Separately approved Stage 6 checkpoint
+
+Stage 6 frontend request ownership, cancellation, stale-response/session guards,
+bounded history loading and non-overlapping Support Panel polling are recorded
+in [FRONTEND_REQUEST_LIFECYCLE.md](FRONTEND_REQUEST_LIFECYCLE.md). The UI design,
+existing cache policies, backend and database schema are unchanged by this stage.
+Earlier totals remain historical checkpoints. Commit, push and merge remain
+separate user decisions.
+
+## Separately approved daily-history correction
+
+Following the Stage 6 manual review, daily history now uses one row per
+item/source/UTC publication day, with latest-publication replacement, unchanged
+next-day observations, newest-first log display and stored-date protection after
+restart. Unlike Stages 5/6, this separately approved correction includes a
+targeted MySQL schema/data adoption after a verified private backup and temporary-
+table restore rehearsal. Details and verification are recorded in
+[DAILY_PRICE_HISTORY.md](DAILY_PRICE_HISTORY.md). No commit, push or merge was
+performed as part of this correction.

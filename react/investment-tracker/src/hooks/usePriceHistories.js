@@ -1,0 +1,69 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import UserService from "../service/UserService";
+import { isRequestCanceled } from "../service/RequestScope";
+import useRequestScope from "./useRequestScope";
+import { PRICE_HISTORY_CONCURRENCY } from "../config/uiConfig";
+
+export default function usePriceHistories(items, revision = 0) {
+  const scope = useRequestScope();
+  const [histories, setHistories] = useState({});
+  const work = useRef({ wanted: new Set(), attempted: new Set(), queue: [], revision });
+  const key = items.map((item) => item.id).filter((id) => id != null).join(",");
+  const ids = useMemo(() => [...new Set(key ? key.split(",") : [])], [key]);
+
+  const pump = useCallback(function pump() {
+    const state = work.current;
+    while (scope.isActive() && scope.pendingCount() < PRICE_HISTORY_CONCURRENCY && state.queue.length) {
+      const id = state.queue.shift();
+      if (!state.wanted.has(id) || state.attempted.has(id)) continue;
+      const request = scope.begin("history:" + id);
+      if (!request) continue;
+      state.attempted.add(id);
+      Promise.resolve()
+        .then(() => {
+          if (!request.isCurrent()) return null;
+          return UserService.getPriceHistory(id, { signal: request.signal });
+        })
+        .then((response) => {
+          if (request.isCurrent() && work.current.wanted.has(id)) {
+            setHistories((previous) => ({ ...previous, [id]: Array.isArray(response) ? response : [] }));
+          }
+        })
+        .catch((error) => {
+          if (request.isCurrent() && !isRequestCanceled(error)) console.error("Price history failed:", error);
+        })
+        .finally(() => { request.finish(); pump(); });
+    }
+  }, [scope]);
+
+  useEffect(() => {
+    const state = work.current;
+    if (state.revision !== revision) {
+      scope.cancelAll();
+      state.attempted.clear();
+      state.queue = [];
+      state.revision = revision;
+      setHistories({});
+    }
+    state.wanted = new Set(ids);
+    state.queue = state.queue.filter((id) => state.wanted.has(id));
+    [...state.attempted].forEach((id) => {
+      if (!state.wanted.has(id)) {
+        scope.cancel("history:" + id);
+        state.attempted.delete(id);
+      }
+    });
+    setHistories((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => state.wanted.has(id))));
+    ids.forEach((id) => {
+      if (!state.attempted.has(id) && !state.queue.includes(id)) state.queue.push(id);
+    });
+    pump();
+  }, [ids, revision, pump, scope]);
+
+  useEffect(() => () => {
+    work.current.wanted.clear();
+    work.current.attempted.clear();
+    work.current.queue = [];
+  }, []);
+  return histories;
+}

@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.model.MarketPriceSnapshot;
+import com.kalin.investment_tracker.model.MarketPriceWriteLock;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
+import com.kalin.investment_tracker.repository.MarketPriceWriteLockRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
@@ -34,6 +36,7 @@ class SteamPriceServiceTest {
     private static final Instant PUBLICATION = Instant.parse("2026-09-16T08:10:59Z");
     @Mock RestTemplate http;
     @Mock MarketPriceSnapshotRepository snapshots;
+    @Mock MarketPriceWriteLockRepository writeLocks;
     @Mock ItemRepository items;
     private final List<MarketPriceSnapshot> stored = new ArrayList<>();
     private final List<Item> tracked = new ArrayList<>();
@@ -59,19 +62,28 @@ class SteamPriceServiceTest {
         });
         lenient().when(snapshots.findFirstBySourceAndSourceVersionOrderByIdAsc(anyString(), anyString()))
                 .thenAnswer(call -> stored.stream().filter(s -> s.getSourceVersion().equals(call.getArgument(1))).findFirst());
-        lenient().when(snapshots.findFirstBySourceOrderByCreatedAtDescIdDesc(anyString()))
+        lenient().when(writeLocks.lockSource(anyString()))
+                .thenReturn(Optional.of(new MarketPriceWriteLock(MarketPriceSnapshot.SOURCE_CSGOTRADER_24H)));
+        lenient().when(snapshots.findLatestObservedAtBySource(anyString()))
+                .thenAnswer(call -> stored.stream().map(MarketPriceSnapshot::getObservedAt).max(Instant::compareTo).orElse(null));
+        lenient().when(snapshots.findFirstBySourceOrderByObservedAtDescIdDesc(anyString()))
                 .thenAnswer(call -> stored.isEmpty() ? Optional.empty() : Optional.of(stored.getLast()));
-        lenient().when(snapshots.findBySourceAndSourceVersionAndMarketHashNameIn(anyString(), anyString(), any()))
-                .thenAnswer(call -> stored.stream().filter(s -> s.getSourceVersion().equals(call.getArgument(1))
+        lenient().when(snapshots.findBySourceAndObservationDateAndMarketHashNameIn(anyString(), any(), any()))
+                .thenAnswer(call -> stored.stream().filter(s -> s.getObservationDate().equals(call.getArgument(1))
                         && ((Collection<?>) call.getArgument(2)).contains(s.getMarketHashName())).toList());
         lenient().when(snapshots.saveAllAndFlush(any())).thenAnswer(call -> {
             List<MarketPriceSnapshot> batch = call.getArgument(0);
-            stored.addAll(batch);
+            for (MarketPriceSnapshot snapshot : batch) {
+                if (!stored.contains(snapshot)) {
+                    snapshot.setId((long) stored.size() + 1);
+                    stored.add(snapshot);
+                }
+            }
             return batch;
         });
     }
     private SteamPriceService newService() {
-        return new SteamPriceService(http, new ObjectMapper(), new MarketPricePersistenceService(items, snapshots), settings, clock);
+        return new SteamPriceService(http, new ObjectMapper(), new MarketPricePersistenceService(items, snapshots, writeLocks), settings, clock);
     }
 
     @Test void loadsLast24hPriceAndStoresOneRealSnapshot() {
@@ -118,6 +130,55 @@ class SteamPriceServiceTest {
         service.refreshPriceCacheIfNeeded(); service.forceUpdateAllTrackedItems();
         assertEquals(1, stored.size());
         verify(http, times(1)).getForEntity(FX, String.class);
+    }
+
+    @Test void sameDayRepublicationUpdatesOneDailyObservationEvenWhenPriceIsUnchanged() {
+        arrangeRate(); track(1L);
+        feedCall().thenReturn(response(PUBLICATION), response(PUBLICATION.plusSeconds(10801)));
+        service.refreshPriceCacheIfNeeded();
+        Long originalId = stored.getFirst().getId();
+        assertEquals(1, service.forceUpdateAllTrackedItems());
+        assertEquals(1, stored.size());
+        assertEquals(originalId, stored.getFirst().getId());
+        assertEquals(PUBLICATION.plusSeconds(10801), stored.getFirst().getObservedAt());
+        assertEquals(new BigDecimal("40.08"), stored.getFirst().getPriceEur());
+    }
+
+    @Test void sameDayNewPriceReplacesTheDailyPointAndCurrentPrice() {
+        arrangeRate(); track(1L);
+        feedCall().thenReturn(response(PUBLICATION), response(PUBLICATION.plusSeconds(3600), FEED.replace("43.56", "100")));
+        service.refreshPriceCacheIfNeeded(); service.forceUpdateAllTrackedItems();
+        assertEquals(1, stored.size());
+        assertEquals(new BigDecimal("92.00"), stored.getFirst().getPriceEur());
+        assertEquals(new BigDecimal("92.00"), tracked.getFirst().getPrice());
+        assertEquals(new BigDecimal("92.00"), service.fetchCurrentPrice(NAME));
+    }
+
+    @Test void restartRejectsAnOlderProviderPublicationBeforeFetchingCurrency() {
+        arrangeRate(); track(1L);
+        feedCall().thenReturn(response(PUBLICATION.plusSeconds(3600)), response(PUBLICATION));
+        service.refreshPriceCacheIfNeeded();
+        service = newService();
+        assertThrows(ExternalServiceException.class, service::forceUpdateAllTrackedItems);
+        assertEquals(1, stored.size());
+        assertEquals(PUBLICATION.plusSeconds(3600), stored.getFirst().getObservedAt());
+        assertEquals(new BigDecimal("40.08"), tracked.getFirst().getPrice());
+        verify(http, times(1)).getForEntity(FX, String.class);
+    }
+
+    @Test void restartRevalidatesOneStaleCdnCopyAndReusesTheLatestStoredPublication() {
+        arrangeRate(); track(1L);
+        Instant latest = PUBLICATION.plusSeconds(3600);
+        feedCall().thenReturn(response(latest), response(PUBLICATION), response(latest));
+        service.refreshPriceCacheIfNeeded();
+        service = newService(); service.refreshPriceCacheIfNeeded();
+        assertEquals(1, stored.size());
+        assertEquals(latest, stored.getFirst().getObservedAt());
+        assertEquals(new BigDecimal("40.08"), service.fetchCurrentPrice(NAME));
+        verify(http, times(1)).getForEntity(FX, String.class);
+        ArgumentCaptor<HttpEntity<?>> requests = requestCaptor();
+        verify(http, times(3)).exchange(eq(URL), eq(HttpMethod.GET), requests.capture(), eq(byte[].class));
+        assertEquals(PUBLICATION.toEpochMilli(), requests.getAllValues().getLast().getHeaders().getIfModifiedSince());
     }
 
     @Test void manualRefreshReportsAProviderFailureWithoutLeakingItsResponse() {
@@ -288,6 +349,35 @@ class SteamPriceServiceTest {
             future.get(5, TimeUnit.SECONDS);
         }
         assertEquals(new BigDecimal("92.00"), service.fetchCurrentPrice(NAME));
+    }
+
+    @Test void bulkPricesUseOnePublicationAndExcludeMissingNames() {
+        arrangeFeed();
+        var prices = service.getCurrentPrices(List.of(NAME, "Unknown item"));
+        assertEquals(Map.of(NAME, new BigDecimal("40.08")), prices);
+        assertThrows(UnsupportedOperationException.class, () -> prices.put(NAME, BigDecimal.ZERO));
+        verify(http, times(1)).exchange(eq(URL), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class));
+    }
+
+    @Test void bulkPriceOutageIsNotReportedAsMissingItemPrices() {
+        feedCall().thenThrow(new IllegalStateException("offline"));
+        assertThrows(ExternalServiceException.class, () -> service.getCurrentPrices(List.of(NAME)));
+        assertThrows(ExternalServiceException.class, () -> service.getCurrentPrices(List.of(NAME)));
+        verify(http, times(1)).exchange(eq(URL), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class));
+    }
+
+    @Test void emptyBulkRequestDoesNotDownloadAFeed() {
+        assertTrue(service.getCurrentPrices(List.of()).isEmpty());
+        verifyNoInteractions(http);
+    }
+
+    @Test void returnedBulkValuationDoesNotChangeWhenAnotherPublicationArrives() {
+        arrangeRate();
+        feedCall().thenReturn(response(PUBLICATION), response(PUBLICATION.plusSeconds(86400), FEED.replace("43.56", "100")));
+        var first = service.getCurrentPrices(List.of(NAME));
+        service.forceUpdateAllTrackedItems();
+        assertEquals(new BigDecimal("40.08"), first.get(NAME));
+        assertEquals(new BigDecimal("92.00"), service.getCurrentPrices(List.of(NAME)).get(NAME));
     }
 
     private void arrangeFeed() { arrangeRate(); feedCall().thenReturn(response(PUBLICATION)); }

@@ -46,7 +46,7 @@ The timeout behavior follows the [Spring HTTP request factory documentation](htt
 2. Parse and validate the downloaded prices before writing anything. The USD
    values, EUR conversion rate, source version, source date and HTTP validators
    form one immutable cache publication. There is no `clear()`/`putAll()` gap.
-3. A separate transactional service updates current prices and inserts shared
+3. A separate transactional service updates current prices and stores shared
    history observations together. A failed history insert rolls back the price
    update. Only price columns of still-tracked records are updated: concurrent
    user settings, quantities, notifications and pinning are not overwritten by
@@ -55,9 +55,13 @@ The timeout behavior follows the [Spring HTTP request factory documentation](htt
    old cache and database values remain available; no fabricated zero price or
    empty publication replaces them.
 
-Snapshots remain shared by market hash name, source and publication version,
-not duplicated per account. The existing database unique constraint remains
-the final duplicate-insert safeguard. Portfolio purchase/sale records are not
+Snapshots remain shared by market hash name and source, not duplicated per account.
+There is one observation per UTC publication day; a later same-day publication
+replaces that daily value. Unique day/version constraints and a source-specific
+database write guard protect concurrent persistence transactions. See
+[DAILY_PRICE_HISTORY.md](DAILY_PRICE_HISTORY.md) for the daily policy and the
+required adoption procedure for existing populated MySQL installations.
+Portfolio purchase/sale records are not
 price-update targets. Price refreshes do not create legacy transaction-history
 rows.
 
@@ -66,15 +70,19 @@ rows.
 When present, `Last-Modified` is included in publication identity and used as
 the observation date. Normal HTTP checks prefer `If-Modified-Since` over ETag:
 the provider can republish unchanged values under the same ETag with a new date.
-That newer publication may produce a new observation even if the numeric price
-is unchanged. A 304 reply produces no extra observation.
+That newer publication creates a daily observation on another UTC day even if
+the numeric price is unchanged; on the same day it replaces the existing row.
+A 304 reply produces no extra observation.
 
 When no publication date is provided, an ETag or decoded-content hash identifies
 the data, and the first local receipt time is used. Repeated receipt of an
 already recorded version reuses its stored time/rate, including after restart.
 Long ETags are hashed to fit the existing version column. Older dated responses
-cannot overwrite a newer in-memory publication; dates over five minutes into
-the future are rejected. Changed values under an unchanged version are rejected
+cannot overwrite a newer in-memory or stored publication, including after restart.
+A cold start receiving a dated response older than the latest stored publication
+performs one conditional revalidation of that stale CDN copy, then fails safely
+if the provider still cannot return usable current data. Dates over five minutes
+into the future are rejected. Changed values under an unchanged version are rejected
 for an already loaded publication or an already stored tracked observation.
 
 This is a reliability safeguard, not independent verification of the provider's
@@ -95,8 +103,9 @@ USD is normalized to 4 decimal places and the rate to 8, matching existing
 snapshot columns; EUR is rounded to 2 places.
 
 Pre-existing database rates have no provenance marker. They are reused for
-compatibility, **not certified as previously fetched or recent**. Old history
-is not rewritten. The fallback has no freshness guarantee; source availability,
+compatibility, **not certified as previously fetched or recent**. Retained historical
+conversion values are not recalculated; superseded same-day rows are consolidated
+only by the documented adoption procedure. The fallback has no freshness guarantee; source availability,
 exchange-rate provenance and monitoring remain relevant for public deployment.
 
 ## Intervals, failures and manual refreshes

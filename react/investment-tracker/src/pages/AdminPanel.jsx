@@ -1,6 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AdminService from "../service/AdminService";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
+import { SUPPORT_JOB_POLL_MS, SUPPORT_TICKET_POLL_MS } from "../config/uiConfig";
 import "../styles/AdminPanel.css";
 
 const EMPTY_PAGE = { content: [], number: 0, totalPages: 0, totalElements: 0 };
@@ -67,6 +70,7 @@ function Pagination({ page, onChange }) {
 }
 
 export default function AdminPanel() {
+  const scope = useRequestScope();
   const currentUser = UserService.getCurrentUser();
   const isAdmin = UserService.hasAuthority("ADMIN");
   const [section, setSection] = useState("overview");
@@ -78,6 +82,7 @@ export default function AdminPanel() {
   const [userDetails, setUserDetails] = useState(null);
   const [supportReason, setSupportReason] = useState("");
   const [userTab, setUserTab] = useState("profile");
+  const userTabRef = useRef("profile");
   const [portfolio, setPortfolio] = useState(EMPTY_PAGE);
   const [trackedItems, setTrackedItems] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -87,83 +92,72 @@ export default function AdminPanel() {
   const [ticketStatus, setTicketStatus] = useState("");
   const [newTicketCount, setNewTicketCount] = useState(0);
   const [systemReason, setSystemReason] = useState("");
-  const [loading, setLoading] = useState(false);
+  const loading = ["users", "audit", "tickets", "details", "tab", "refresh-selected", "user-action", "system-action", "ticket-action"]
+    .some((key) => scope.isPending(key));
   const [notice, setNotice] = useState(null);
 
   const showNotice = useCallback((type, text) => {
     setNotice({ type, text });
-    window.setTimeout(() => setNotice(null), 5000);
   }, []);
 
-  const loadOverview = useCallback(async () => {
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  const read = useCallback(async (key, operation, apply, { replace = true, silent = false } = {}) => {
+    const request = scope.begin(key, { replace });
+    if (!request) return;
     try {
-      setOverview(await AdminService.getOverview());
+      const result = await operation({ signal: request.signal });
+      if (request.isCurrent()) apply(result);
     } catch (error) {
-      showNotice("error", errorMessage(error));
+      if (request.isCurrent() && !silent && !isRequestCanceled(error)) showNotice("error", errorMessage(error));
+    } finally {
+      request.finish();
     }
-  }, [showNotice]);
+  }, [scope, showNotice]);
+
+  const loadOverview = useCallback((replace = false) =>
+    read("overview", (config) => AdminService.getOverview(config), setOverview, { replace }),
+  [read]);
 
   const loadUsers = useCallback(
-    async (page = 0, query = "") => {
-      try {
-        setLoading(true);
-        const result = await AdminService.searchUsers(query, page, 20);
+    (page = 0, query = "") =>
+      read("users", (config) => AdminService.searchUsers(query, page, 20, config), (result) => {
         setUsers(result);
         setUserPage(page);
-      } catch (error) {
-        showNotice("error", errorMessage(error));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [showNotice],
+      }),
+    [read],
   );
 
   const loadAudit = useCallback(
-    async (page = 0) => {
+    (page = 0) => {
       if (!isAdmin) return;
-      try {
-        setLoading(true);
-        setAudit(await AdminService.getAudit(page, 25));
-      } catch (error) {
-        showNotice("error", errorMessage(error));
-      } finally {
-        setLoading(false);
-      }
+      return read("audit", (config) => AdminService.getAudit(page, 25, config), setAudit);
     },
-    [isAdmin, showNotice],
+    [isAdmin, read],
   );
 
   const loadTickets = useCallback(
-    async (page = 0, status = "") => {
-      try {
-        setLoading(true);
-        setTickets(await AdminService.getTickets(status, page, 15));
-      } catch (error) {
-        showNotice("error", errorMessage(error));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [showNotice],
+    (page = 0, status = "") =>
+      read("tickets", (config) => AdminService.getTickets(status, page, 15, config), setTickets),
+    [read],
   );
 
-  const loadNewTicketCount = useCallback(async () => {
-    try {
-      setNewTicketCount(await AdminService.getNewTicketCount());
-    } catch {
-      // The navigation indicator is supplementary; normal page errors are handled elsewhere.
-    }
-  }, []);
+  const loadNewTicketCount = useCallback(() =>
+    read("ticket-count", (config) => AdminService.getNewTicketCount(config), setNewTicketCount, { replace: false, silent: true }),
+  [read]);
 
   useEffect(() => {
-    loadOverview();
     loadUsers(0, "");
     loadNewTicketCount();
-  }, [loadOverview, loadUsers, loadNewTicketCount]);
+    return () => { scope.cancel("users"); scope.cancel("ticket-count"); };
+  }, [loadUsers, loadNewTicketCount, scope]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(loadNewTicketCount, 30000);
+    const intervalId = window.setInterval(loadNewTicketCount, SUPPORT_TICKET_POLL_MS);
     return () => window.clearInterval(intervalId);
   }, [loadNewTicketCount]);
 
@@ -171,7 +165,12 @@ export default function AdminPanel() {
     if (section === "audit") loadAudit(0);
     if (section === "tickets") loadTickets(0, ticketStatus);
     if (section === "overview" || section === "system") loadOverview();
-  }, [section, ticketStatus, loadAudit, loadOverview, loadTickets]);
+    return () => {
+      scope.cancel("audit");
+      scope.cancel("tickets");
+      scope.cancel("ticket-action");
+    };
+  }, [section, ticketStatus, loadAudit, loadOverview, loadTickets, scope]);
 
   useEffect(() => {
     const hasRunningJob =
@@ -179,15 +178,17 @@ export default function AdminPanel() {
       overview?.priceUpdate?.status === "RUNNING";
     if (!hasRunningJob) return undefined;
 
-    const intervalId = window.setInterval(loadOverview, 2000);
+    const intervalId = window.setInterval(loadOverview, SUPPORT_JOB_POLL_MS);
     return () => window.clearInterval(intervalId);
   }, [overview?.catalogueSync?.status, overview?.priceUpdate?.status, loadOverview]);
 
   const selectUser = (user) => {
+    ["details", "tab", "refresh-selected", "user-action"].forEach(scope.cancel);
     setSelectedUser(user);
     setUserDetails(null);
     setSupportReason("");
     setUserTab("profile");
+    userTabRef.current = "profile";
     setPortfolio(EMPTY_PAGE);
     setTrackedItems([]);
     setSessions([]);
@@ -199,59 +200,57 @@ export default function AdminPanel() {
       showNotice("error", "Enter a clear support reason of at least 5 characters.");
       return;
     }
-    try {
-      setLoading(true);
-      setUserDetails(await AdminService.getUserDetails(selectedUser.id, supportReason.trim()));
+    scope.cancel("tab");
+    await read("details", (config) => AdminService.getUserDetails(selectedUser.id, supportReason.trim(), config), (details) => {
+      setUserDetails(details);
       setUserTab("profile");
-    } catch (error) {
-      showNotice("error", errorMessage(error));
-    } finally {
-      setLoading(false);
-    }
+      userTabRef.current = "profile";
+    });
   };
 
   const loadUserTab = async (tab, page = 0) => {
     if (!userDetails || !selectedUser) return;
     setUserTab(tab);
-    try {
-      setLoading(true);
-      if (tab === "portfolio") {
-        setPortfolio(await AdminService.getPortfolio(selectedUser.id, supportReason, page, 20));
-      } else if (tab === "tracked") {
-        setTrackedItems(await AdminService.getTrackedItems(selectedUser.id, supportReason));
-      } else if (tab === "sessions") {
-        setSessions(await AdminService.getSessions(selectedUser.id, supportReason));
-      } else if (tab === "activity") {
-        setActivity(await AdminService.getActivity(selectedUser.id, supportReason, page, 30));
-      }
-    } catch (error) {
-      showNotice("error", errorMessage(error));
-    } finally {
-      setLoading(false);
+    userTabRef.current = tab;
+    scope.cancel("tab");
+    if (tab === "portfolio") {
+      await read("tab", (config) => AdminService.getPortfolio(selectedUser.id, supportReason, page, 20, config), setPortfolio);
+    } else if (tab === "tracked") {
+      await read("tab", (config) => AdminService.getTrackedItems(selectedUser.id, supportReason, config), setTrackedItems);
+    } else if (tab === "sessions") {
+      await read("tab", (config) => AdminService.getSessions(selectedUser.id, supportReason, config), setSessions);
+    } else if (tab === "activity") {
+      await read("tab", (config) => AdminService.getActivity(selectedUser.id, supportReason, page, 30, config), setActivity);
     }
   };
 
   const refreshSelectedUser = async () => {
     if (!selectedUser || !supportReason) return;
-    const details = await AdminService.getUserDetails(selectedUser.id, supportReason);
-    setUserDetails(details);
-    setSelectedUser(details.user);
-    await Promise.all([loadUsers(userPage, search), loadOverview()]);
+    await read("refresh-selected", (config) => AdminService.getUserDetails(selectedUser.id, supportReason, config), (details) => {
+      setUserDetails(details);
+      setSelectedUser(details.user);
+    });
   };
 
   const performUserAction = async (action, confirmation) => {
     if (!selectedUser || !supportReason) return;
+    if (scope.isPending("user-action")) return;
     if (confirmation && !window.confirm(confirmation)) return;
+    const request = scope.begin("user-action", { replace: false, abortable: false });
+    if (!request) return;
     try {
-      setLoading(true);
       const result = await action();
+      if (!request.isCurrent()) return;
       showNotice("success", result.message);
       await refreshSelectedUser();
-      if (userTab === "sessions") await loadUserTab("sessions");
+      if (!request.isCurrent()) return;
+      await Promise.all([loadUsers(userPage, search), loadOverview()]);
+      if (!request.isCurrent()) return;
+      if (userTabRef.current === "sessions") await loadUserTab("sessions");
     } catch (error) {
-      showNotice("error", errorMessage(error));
+      if (request.isCurrent() && !isRequestCanceled(error)) showNotice("error", errorMessage(error));
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
@@ -260,39 +259,48 @@ export default function AdminPanel() {
       showNotice("error", "Enter a reason of at least 5 characters.");
       return;
     }
+    const request = scope.begin("system-action", { replace: false, abortable: false });
+    if (!request) return;
     try {
-      setLoading(true);
       const result = await action(systemReason.trim());
+      if (!request.isCurrent()) return;
       showNotice("success", result.message);
       setSystemReason("");
-      await loadOverview();
+      await loadOverview(true);
     } catch (error) {
-      showNotice("error", errorMessage(error));
+      if (request.isCurrent() && !isRequestCanceled(error)) showNotice("error", errorMessage(error));
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
   const changeTicketStatus = async (ticketId, status) => {
+    const request = scope.begin("ticket-action", { replace: false, abortable: false });
+    if (!request) return;
+    scope.cancel("tickets");
     try {
-      setLoading(true);
       await AdminService.updateTicketStatus(ticketId, status);
+      if (!request.isCurrent()) return;
       await Promise.all([
         loadTickets(tickets.number, ticketStatus),
         loadNewTicketCount(),
       ]);
     } catch (error) {
-      showNotice("error", errorMessage(error));
+      if (request.isCurrent() && !isRequestCanceled(error)) showNotice("error", errorMessage(error));
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
   const removeTicket = async (ticketId) => {
+    if (scope.isPending("ticket-action")) return;
     if (!window.confirm("Remove this contact request permanently?")) return;
+    const request = scope.begin("ticket-action", { replace: false, abortable: false });
+    if (!request) return;
+    scope.cancel("tickets");
     try {
-      setLoading(true);
       const result = await AdminService.removeTicket(ticketId);
+      if (!request.isCurrent()) return;
       showNotice("success", result.message);
       const targetPage = tickets.content.length === 1 && tickets.number > 0
         ? tickets.number - 1
@@ -302,9 +310,9 @@ export default function AdminPanel() {
         loadNewTicketCount(),
       ]);
     } catch (error) {
-      showNotice("error", errorMessage(error));
+      if (request.isCurrent() && !isRequestCanceled(error)) showNotice("error", errorMessage(error));
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
@@ -339,7 +347,10 @@ export default function AdminPanel() {
               key={key}
               type="button"
               className={section === key ? "active" : ""}
-              onClick={() => setSection(key)}
+              onClick={() => {
+                ["details", "tab", "refresh-selected", "user-action", "system-action"].forEach(scope.cancel);
+                setSection(key);
+              }}
             >
               <span>{label}</span>
               {key === "tickets" && newTicketCount > 0 && (

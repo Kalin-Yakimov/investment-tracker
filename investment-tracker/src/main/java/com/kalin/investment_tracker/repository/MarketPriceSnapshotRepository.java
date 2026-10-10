@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Collection;
 import java.util.Optional;
@@ -17,9 +18,10 @@ public interface MarketPriceSnapshotRepository extends JpaRepository<MarketPrice
 
     Optional<MarketPriceSnapshot> findFirstBySourceAndSourceVersionOrderByIdAsc(String source, String sourceVersion);
 
-    Optional<MarketPriceSnapshot> findFirstBySourceOrderByCreatedAtDescIdDesc(String source);
+    Optional<MarketPriceSnapshot> findFirstBySourceOrderByObservedAtDescIdDesc(String source);
 
-    List<MarketPriceSnapshot> findBySourceAndSourceVersionAndMarketHashNameIn(String source, String version, Collection<String> names);
+    List<MarketPriceSnapshot> findBySourceAndObservationDateAndMarketHashNameIn(
+            String source, LocalDate observationDate, Collection<String> names);
 
     boolean existsByMarketHashNameAndSourceAndSourceVersion(
             String marketHashName,
@@ -39,4 +41,7 @@ public interface MarketPriceSnapshotRepository extends JpaRepository<MarketPrice
 
     @Query("SELECT MAX(snapshot.observedAt) FROM MarketPriceSnapshot snapshot")
     Instant findLatestObservedAt();
+
+    @Query("SELECT MAX(snapshot.observedAt) FROM MarketPriceSnapshot snapshot WHERE snapshot.source = :source")
+    Instant findLatestObservedAtBySource(@Param("source") String source);
 }

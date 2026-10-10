@@ -1,6 +1,8 @@
 import React, { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import "../styles/ForgotPasswordPage.css";
 import { authErrorMessage } from "./authFeedback";
 
@@ -19,6 +21,7 @@ const EyeOffIcon = () => (
 );
 
 function ForgotPasswordPage() {
+  const scope = useRequestScope({ guardSession: false });
   const [step, setStep] = useState(1); // 1: Request Code, 2: Reset Password, 3: Success
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -36,6 +39,8 @@ function ForgotPasswordPage() {
   const handleRequestCode = async (e) => {
     e.preventDefault();
     if (busy.current) return;
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     busy.current = true;
     setError("");
     setMessage("");
@@ -43,13 +48,15 @@ function ForgotPasswordPage() {
 
     try {
       await UserService.forgotPassword(email);
+      if (!request.isCurrent()) return;
       setMessage("If an account exists for this email, a reset code has been requested. Check your inbox and spam folder.");
       setStep(2);
     } catch (err) {
-      setError(authErrorMessage(err, "Could not request a reset code. Please try again later."));
+      if (request.isCurrent() && !isRequestCanceled(err)) setError(authErrorMessage(err, "Could not request a reset code. Please try again later."));
     } finally {
       busy.current = false;
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
+      request.finish();
     }
   };
 
@@ -69,18 +76,22 @@ function ForgotPasswordPage() {
       return;
     }
 
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     busy.current = true;
     setLoading(true);
 
     try {
       await UserService.resetPassword(email, code, newPassword);
+      if (!request.isCurrent()) return;
       setMessage("Your password has been successfully reset!");
       setStep(3);
     } catch (err) {
-      setError(authErrorMessage(err, "Failed to reset password. Please check your email and code."));
+      if (request.isCurrent() && !isRequestCanceled(err)) setError(authErrorMessage(err, "Failed to reset password. Please check your email and code."));
     } finally {
       busy.current = false;
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
+      request.finish();
     }
   };
 

@@ -22,6 +22,7 @@ public class CacheConfig {
     public static final String PORTFOLIO_SUMMARY_CACHE = "portfolioSummary";
     public static final String TRACKED_ITEMS_CACHE = "trackedItems";
     public static final String INVENTORY_CALCULATOR_CACHE = "inventoryCalculatorCache";
+    public static final String STEAM_PROFILE_RESOLUTION_CACHE = "steamProfileResolution";
 
     @Bean
     public CacheManager cacheManager(
@@ -39,7 +40,8 @@ public class CacheConfig {
                 buildCache(PRICE_HISTORY_CHART_CACHE, priceHistoryChartTtl, initialCapacity, maximumSize),
                 new TransactionAwareCacheDecorator(buildCache(PORTFOLIO_SUMMARY_CACHE, portfolioSummaryTtl, initialCapacity, maximumSize)),
                 buildCache(TRACKED_ITEMS_CACHE, trackedItemsTtl, initialCapacity, maximumSize),
-                buildCache(INVENTORY_CALCULATOR_CACHE, inventoryCalculatorTtl, initialCapacity, maximumSize)
+                buildCache(INVENTORY_CALCULATOR_CACHE, inventoryCalculatorTtl, initialCapacity, maximumSize),
+                buildCache(STEAM_PROFILE_RESOLUTION_CACHE, inventoryCalculatorTtl, initialCapacity, maximumSize)
         ));
         return cacheManager;
     }

@@ -1,4 +1,5 @@
-const STORAGE_KEY = "investment-tracker.inventory-calculator.v1";
+const STORAGE_KEY = "investment-tracker.inventory-calculator.v2";
+const LEGACY_STORAGE_KEY = "investment-tracker.inventory-calculator.v1";
 
 let memoryEntry = null;
 
@@ -15,12 +16,19 @@ export function clearInventoryCalculatorSession() {
   memoryEntry = null;
   try {
     window.sessionStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     // The in-memory copy is still cleared if browser storage is unavailable.
   }
 }
 
 export function loadInventoryCalculatorSession(userId) {
+  try {
+    // Old results counted asset rows and displayed unavailable prices as zero.
+    window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // Storage may be unavailable; the in-memory session still works.
+  }
   const ownerId = ownerKey(userId);
   if (!ownerId) {
     clearInventoryCalculatorSession();

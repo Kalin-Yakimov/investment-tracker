@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import UserService from "../service/UserService";
+import useModalRequestScope from "../hooks/useModalRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import "../styles/ContactUsModal.css";
 
 function getErrorMessage(error) {
@@ -16,9 +18,10 @@ function getErrorMessage(error) {
 }
 
 function ContactUsModal({ show, onClose, defaultEmail }) {
+  const scope = useModalRequestScope(show);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const loading = scope.isPending("submit");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
@@ -42,15 +45,17 @@ function ContactUsModal({ show, onClose, defaultEmail }) {
       return;
     }
 
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     try {
-      setLoading(true);
       await UserService.createContactTicket(email.trim(), message.trim());
+      if (!request.isCurrent()) return;
       setSuccess(true);
       setMessage("");
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      if (request.isCurrent() && !isRequestCanceled(requestError)) setError(getErrorMessage(requestError));
     } finally {
-      setLoading(false);
+      request.finish();
     }
   };
 
@@ -87,6 +92,7 @@ function ContactUsModal({ show, onClose, defaultEmail }) {
               </label>
               <input
                 id="contact-email"
+                disabled={loading}
                 type="email"
                 className="form-control"
                 value={email}
@@ -103,6 +109,7 @@ function ContactUsModal({ show, onClose, defaultEmail }) {
               </label>
               <textarea
                 id="contact-message"
+                disabled={loading}
                 className="form-control contact-us-message"
                 rows="7"
                 value={message}

@@ -2,10 +2,13 @@ import axios from "axios";
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import DatePicker from "react-datepicker";
 import { format } from "date-fns";
 
 export default function EditItem() {
+  const scope = useRequestScope();
   const navigate = useNavigate();
   const { id } = useParams();
 
@@ -31,14 +34,18 @@ export default function EditItem() {
   };
 
   const loadItem = useCallback(async () => {
+    const request = scope.begin("item");
+    if (!request) return;
     try {
       const token = UserService.getToken();
       const result = await axios.get(`${UserService.BASE_URL}/item/${id}`, {
+        signal: request.signal,
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      let item = result.data;
+      if (!request.isCurrent()) return;
+      let item = { ...result.data };
 
       if (item.date) {
         if (item.date.includes(".")) {
@@ -52,13 +59,14 @@ export default function EditItem() {
 
       setItem(item);
     } catch (error) {
-      console.error("Error loading item:", error);
-    }
-  }, [id]);
+      if (request.isCurrent() && !isRequestCanceled(error)) console.error("Error loading item:", error);
+    } finally { request.finish(); }
+  }, [id, scope]);
 
   useEffect(() => {
     loadItem();
-  }, [loadItem]);
+    return () => scope.cancel("item");
+  }, [loadItem, scope]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -67,6 +75,8 @@ export default function EditItem() {
       return;
     }
 
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     try {
       const formattedDate = format(date, "dd.MM.yyyy");
       const token = UserService.getToken();
@@ -81,10 +91,13 @@ export default function EditItem() {
         }
       );
       // Navigate back to the Item Details / Item History page
-      navigate(`/viewItem/${id}`);
+      if (request.isCurrent()) navigate(`/viewItem/${id}`);
     } catch (error) {
-      console.error("There was an error submitting the form!", error);
-    }
+      if (request.isCurrent() && !isRequestCanceled(error)) {
+        console.error("There was an error submitting the form!", error);
+        setError(error.response?.data?.error || "The item could not be updated. Please try again.");
+      }
+    } finally { request.finish(); }
   };
 
   const handleDateChange = (date) => {
@@ -113,6 +126,7 @@ export default function EditItem() {
                   placeholder="Enter item name"
                   name="itemName"
                   value={itemName}
+                  disabled={scope.isPending("item") || scope.isPending("submit")}
                   onChange={onInputChange}
                   id="itemName"
                   required
@@ -128,6 +142,7 @@ export default function EditItem() {
                     className="form-select"
                     name="itemStatus"
                     value={itemStatus}
+                    disabled={scope.isPending("item") || scope.isPending("submit")}
                     onChange={onInputChange}
                     id="itemStatus"
                     required
@@ -144,6 +159,7 @@ export default function EditItem() {
                   </label>
                   <DatePicker
                     selected={date}
+                    disabled={scope.isPending("item") || scope.isPending("submit")}
                     onChange={handleDateChange}
                     dateFormat={"dd.MM.yyyy"}
                     className="form-control"
@@ -163,6 +179,7 @@ export default function EditItem() {
                     placeholder="Quantity"
                     name="quantity"
                     value={quantity}
+                    disabled={scope.isPending("item") || scope.isPending("submit")}
                     onChange={onInputChange}
                     id="quantity"
                     min="1"
@@ -180,6 +197,7 @@ export default function EditItem() {
                     placeholder="Price in Euro"
                     name="price"
                     value={price}
+                    disabled={scope.isPending("item") || scope.isPending("submit")}
                     onChange={onInputChange}
                     id="price"
                     step="0.01"
@@ -190,7 +208,7 @@ export default function EditItem() {
               </div>
 
               <div className="d-flex justify-content-end gap-2 mt-4">
-                <button type="submit" className="btn btn-primary px-4">
+                <button type="submit" className="btn btn-primary px-4" disabled={scope.isPending("item") || scope.isPending("submit")}>
                   Update Item
                 </button>
                 <button

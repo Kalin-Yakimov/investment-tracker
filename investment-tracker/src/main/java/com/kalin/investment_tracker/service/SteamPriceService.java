@@ -104,6 +104,18 @@ public class SteamPriceService {
             }
             ResponseEntity<byte[]> response = restTemplate.exchange(FEED_URL, HttpMethod.GET,
                     new HttpEntity<>(headers), byte[].class);
+            if (previous == null && response.getStatusCode().is2xxSuccessful()
+                    && response.getHeaders().getLastModified() > 0) {
+                long receivedDate = response.getHeaders().getLastModified();
+                boolean olderThanStored = persistence.findLatestObservationTime()
+                        .filter(latest -> latest.isAfter(Instant.ofEpochMilli(receivedDate))).isPresent();
+                if (olderThanStored) {
+                    // Revalidate one stale CDN response on cold start; never fabricate a newer source date.
+                    headers.setIfModifiedSince(receivedDate);
+                    response = restTemplate.exchange(FEED_URL, HttpMethod.GET,
+                            new HttpEntity<>(headers), byte[].class);
+                }
+            }
             if (response.getStatusCode() == HttpStatus.NOT_MODIFIED && previous != null) {
                 lastCacheCheck = clock.instant();
                 retryAfter = null;
@@ -117,7 +129,9 @@ public class SteamPriceService {
             Map<String, BigDecimal> prices = parsePrices(decoded);
             long modified = response.getHeaders().getLastModified();
             if (modified > clock.instant().plusSeconds(300).toEpochMilli()
-                    || (previous != null && modified > 0 && previous.modifiedMillis() > modified)) {
+                    || (previous != null && modified > 0 && previous.modifiedMillis() > modified)
+                    || (modified > 0 && persistence.findLatestObservationTime()
+                            .filter(latest -> latest.isAfter(Instant.ofEpochMilli(modified))).isPresent())) {
                 throw new ExternalServiceException("The price source returned an invalid publication date");
             }
             String etag = response.getHeaders().getETag();
@@ -138,7 +152,7 @@ public class SteamPriceService {
             currentFeed = next;
             lastCacheCheck = clock.instant();
             retryAfter = null;
-            log.info("Loaded {} CSGOTrader prices; recorded {} observations (source date {})", prices.size(), count, observedAt);
+            log.info("Loaded {} CSGOTrader prices; stored {} daily observations (source date {})", prices.size(), count, observedAt);
             return count;
         } catch (Exception failure) {
             retryAfter = nextRetryAt(failure);
@@ -235,6 +249,21 @@ public class SteamPriceService {
         PriceFeedSnapshot feed = currentFeed;
         BigDecimal eur = feed == null || marketHashName == null ? null : feed.priceEur(marketHashName);
         return eur == null ? null : new ItemPriceData(eur);
+    }
+
+    /** Value a whole inventory against one immutable publication and one conversion rate. */
+    public Map<String, BigDecimal> getCurrentPrices(Collection<String> marketNames) {
+        if (marketNames == null || marketNames.isEmpty()) return Map.of();
+        refreshPriceCacheIfNeeded();
+        PriceFeedSnapshot feed = currentFeed;
+        if (feed == null) throw new ExternalServiceException("Inventory prices are temporarily unavailable; try again later");
+        Map<String, BigDecimal> prices = new HashMap<>();
+        for (String name : marketNames) {
+            if (name == null) continue;
+            BigDecimal price = feed.priceEur(name);
+            if (price != null) prices.put(name, price);
+        }
+        return Map.copyOf(prices);
     }
 
     /** CSGOTrader 24-hour average in EUR; no hidden request to Steam for a missing item. */

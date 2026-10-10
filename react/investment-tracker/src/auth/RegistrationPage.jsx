@@ -1,5 +1,7 @@
 import React, { useRef, useState } from "react";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import { isRequestCanceled } from "../service/RequestScope";
 import { useNavigate, Link } from "react-router-dom";
 import "../styles/RegistrationPage.css";
 import { authErrorMessage, rememberActivationEmail } from "./authFeedback";
@@ -19,6 +21,7 @@ const EyeOffIcon = () => (
 );
 
 function RegistrationPage() {
+  const scope = useRequestScope({ guardSession: false });
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -58,6 +61,8 @@ function RegistrationPage() {
       return;
     }
 
+    const request = scope.begin("submit", { replace: false, abortable: false });
+    if (!request) return;
     busy.current = true;
     setLoading(true);
     const activationEmail = formData.email.trim();
@@ -67,7 +72,7 @@ function RegistrationPage() {
         email: activationEmail,
         password: formData.password,
       });
-
+      if (!request.isCurrent()) return;
       setFormData({
         username: "",
         email: "",
@@ -78,10 +83,11 @@ function RegistrationPage() {
       rememberActivationEmail(activationEmail);
       navigate("/activate-account", { state: { email: activationEmail } });
     } catch (err) {
-      setError(authErrorMessage(err, "An error occurred while registering. Please try again."));
+      if (request.isCurrent() && !isRequestCanceled(err)) setError(authErrorMessage(err, "An error occurred while registering. Please try again."));
     } finally {
       busy.current = false;
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
+      request.finish();
     }
   };
 

@@ -1,7 +1,11 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import UserService from "../service/UserService";
+import useRequestScope from "../hooks/useRequestScope";
+import usePriceHistories from "../hooks/usePriceHistories";
+import { isRequestCanceled } from "../service/RequestScope";
 import useChartPointTooltip from "../hooks/useChartPointTooltip";
+import { buildDailyPricePoints as getItemPoints } from "../utils/priceHistory";
 import { Table } from "react-bootstrap";
 import "../styles/Home.css";
 import "../styles/PriceTracker.css";
@@ -34,15 +38,6 @@ const formatCurrency = (value) => {
   return `€${Number(value).toFixed(2)}`;
 };
 
-const formatDateTime = (dateObj) => {
-  if (!dateObj || Number.isNaN(dateObj.getTime())) return "";
-
-  const day = String(dateObj.getDate()).padStart(2, "0");
-  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const year = dateObj.getFullYear();
-  return `${day}/${month}/${year}`;
-};
-
 const formatDateDDMMYYYY = (dateStr) => {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
@@ -51,35 +46,6 @@ const formatDateDDMMYYYY = (dateStr) => {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
-};
-
-const getItemPoints = (history = [], timeframe = "1M") => {
-  const now = new Date();
-  const days = timeframe === "7D" ? 7 : timeframe === "3M" ? 90 : 30;
-  const cutoffTime = now.getTime() - days * 24 * 60 * 60 * 1000;
-  const dailyPoints = new Map();
-
-  (Array.isArray(history) ? history : []).forEach((entry) => {
-    if (entry?.price == null || !entry?.dateExtracted) return;
-    const dateObj = new Date(entry.dateExtracted);
-    const price = Number(entry.price);
-    if (Number.isNaN(dateObj.getTime()) || Number.isNaN(price) || dateObj.getTime() < cutoffTime) return;
-
-    const dayKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
-    const existing = dailyPoints.get(dayKey);
-    if (!existing || dateObj.getTime() > existing.dateObj.getTime()) {
-      dailyPoints.set(dayKey, { dateObj, price });
-    }
-  });
-
-  return Array.from(dailyPoints.values())
-    .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
-    .map((p) => ({
-    ...p,
-    dateExtracted: p.dateObj.toISOString(),
-    label: formatDateTime(p.dateObj),
-    price: p.price,
-  }));
 };
 
 /**
@@ -189,6 +155,7 @@ function HomePinnedSparkline({ points, strokeColor }) {
 }
 
 export default function Home() {
+  const scope = useRequestScope();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
@@ -253,63 +220,61 @@ export default function Home() {
   const [selectedTimeframe, setSelectedTimeframe] = useState("7D");
   const [allPinnedItems, setAllPinnedItems] = useState([]);
   const [pinnedVisibleCount, setPinnedVisibleCount] = useState(10);
-  const [pinnedHistories, setPinnedHistories] = useState({});
+  const visiblePinnedItems = useMemo(() => allPinnedItems.slice(0, pinnedVisibleCount), [allPinnedItems, pinnedVisibleCount]);
+  const pinnedHistories = usePriceHistories(visiblePinnedItems);
   const loaderRef = useRef(null);
 
   const loadItems = useCallback(
     async (page = 0, filter = filterSortOption) => {
+      const request = scope.begin("portfolio");
+      if (!request) return;
       try {
         setLoading(true);
-        const result = await UserService.getUserItems(page, itemsPerPage, filter);
+        const result = await UserService.getUserItems(page, itemsPerPage, filter, { signal: request.signal });
+        if (!request.isCurrent()) return;
         setItems(result.content || []);
         setTotalPages(result.totalPages || 0);
         setCurrentPage(page);
       } catch (error) {
-        console.error("Error loading items:", error);
-        setItems([]);
+        if (request.isCurrent() && !isRequestCanceled(error)) {
+          console.error("Error loading items:", error);
+          setItems([]);
+        }
       } finally {
-        setLoading(false);
+        if (request.isCurrent()) setLoading(false);
+        request.finish();
       }
     },
-    [itemsPerPage, filterSortOption],
+    [itemsPerPage, filterSortOption, scope],
   );
 
   const loadPinnedItems = useCallback(async () => {
+    const request = scope.begin("pinned");
+    if (!request) return;
     try {
-      const data = await UserService.getTrackedItems();
+      const data = await UserService.getTrackedItems({ signal: request.signal });
+      if (!request.isCurrent()) return;
       if (Array.isArray(data)) {
         const bookmarked = data.filter((item) => item.showInDashboard === true);
         bookmarked.sort((a, b) => (b.id || 0) - (a.id || 0));
         setAllPinnedItems(bookmarked);
       }
     } catch (err) {
-      console.error("Failed to load pinned items:", err);
+      if (request.isCurrent() && !isRequestCanceled(err)) console.error("Failed to load pinned items:", err);
+    } finally {
+      request.finish();
     }
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     loadItems(0, filterSortOption);
-    loadPinnedItems();
-  }, [filterSortOption, loadItems, loadPinnedItems]);
+    return () => scope.cancel("portfolio");
+  }, [filterSortOption, loadItems, scope]);
 
-  // Load price histories for visible pinned items
   useEffect(() => {
-    const visibleItems = allPinnedItems.slice(0, pinnedVisibleCount);
-    visibleItems.forEach((item) => {
-      if (!pinnedHistories[item.id]) {
-        UserService.getPriceHistory(item.id)
-          .then((history) => {
-            setPinnedHistories((prev) => ({
-              ...prev,
-              [item.id]: Array.isArray(history) ? history : [],
-            }));
-          })
-          .catch((err) => {
-            console.error(`Failed to load history for pinned item ${item.id}:`, err);
-          });
-      }
-    });
-  }, [allPinnedItems, pinnedVisibleCount, pinnedHistories]);
+    loadPinnedItems();
+    return () => scope.cancel("pinned");
+  }, [loadPinnedItems, scope]);
 
   // IntersectionObserver for Infinite Scroll on Pinned Items
   useEffect(() => {
@@ -334,9 +299,7 @@ export default function Home() {
     }
 
     return () => {
-      if (currentLoader) {
-        observer.unobserve(currentLoader);
-      }
+      observer.disconnect();
     };
   }, [allPinnedItems]);
 
@@ -352,11 +315,17 @@ export default function Home() {
 
   const handleUnpin = async (itemId, e) => {
     e.stopPropagation();
+    const request = scope.begin("unpin:" + itemId, { replace: false, abortable: false });
+    if (!request) return;
+    scope.cancel("pinned");
     try {
       await UserService.toggleBookmark(itemId);
+      if (!request.isCurrent()) return;
       setAllPinnedItems((prev) => prev.filter((i) => i.id !== itemId));
     } catch (err) {
-      console.error("Failed to unpin item:", err);
+      if (request.isCurrent() && !isRequestCanceled(err)) console.error("Failed to unpin item:", err);
+    } finally {
+      request.finish();
     }
   };
 
@@ -364,24 +333,26 @@ export default function Home() {
   const [stats, setStats] = useState({ count: 0, bought: 0 });
 
   const loadPortfolioSummary = useCallback(async () => {
+    const request = scope.begin("summary");
+    if (!request) return;
     try {
-      const summary = await UserService.getPortfolioSummary();
+      const summary = await UserService.getPortfolioSummary({ signal: request.signal });
+      if (!request.isCurrent()) return;
       setStats({
         count: summary.count || 0,
         bought: Number(summary.totalInvestmentValue || 0),
       });
     } catch (err) {
-      console.error("Failed to load portfolio summary:", err);
+      if (request.isCurrent() && !isRequestCanceled(err)) console.error("Failed to load portfolio summary:", err);
+    } finally {
+      request.finish();
     }
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     loadPortfolioSummary();
-  }, [loadPortfolioSummary, items]);
-
-  const visiblePinnedItems = useMemo(() => {
-    return allPinnedItems.slice(0, pinnedVisibleCount);
-  }, [allPinnedItems, pinnedVisibleCount]);
+    return () => scope.cancel("summary");
+  }, [loadPortfolioSummary, scope]);
 
   const renderPagination = () => (
     <div className="d-flex align-items-center justify-content-between pt-3 px-2">
