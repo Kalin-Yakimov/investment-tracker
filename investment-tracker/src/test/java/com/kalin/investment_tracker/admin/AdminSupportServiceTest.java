@@ -151,6 +151,21 @@ class AdminSupportServiceTest {
         assertEquals(1, secondPage.getNumberOfElements());
     }
 
+    @Test
+    void veryLargeAuditPageReturnsAnEmptyPageWithoutIntegerOverflow() {
+        when(activityEventRepository.findByCategoryInOrderByCreatedAtDesc(any())).thenReturn(List.of());
+        Page<AdminDtos.Activity> result = service.getAdministrativeAudit(Integer.MAX_VALUE, 100);
+        assertTrue(result.isEmpty());
+        assertEquals(Integer.MAX_VALUE, result.getNumber());
+    }
+
+    @Test
+    void invalidAdministrativePaginationIsRejectedRatherThanSilentlyClamped() {
+        assertThrows(IllegalArgumentException.class, () -> service.getAdministrativeAudit(-1, 10));
+        assertThrows(IllegalArgumentException.class, () -> service.getAdministrativeAudit(0, 101));
+        assertThrows(IllegalArgumentException.class, () -> service.searchUsers("", 0, 51));
+    }
+
     private User user(int id, String roleName) {
         User user = new User();
         user.setId(id);

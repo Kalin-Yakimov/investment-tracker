@@ -13,6 +13,7 @@ import com.kalin.investment_tracker.dto.TrackedItemUpdateRequest;
 import com.kalin.investment_tracker.service.TrackedItemService;
 import com.kalin.investment_tracker.user.User;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -62,7 +63,7 @@ public class SteamPriceController {
 
     @GetMapping("/price-history/{itemId}")
     public ResponseEntity<List<MarketPriceSnapshotDto>> getPriceHistory(
-            @PathVariable Long itemId,
+            @PathVariable @Positive Long itemId,
             @AuthenticationPrincipal User user
     ) {
         return ResponseEntity.ok(trackedItemService.getPriceHistory(itemId, user));
@@ -70,7 +71,7 @@ public class SteamPriceController {
 
     @PutMapping("/items/{id}")
     public ResponseEntity<SteamItemDto> updateItem(
-            @PathVariable Long id,
+            @PathVariable @Positive Long id,
             @RequestBody @Valid TrackedItemUpdateRequest request,
             @AuthenticationPrincipal User user
     ) {
@@ -79,7 +80,7 @@ public class SteamPriceController {
 
     @PatchMapping("/items/{id}/bookmark")
     public ResponseEntity<BookmarkResponse> toggleBookmark(
-            @PathVariable Long id,
+            @PathVariable @Positive Long id,
             @AuthenticationPrincipal User user
     ) {
         return ResponseEntity.ok(trackedItemService.toggleBookmark(id, user));
@@ -87,7 +88,7 @@ public class SteamPriceController {
 
     @DeleteMapping("/items/{id}")
     public ResponseEntity<ApiMessageResponse> deleteItem(
-            @PathVariable Long id,
+            @PathVariable @Positive Long id,
             @AuthenticationPrincipal User user
     ) {
         return ResponseEntity.ok(trackedItemService.deleteTrackedItem(id, user));
@@ -102,7 +103,7 @@ public class SteamPriceController {
 
     @GetMapping("/items/{id}/details")
     public ResponseEntity<SteamItemDto> getItemDetails(
-            @PathVariable Long id,
+            @PathVariable @Positive Long id,
             @AuthenticationPrincipal User user
     ) {
         return ResponseEntity.ok(trackedItemService.getTrackedItemDetails(id, user));

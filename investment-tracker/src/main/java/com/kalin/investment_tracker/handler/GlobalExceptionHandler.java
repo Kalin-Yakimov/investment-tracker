@@ -21,6 +21,11 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.ServletRequestBindingException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -31,6 +36,37 @@ import static org.springframework.http.HttpStatus.*;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler({ServletRequestBindingException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ExceptionResponse> handleInvalidParameters(Exception exception) {
+        // Do not echo rejected query, path or header values.
+        return ResponseEntity.badRequest()
+                .body(ExceptionResponse.builder().error("Invalid or missing request parameter.").build());
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ExceptionResponse> handleMethodValidation(HandlerMethodValidationException exception) {
+        if (exception.isForReturnValue()) {
+            return ResponseEntity.internalServerError()
+                    .body(ExceptionResponse.builder().error("An unexpected server error occurred").build());
+        }
+        Set<String> errors = new HashSet<>();
+        exception.getParameterValidationResults().forEach(result -> result.getResolvableErrors().forEach(error ->
+                errors.add(error.getDefaultMessage() == null ? "Invalid request value" : error.getDefaultMessage())));
+        return ResponseEntity.badRequest().body(ExceptionResponse.builder().validationErrors(errors).build());
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ExceptionResponse> handleUnsupportedContentType(HttpMediaTypeNotSupportedException exception) {
+        return ResponseEntity.status(UNSUPPORTED_MEDIA_TYPE)
+                .body(ExceptionResponse.builder().error("Unsupported request content type.").build());
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ExceptionResponse> handleMissingResource(NoResourceFoundException exception) {
+        return ResponseEntity.status(NOT_FOUND)
+                .body(ExceptionResponse.builder().error("The requested resource was not found.").build());
+    }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ExceptionResponse> handleUnsupportedMethod(HttpRequestMethodNotSupportedException exception) {

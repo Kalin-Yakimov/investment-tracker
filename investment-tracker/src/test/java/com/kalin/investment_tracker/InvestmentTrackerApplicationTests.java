@@ -6,9 +6,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @SpringBootTest(properties = {
 		"spring.datasource.url=jdbc:h2:mem:context-test;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -37,6 +40,8 @@ class InvestmentTrackerApplicationTests {
 				"Stage 1 must not enable Flyway during ordinary application startup");
 		assertTrue(applicationContext.containsBean("applicationTaskExecutor"),
 				"The separate verification mail executor must not replace normal application tasks");
+		assertFalse(applicationContext.getBean(ObjectMapper.class).isEnabled(DeserializationFeature.ACCEPT_FLOAT_AS_INT),
+				"Fractional quantities and IDs must not be silently truncated");
 	}
 
 }

@@ -5,6 +5,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCache;
 import org.springframework.cache.support.SimpleCacheManager;
+import org.springframework.cache.transaction.TransactionAwareCacheDecorator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,7 +37,7 @@ public class CacheConfig {
         cacheManager.setCaches(List.of(
                 buildCache(CS_ITEMS_SEARCH_CACHE, csItemsSearchTtl, initialCapacity, maximumSize),
                 buildCache(PRICE_HISTORY_CHART_CACHE, priceHistoryChartTtl, initialCapacity, maximumSize),
-                buildCache(PORTFOLIO_SUMMARY_CACHE, portfolioSummaryTtl, initialCapacity, maximumSize),
+                new TransactionAwareCacheDecorator(buildCache(PORTFOLIO_SUMMARY_CACHE, portfolioSummaryTtl, initialCapacity, maximumSize)),
                 buildCache(TRACKED_ITEMS_CACHE, trackedItemsTtl, initialCapacity, maximumSize),
                 buildCache(INVENTORY_CALCULATOR_CACHE, inventoryCalculatorTtl, initialCapacity, maximumSize)
         ));

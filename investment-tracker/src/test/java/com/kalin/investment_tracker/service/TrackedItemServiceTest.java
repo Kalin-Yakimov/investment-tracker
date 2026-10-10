@@ -162,7 +162,7 @@ class TrackedItemServiceTest {
 
     @Test
     void deletingAnotherUsersItemIsRejected() {
-        when(itemRepository.findByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
+        when(itemRepository.findTrackedItemByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
 
         assertThrows(ItemNotFoundException.class, () -> service.deleteTrackedItem(42L, user));
 

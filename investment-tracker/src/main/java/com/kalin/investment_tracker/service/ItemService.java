@@ -18,12 +18,18 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
+
+import java.util.Locale;
 
 import static com.kalin.investment_tracker.utils.StringUtils.normalizeString;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class ItemService {
 
     private final ItemRepository itemRepository;
@@ -31,6 +37,7 @@ public class ItemService {
     private final ActivityEventService activityEventService;
 
     @CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    @Transactional
     public ItemResponseDto addItem(PortfolioItemRequest request, User user) {
         Item newItem = new Item();
         newItem.setUser(user);
@@ -59,9 +66,9 @@ public class ItemService {
     }
 
     @CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    @Transactional
     public ItemResponseDto updateItem(Long id, PortfolioItemRequest request, User user) {
-        // IDOR protection: query DB for item matching BOTH id AND authenticated userId
-        return itemRepository.findByIdAndUserId(id, user.getId())
+        return itemRepository.findPortfolioItemByIdAndUserId(id, user.getId())
                 .map(item -> {
                     if (request.csItemId() != null && !request.csItemId().isBlank()) {
                         CsItem csItem = findCatalogueItem(request.csItemId());
@@ -90,28 +97,27 @@ public class ItemService {
     }
 
     public Page<ItemResponseDto> getUserItems(User user, int page, int size, String filter) {
-        ItemStatus statusFilter = null;
-        org.springframework.data.domain.Sort sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "date");
-
-        if ("bought".equalsIgnoreCase(filter)) {
-            statusFilter = ItemStatus.BOUGHT;
-        } else if ("sold".equalsIgnoreCase(filter)) {
-            statusFilter = ItemStatus.SOLD;
-        } else if ("oldest_date".equalsIgnoreCase(filter)) {
-            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "date");
-        } else if ("highest_quantity".equalsIgnoreCase(filter)) {
-            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "quantity");
-        } else if ("highest_unit_price".equalsIgnoreCase(filter)) {
-            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "price");
-        } else if ("lowest_unit_price".equalsIgnoreCase(filter)) {
-            sort = org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "price");
-        }
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.PAGE_SIZE);
+        String selectedFilter = filter == null ? "newest_date" : filter.trim().toLowerCase(Locale.ROOT);
+        ItemStatus statusFilter = switch (selectedFilter) {
+            case "bought" -> ItemStatus.BOUGHT;
+            case "sold" -> ItemStatus.SOLD;
+            default -> null;
+        };
+        Sort sort = switch (selectedFilter) {
+            case "newest_date", "bought", "sold", "highest_total_price", "lowest_total_price" -> Sort.by(Sort.Direction.DESC, "date", "id");
+            case "oldest_date" -> Sort.by(Sort.Direction.ASC, "date", "id");
+            case "highest_quantity" -> Sort.by(Sort.Direction.DESC, "quantity", "id");
+            case "highest_unit_price" -> Sort.by(Sort.Direction.DESC, "price", "id");
+            case "lowest_unit_price" -> Sort.by(Sort.Direction.ASC, "price", "id");
+            default -> throw new IllegalArgumentException("Unsupported portfolio filter");
+        };
 
         Page<Item> items;
-        if ("highest_total_price".equalsIgnoreCase(filter)) {
+        if ("highest_total_price".equals(selectedFilter)) {
             items = itemRepository.findPortfolioOrderByTotalPriceDesc(
                     user.getId(), PageRequest.of(page, size));
-        } else if ("lowest_total_price".equalsIgnoreCase(filter)) {
+        } else if ("lowest_total_price".equals(selectedFilter)) {
             items = itemRepository.findPortfolioOrderByTotalPriceAsc(
                     user.getId(), PageRequest.of(page, size));
         } else {
@@ -134,12 +140,13 @@ public class ItemService {
     }
 
     public ItemResponseDto getItemById(Long id, User user) {
-        Item item = itemRepository.findByIdAndUserId(id, user.getId())
+        Item item = itemRepository.findPortfolioItemByIdAndUserId(id, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(id));
         return mapToDto(item);
     }
 
     public Page<ItemResponseDto> getItemHistory(User user, String name, int page, int size) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.PAGE_SIZE);
         Pageable pageable = PageRequest.of(page, size);
         Page<Item> items = itemRepository.findByUserIdAndItemNameOrderByDateDesc(user.getId(), normalizeString(name), pageable);
         
@@ -147,9 +154,9 @@ public class ItemService {
     }
 
     @CacheEvict(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    @Transactional
     public ApiMessageResponse deleteItem(Long id, User user) {
-        // IDOR protection: verify ownership at DB level before deletion
-        Item item = itemRepository.findByIdAndUserId(id, user.getId())
+        Item item = itemRepository.findPortfolioItemByIdAndUserId(id, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(id));
         
         itemRepository.delete(item);

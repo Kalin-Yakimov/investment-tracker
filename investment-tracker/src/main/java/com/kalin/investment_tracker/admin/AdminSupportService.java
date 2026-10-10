@@ -20,6 +20,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
@@ -85,11 +86,12 @@ public class AdminSupportService {
 
     @Transactional(readOnly = true)
     public Page<AdminDtos.UserSummary> searchUsers(String query, int page, int size) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         String cleanQuery = query == null ? "" : query.trim();
         Pageable pageable = PageRequest.of(
-                Math.max(0, page),
-                Math.min(Math.max(1, size), 50),
-                Sort.by(Sort.Direction.DESC, "createdDate")
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdDate", "id")
         );
         return userRepository.searchForAdministration(cleanQuery, pageable).map(this::toUserSummary);
     }
@@ -125,12 +127,13 @@ public class AdminSupportService {
             int size,
             String ipAddress
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
         Pageable pageable = PageRequest.of(
-                Math.max(0, page),
-                Math.min(Math.max(1, size), 50),
-                Sort.by(Sort.Direction.DESC, "date")
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "date", "id")
         );
         Page<Item> items = itemRepository.findPortfolioForAdministration(userId, pageable);
         return items.map(item -> {
@@ -213,9 +216,10 @@ public class AdminSupportService {
             int size,
             String ipAddress
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
-        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 50));
+        Pageable pageable = PageRequest.of(page, size);
         return activityEventRepository
                 .findByTargetUserIdOrderByCreatedAtDesc(target.getId(), pageable)
                 .map(this::toActivity);
@@ -223,15 +227,14 @@ public class AdminSupportService {
 
     @Transactional(readOnly = true)
     public Page<AdminDtos.Activity> getAdministrativeAudit(int page, int size) {
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(1, size), 100);
-        Pageable pageable = PageRequest.of(safePage, safeSize);
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.PAGE_SIZE);
+        Pageable pageable = PageRequest.of(page, size);
         List<AdminDtos.Activity> groupedEvents = groupAdministrativeAuditEvents(
                 activityEventRepository.findByCategoryInOrderByCreatedAtDesc(ADMINISTRATIVE_AUDIT_CATEGORIES)
         ).stream().map(this::toActivity).toList();
 
-        int fromIndex = Math.min(safePage * safeSize, groupedEvents.size());
-        int toIndex = Math.min(fromIndex + safeSize, groupedEvents.size());
+        int fromIndex = (int) Math.min(pageable.getOffset(), groupedEvents.size());
+        int toIndex = Math.min(fromIndex + size, groupedEvents.size());
         return new PageImpl<>(groupedEvents.subList(fromIndex, toIndex), pageable, groupedEvents.size());
     }
 

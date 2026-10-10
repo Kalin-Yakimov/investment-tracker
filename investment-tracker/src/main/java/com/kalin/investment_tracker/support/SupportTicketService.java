@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.support;
 
 import com.kalin.investment_tracker.user.User;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -35,10 +36,8 @@ public class SupportTicketService {
             int page,
             int size
     ) {
-        PageRequest pageable = PageRequest.of(
-                Math.max(0, page),
-                Math.min(Math.max(1, size), 50)
-        );
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
+        PageRequest pageable = PageRequest.of(page, size);
         Page<SupportTicket> tickets = status == null
                 ? repository.findAllByOrderByCreatedAtDesc(pageable)
                 : repository.findByStatusOrderByCreatedAtDesc(status, pageable);

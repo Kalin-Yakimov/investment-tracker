@@ -8,6 +8,12 @@ import com.kalin.investment_tracker.dto.PortfolioSummaryDto;
 import com.kalin.investment_tracker.service.ItemService;
 import com.kalin.investment_tracker.user.User;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -30,9 +36,9 @@ public class ItemController {
     @GetMapping("/get-user-items")
     public ResponseEntity<PageResponse<ItemResponseDto>> getAllUserItems(
             @AuthenticationPrincipal User user,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false, defaultValue = "newest_date") String filter) {
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(ApiRequestLimits.PAGE_SIZE) int size,
+            @RequestParam(required = false, defaultValue = "newest_date") @Size(max = 32) String filter) {
         return ResponseEntity.ok(PageResponse.from(itemService.getUserItems(user, page, size, filter)));
     }
 
@@ -44,7 +50,7 @@ public class ItemController {
 
     @GetMapping("/item/{id}")
     public ResponseEntity<ItemResponseDto> getItemById(
-            @PathVariable Long id,
+            @PathVariable @Positive Long id,
             @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(itemService.getItemById(id, user));
     }
@@ -52,9 +58,9 @@ public class ItemController {
     @GetMapping("/item/history")
     public ResponseEntity<PageResponse<ItemResponseDto>> getItemHistory(
             @AuthenticationPrincipal User user,
-            @RequestParam String name,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam @NotBlank @Size(max = ApiRequestLimits.ITEM_TEXT_LENGTH) String name,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(ApiRequestLimits.PAGE_SIZE) int size) {
         return ResponseEntity.ok(PageResponse.from(itemService.getItemHistory(user, name, page, size)));
     }
 
@@ -62,14 +68,14 @@ public class ItemController {
     @PutMapping("/item/{id}")
     public ResponseEntity<ItemResponseDto> updateItem(
             @RequestBody @Valid PortfolioItemRequest request,
-            @PathVariable Long id,
+            @PathVariable @Positive Long id,
             @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(itemService.updateItem(id, request, user));
     }
 
     @DeleteMapping("/item/{id}")
     public ResponseEntity<ApiMessageResponse> deleteItem(
-            @PathVariable Long id,
+            @PathVariable @Positive Long id,
             @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(itemService.deleteItem(id, user));
     }

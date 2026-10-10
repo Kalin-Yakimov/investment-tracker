@@ -26,7 +26,7 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     @Query(
             value = "SELECT i FROM Item i WHERE i.user.id = :userId " +
                     "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) " +
-                    "ORDER BY (COALESCE(i.price, 0) * i.quantity) DESC",
+                    "ORDER BY (COALESCE(i.price, 0) * i.quantity) DESC, i.id DESC",
             countQuery = "SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId " +
                     "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)"
     )
@@ -36,7 +36,7 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     @Query(
             value = "SELECT i FROM Item i WHERE i.user.id = :userId " +
                     "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) " +
-                    "ORDER BY (COALESCE(i.price, 0) * i.quantity) ASC",
+                    "ORDER BY (COALESCE(i.price, 0) * i.quantity) ASC, i.id ASC",
             countQuery = "SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId " +
                     "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)"
     )
@@ -44,7 +44,7 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     Page<Item> findPortfolioOrderByTotalPriceAsc(@Param("userId") Integer userId, Pageable pageable);
 
     // Used for the item history (non-Steam items only).
-    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND i.itemName = :itemName AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) ORDER BY i.date DESC")
+    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND i.itemName = :itemName AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) ORDER BY i.date DESC, i.id DESC")
     @EntityGraph(attributePaths = "catalogueItem")
     Page<Item> findByUserIdAndItemNameOrderByDateDesc(@Param("userId") Integer userId, @Param("itemName") String itemName, Pageable pageable);
 
@@ -60,9 +60,15 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     // Fast DB-level check if a user is already tracking a market hash name
     boolean existsByUserIdAndMarketHashNameAndSteamFoundCheckTrue(Integer userId, String marketHashName);
 
-    // IDOR protection: find item by ID strictly belonging to the authenticated user
+    // Ownership and record type must match; legacy null flags are portfolio records.
+    @Query("SELECT i FROM Item i WHERE i.id = :id AND i.user.id = :userId " +
+            "AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)")
     @EntityGraph(attributePaths = "catalogueItem")
-    java.util.Optional<Item> findByIdAndUserId(Long id, Integer userId);
+    java.util.Optional<Item> findPortfolioItemByIdAndUserId(@Param("id") Long id, @Param("userId") Integer userId);
+
+    @Query("SELECT i FROM Item i WHERE i.id = :id AND i.user.id = :userId AND i.steamFoundCheck = true")
+    @EntityGraph(attributePaths = "catalogueItem")
+    java.util.Optional<Item> findTrackedItemByIdAndUserId(@Param("id") Long id, @Param("userId") Integer userId);
 
     List<Item> findAllByIdInAndUserIdAndSteamFoundCheckTrue(Collection<Long> ids, Integer userId);
 

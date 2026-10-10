@@ -9,6 +9,7 @@ The repository contains both parts of the application:
 - `LOCAL_SETUP.md` — complete setup, backup and recovery instructions.
 - `docs/DATABASE_MIGRATIONS.md` — safeguards for introducing controlled schema migrations.
 - `docs/AUTH_SECURITY.md` — verification-code safeguards, limits and deployment boundaries.
+- `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
 
 ## Main functionality
 

@@ -18,6 +18,7 @@ import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.repository.PriceHistoryRepository;
 import com.kalin.investment_tracker.user.User;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
@@ -95,6 +96,11 @@ public class TrackedItemService {
     }
 
     public PriceUpdateResponse requestPriceUpdate(List<Long> requestedIds, User user) {
+        if (requestedIds == null || requestedIds.isEmpty()
+                || requestedIds.size() > ApiRequestLimits.PRICE_UPDATE_BATCH_SIZE
+                || requestedIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("Provide between 1 and " + ApiRequestLimits.PRICE_UPDATE_BATCH_SIZE + " positive item IDs");
+        }
         List<Long> itemIds = requestedIds.stream().distinct().toList();
         List<Item> ownedItems = itemRepository
                 .findAllByIdInAndUserIdAndSteamFoundCheckTrue(itemIds, user.getId());
@@ -246,7 +252,7 @@ public class TrackedItemService {
     }
 
     private Item findOwnedItem(Long itemId, User user) {
-        return itemRepository.findByIdAndUserId(itemId, user.getId())
+        return itemRepository.findTrackedItemByIdAndUserId(itemId, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(itemId));
     }
 

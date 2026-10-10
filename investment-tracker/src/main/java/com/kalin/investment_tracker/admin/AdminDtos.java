@@ -2,6 +2,7 @@ package com.kalin.investment_tracker.admin;
 
 import com.kalin.investment_tracker.model.ItemStatus;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Page;
 
@@ -133,7 +134,7 @@ public final class AdminDtos {
     }
 
     public record SupportRoleRequest(
-            boolean enabled,
+            @NotNull(message = "Support role state is required") Boolean enabled,
             @NotBlank(message = "Reason is required")
             @Size(min = 5, max = 500, message = "Reason must be between 5 and 500 characters")
             String reason
@@ -141,7 +142,7 @@ public final class AdminDtos {
     }
 
     public record LockRequest(
-            boolean locked,
+            @NotNull(message = "Account lock state is required") Boolean locked,
             @NotBlank(message = "Reason is required")
             @Size(min = 5, max = 500, message = "Reason must be between 5 and 500 characters")
             String reason

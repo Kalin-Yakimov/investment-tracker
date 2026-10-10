@@ -85,3 +85,9 @@ Stage 2 was approved after the preparation checkpoint above. Its implementation,
 policy defaults, deployment boundaries and verified test results are recorded in
 [AUTH_SECURITY.md](AUTH_SECURITY.md). The base commit and Stage 1 results above
 remain historical reference points; they are not the current test totals.
+
+## Separately approved Stage 3 checkpoint
+
+Stage 3 API validation, type-scoped ownership checks, portfolio transaction
+boundaries and verified results are recorded in [API_VALIDATION.md](API_VALIDATION.md).
+Earlier stage totals above are retained as historical checkpoints.

@@ -47,20 +47,20 @@ class ItemServiceAuthorizationTest {
 
     @Test
     void getItemByIdRejectsAnItemThatDoesNotBelongToAuthenticatedUser() {
-        when(itemRepository.findByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
+        when(itemRepository.findPortfolioItemByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
 
         assertThrows(
                 ItemNotFoundException.class,
                 () -> itemService.getItemById(42L, authenticatedUser)
         );
 
-        verify(itemRepository).findByIdAndUserId(42L, 7);
+        verify(itemRepository).findPortfolioItemByIdAndUserId(42L, 7);
         verify(itemRepository, never()).findById(42L);
     }
 
     @Test
     void updateItemRejectsAnItemThatDoesNotBelongToAuthenticatedUser() {
-        when(itemRepository.findByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
+        when(itemRepository.findPortfolioItemByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
 
         assertThrows(
                 ItemNotFoundException.class,
@@ -83,7 +83,7 @@ class ItemServiceAuthorizationTest {
 
     @Test
     void deleteItemRejectsAnItemThatDoesNotBelongToAuthenticatedUser() {
-        when(itemRepository.findByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
+        when(itemRepository.findPortfolioItemByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
 
         assertThrows(
                 ItemNotFoundException.class,
