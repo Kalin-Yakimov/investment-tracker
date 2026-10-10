@@ -3,6 +3,7 @@ package com.kalin.investment_tracker.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.model.CsItem;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.CsItemSpecification;
 import jakarta.annotation.PostConstruct;
@@ -14,12 +15,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 @RequiredArgsConstructor
@@ -29,19 +28,20 @@ public class CsItemService {
     private final CsItemRepository csItemRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final CataloguePersistenceService persistence;
+    private final ReentrantLock synchronizationLock = new ReentrantLock();
 
     @PostConstruct
     public void init() {
         log.info("Starting CS items database synchronization...");
         cleanExcludedItemsFromDatabase();
 
-        long count = csItemRepository.count();
-        if (count == 0) {
-            log.info("Database is empty. Performing initial full CS items sync...");
-            fetchAndSaveItems();
-        } else {
-            log.info("Database contains {} CS items. Checking for new missing items...", count);
-            syncMissingItems();
+        try {
+            if (csItemRepository.count() == 0) fetchAndSaveItems();
+            else syncMissingItems();
+        } catch (ExternalServiceException unavailable) {
+            // A provider outage must not prevent the application using its stored catalogue.
+            log.warn("Startup catalogue synchronization failed; retaining the stored catalogue");
         }
         updateExistingItemsWithMarketHashNames();
     }
@@ -101,108 +101,46 @@ public class CsItemService {
         }
     }
 
-    @org.springframework.cache.annotation.CacheEvict(
-            value = com.kalin.investment_tracker.config.CacheConfig.CS_ITEMS_SEARCH_CACHE,
-            allEntries = true
-    )
     public void fetchAndSaveItems() {
-        String url = "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/all.json";
-        try {
-            log.info("Sending request to: {}", url);
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, null, String.class);
-            log.info("Response received. Status code: {}", response.getStatusCode());
-
-            String jsonBody = response.getBody();
-            if (jsonBody != null) {
-                log.info("Raw JSON response (first 500 chars): {}", jsonBody.substring(0, Math.min(jsonBody.length(), 500)));
-                
-                JsonNode rootNode = objectMapper.readTree(jsonBody);
-                log.info("Found {} items from API", rootNode.size());
-                
-                List<CsItem> csItems = new ArrayList<>();
-                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.properties().iterator();
-                while (fields.hasNext()) {
-                    Map.Entry<String, JsonNode> entry = fields.next();
-                    JsonNode node = entry.getValue();
-                    
-                    String id = node.path("id").asText();
-                    String name = node.path("name").asText();
-                    if (isExcludedCategory(id, name)) {
-                        continue;
-                    }
-
-                    String image = node.path("image").asText();
-                    
-                    if (id != null && !id.isEmpty() && name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
-                        String marketHashName = convertToMarketHashName(name);
-                        csItems.add(CsItem.builder()
-                                .id(id)
-                                .name(name)
-                                .image(image)
-                                .marketHashName(marketHashName)
-                                .build());
-                    }
-                }
-                
-                log.info("Saving items to database...");
-                csItemRepository.saveAll(csItems);
-                log.info("Successfully saved {} items", csItems.size());
-            } else {
-                log.warn("Response body is null!");
-            }
-        } catch (Exception e) {
-            log.error("Failed to fetch and save items", e);
-            throw new RuntimeException("Failed to parse and save items", e);
-        }
+        synchronizeCatalogue(false);
     }
 
     public void syncMissingItems() {
-        String url = "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/all.json";
+        synchronizeCatalogue(true);
+    }
+
+    private void synchronizeCatalogue(boolean onlyMissing) {
+        if (!synchronizationLock.tryLock()) throw new ExternalServiceException("Catalogue synchronization is already running");
         try {
-            Set<String> existingIds = new HashSet<>(csItemRepository.findAllItemIds());
-            log.info("Loaded {} existing CS item IDs from database", existingIds.size());
-
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, null, String.class);
-            String jsonBody = response.getBody();
-            if (jsonBody != null) {
-                JsonNode rootNode = objectMapper.readTree(jsonBody);
-                List<CsItem> newItemsToSave = new ArrayList<>();
-
-                Iterator<Map.Entry<String, JsonNode>> fields = rootNode.properties().iterator();
-                while (fields.hasNext()) {
-                    Map.Entry<String, JsonNode> entry = fields.next();
-                    JsonNode node = entry.getValue();
-
-                    String id = node.path("id").asText();
-                    String name = node.path("name").asText();
-                    if (isExcludedCategory(id, name)) {
-                        continue;
-                    }
-
-                    if (id != null && !id.isEmpty() && !existingIds.contains(id)) {
-                        String image = node.path("image").asText();
-
-                        if (name != null && !name.isEmpty() && image != null && !image.isEmpty()) {
-                            newItemsToSave.add(CsItem.builder()
-                                    .id(id)
-                                    .name(name)
-                                    .image(image)
-                                    .marketHashName(convertToMarketHashName(name))
-                                    .build());
-                        }
-                    }
-                }
-
-                if (!newItemsToSave.isEmpty()) {
-                    log.info("Found {} NEW CS items from API. Saving to database...", newItemsToSave.size());
-                    csItemRepository.saveAll(newItemsToSave);
-                    log.info("Successfully saved {} new CS items", newItemsToSave.size());
-                } else {
-                    log.info("Database is fully up to date with API! No new CS items found.");
-                }
+            ResponseEntity<String> response = restTemplate.exchange(
+                    "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/all.json",
+                    HttpMethod.GET, null, String.class);
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new ExternalServiceException("The catalogue source returned no usable data");
             }
-        } catch (Exception e) {
-            log.error("Error performing incremental CS items sync", e);
+            JsonNode root = objectMapper.readTree(response.getBody());
+            if (root == null || (!root.isObject() && !root.isArray())) {
+                throw new ExternalServiceException("Invalid catalogue format");
+            }
+            Map<String, CsItem> parsed = new LinkedHashMap<>();
+            for (JsonNode node : root) {
+                String id = node.path("id").asText("");
+                String name = node.path("name").asText("");
+                String image = node.path("image").asText("");
+                if (isExcludedCategory(id, name)) continue;
+                if (id.isBlank() || id.length() > 255 || name.isBlank() || name.length() > 255
+                        || image.isBlank() || image.length() > 1000) continue;
+                parsed.put(id, CsItem.builder().id(id).name(name).image(image)
+                        .marketHashName(convertToMarketHashName(name)).build());
+            }
+            if (parsed.isEmpty()) throw new ExternalServiceException("The catalogue contains no usable items");
+            int saved = persistence.saveCatalogue(List.copyOf(parsed.values()), onlyMissing);
+            log.info("Catalogue synchronization completed; {} entries saved", saved);
+        } catch (Exception failure) {
+            log.warn("Catalogue synchronization failed ({})", failure.getClass().getSimpleName());
+            throw new ExternalServiceException("Catalogue synchronization failed; stored entries were retained");
+        } finally {
+            synchronizationLock.unlock();
         }
     }
 
@@ -214,7 +152,8 @@ public class CsItemService {
         return csApiName;
     }
 
-    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.CS_ITEMS_SEARCH_CACHE, key = "#query.toLowerCase().trim()")
+    @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.CS_ITEMS_SEARCH_CACHE,
+            key = "#query.toLowerCase().trim()", condition = "#query != null && !#query.isBlank()")
     public List<CsItem> searchItems(String query) {
         if (query == null || query.trim().isEmpty()) {
             return List.of();

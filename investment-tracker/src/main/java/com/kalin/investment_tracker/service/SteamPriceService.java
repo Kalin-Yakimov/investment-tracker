@@ -2,427 +2,267 @@ package com.kalin.investment_tracker.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kalin.investment_tracker.config.BoundedInputStream;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.model.Item;
-import com.kalin.investment_tracker.model.MarketPriceSnapshot;
-import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.zip.GZIPInputStream;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class SteamPriceService {
-
-    private static final String CSGOTRADER_STEAM_PRICES_URL =
-            "https://prices.csgotrader.app/latest/steam.json";
-    private static final BigDecimal DEFAULT_EUR_RATE = new BigDecimal("0.92");
-
+    private static final String FEED_URL = "https://prices.csgotrader.app/latest/steam.json";
+    private static final String FX_URL = "https://open.er-api.com/v6/latest/USD";
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    private final MarketPriceSnapshotRepository marketPriceSnapshotRepository;
-    private final ItemRepository itemRepository;
-
-    private final ConcurrentHashMap<String, ItemPriceData> priceCache = new ConcurrentHashMap<>();
-    private final AtomicBoolean isRefreshingCache = new AtomicBoolean(false);
-    private final Object snapshotWriteLock = new Object();
-
+    private final MarketPricePersistenceService persistence;
+    private final PriceFeedProperties properties;
+    private final Clock clock;
+    // All price/history writers in this instance use this lock. Warm readers never wait for HTTP.
+    private final ReentrantLock refreshLock = new ReentrantLock();
+    private volatile PriceFeedSnapshot currentFeed;
     private volatile Instant lastCacheCheck;
-    private volatile String lastFeedEtag;
-    private volatile long lastFeedModifiedMillis = -1L;
-    private volatile String lastFeedVersion;
-    private volatile Instant lastFeedObservedAt;
-    private volatile BigDecimal cachedEurRate;
-
-    @Value("${price.feed.check-interval-ms:7200000}")
-    private long feedCheckIntervalMs;
+    private volatile Instant retryAfter;
 
     public static class ItemPriceData {
         public final BigDecimal currentPrice;
         public final BigDecimal price24h;
-
-        public ItemPriceData(BigDecimal price24h) {
-            this.currentPrice = price24h;
-            this.price24h = price24h;
-        }
+        public ItemPriceData(BigDecimal price24h) { this.currentPrice = price24h; this.price24h = price24h; }
     }
 
-    /** Checks the shared CSGOTrader feed for a newly published observation. */
-    public void refreshPriceCacheIfNeeded() {
-        refreshPriceCache(false, false);
-    }
+    public void refreshPriceCacheIfNeeded() { refreshPriceCache(false, false); }
 
-    /** Immediately downloads the feed, bypassing both the interval and HTTP validators. */
-    public int forceRefreshPriceCache() {
-        return refreshPriceCache(true, true);
-    }
+    /** Bypasses the normal interval/HTTP validators, but respects a provider failure cooldown. */
+    public int forceRefreshPriceCache() { return refreshPriceCache(true, true); }
 
-    private int refreshPriceCache(boolean forceRefresh, boolean reportFailure) {
-        Instant now = Instant.now();
-        if (!forceRefresh
-                && lastCacheCheck != null
-                && now.toEpochMilli() - lastCacheCheck.toEpochMilli() < feedCheckIntervalMs
-                && !priceCache.isEmpty()) {
-            return 0;
-        }
-
-        if (!isRefreshingCache.compareAndSet(false, true)) {
-            if (reportFailure) {
-                throw new IllegalStateException("A price feed refresh is already running");
-            }
-            return 0;
-        }
-
+    private int refreshPriceCache(boolean force, boolean strict) {
+        if (!refreshDue(force, strict)) return 0;
+        boolean locked = false;
         try {
-            now = Instant.now();
-            if (!forceRefresh
-                    && lastCacheCheck != null
-                    && now.toEpochMilli() - lastCacheCheck.toEpochMilli() < feedCheckIntervalMs
-                    && !priceCache.isEmpty()) {
+            locked = refreshLock.tryLock();
+            if (!locked && currentFeed == null) {
+                locked = refreshLock.tryLock(properties.getRefreshWaitMs(), TimeUnit.MILLISECONDS);
+            }
+            if (!locked) {
+                if (strict) throw new ExternalServiceException("A price feed refresh is already running");
                 return 0;
             }
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "InvestmentTracker/1.0");
-            headers.set("Accept", "application/json");
-            // ETag can remain identical when the provider republishes the same
-            // 24-hour values. If-None-Match would hide the newer publication date.
-            // A manual refresh always checks the complete response.
-            if (!forceRefresh && lastFeedModifiedMillis > 0) {
-                headers.setIfModifiedSince(lastFeedModifiedMillis);
-            } else if (!forceRefresh && lastFeedEtag != null && !lastFeedEtag.isBlank()) {
-                headers.setIfNoneMatch(lastFeedEtag);
-            }
-
-            ResponseEntity<byte[]> response = restTemplate.exchange(
-                    CSGOTRADER_STEAM_PRICES_URL,
-                    HttpMethod.GET,
-                    new HttpEntity<>(headers),
-                    byte[].class
-            );
-
-            if (response.getStatusCode() == HttpStatus.NOT_MODIFIED) {
-                lastCacheCheck = Instant.now();
-                log.debug("CSGOTrader feed has not changed");
+            if (!refreshDue(force, strict)) return 0;
+            try { return downloadAndPublish(force); }
+            catch (ExternalServiceException failure) {
+                if (strict) throw failure;
                 return 0;
             }
-
-            byte[] body = response.getBody();
-            if (!response.getStatusCode().is2xxSuccessful() || body == null || body.length == 0) {
-                throw new IllegalStateException(
-                        "CSGOTrader feed returned status " + response.getStatusCode() + " without usable data"
-                );
-            }
-
-            String json = decodeBody(body);
-            Map<String, ItemPriceData> newPrices = parsePrices(json);
-            if (newPrices.isEmpty()) {
-                throw new IllegalStateException("CSGOTrader feed contains no usable 24-hour prices");
-            }
-
-            BigDecimal eurRate = fetchFreshUsdToEurRate();
-            long modifiedMillis = response.getHeaders().getLastModified();
-            Instant observedAt = modifiedMillis > 0
-                    ? Instant.ofEpochMilli(modifiedMillis)
-                    : Instant.now();
-            String etag = response.getHeaders().getETag();
-            String version = buildSourceVersion(etag, modifiedMillis, body);
-
-            int recordedSnapshots = persistTrackedSnapshots(newPrices, eurRate, version, observedAt);
-            priceCache.clear();
-            priceCache.putAll(newPrices);
-            cachedEurRate = eurRate;
-            lastFeedEtag = etag;
-            lastFeedModifiedMillis = modifiedMillis;
-            lastFeedObservedAt = observedAt;
-            lastFeedVersion = version;
-            lastCacheCheck = Instant.now();
-
-            log.info("Loaded {} CSGOTrader 24-hour prices (version {}, observed {}); recorded {} new snapshots",
-                    newPrices.size(), version, observedAt, recordedSnapshots);
-            return recordedSnapshots;
-        } catch (Exception e) {
-            log.error("Failed to refresh the CSGOTrader price feed: {}", e.getMessage(), e);
-            if (reportFailure) {
-                throw new IllegalStateException("Price feed refresh failed: " + e.getMessage(), e);
-            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            if (strict) throw new ExternalServiceException("Price refresh was interrupted");
             return 0;
         } finally {
-            isRefreshingCache.set(false);
+            if (locked) refreshLock.unlock();
         }
     }
 
-    private String decodeBody(byte[] body) throws Exception {
-        boolean gzipBody = body.length >= 2
-                && (body[0] & 0xff) == 0x1f
-                && (body[1] & 0xff) == 0x8b;
-        if (gzipBody) {
-            try (ByteArrayInputStream input = new ByteArrayInputStream(body);
-                 GZIPInputStream gzip = new GZIPInputStream(input)) {
-                return new String(gzip.readAllBytes(), StandardCharsets.UTF_8);
+    private boolean refreshDue(boolean force, boolean strict) {
+        Instant now = clock.instant();
+        if (retryAfter != null && now.isBefore(retryAfter)) {
+            if (strict) throw new ExternalServiceException("Price refresh is temporarily unavailable; try again later");
+            return false;
+        }
+        return force || currentFeed == null || lastCacheCheck == null
+                || !now.isBefore(lastCacheCheck.plusMillis(properties.getCheckIntervalMs()));
+    }
+
+    private int downloadAndPublish(boolean force) {
+        try {
+            PriceFeedSnapshot previous = currentFeed;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "InvestmentTracker/1.0");
+            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+            // A new publication can reuse the same ETag: prefer its Last-Modified date.
+            if (!force && previous != null && previous.modifiedMillis() > 0) {
+                headers.setIfModifiedSince(previous.modifiedMillis());
+            } else if (!force && previous != null && previous.etag() != null) {
+                headers.setIfNoneMatch(previous.etag());
             }
+            ResponseEntity<byte[]> response = restTemplate.exchange(FEED_URL, HttpMethod.GET,
+                    new HttpEntity<>(headers), byte[].class);
+            if (response.getStatusCode() == HttpStatus.NOT_MODIFIED && previous != null) {
+                lastCacheCheck = clock.instant();
+                retryAfter = null;
+                return 0;
+            }
+            byte[] body = response.getBody();
+            if (!response.getStatusCode().is2xxSuccessful() || body == null || body.length == 0) {
+                throw new ExternalServiceException("The price source returned no usable data");
+            }
+            byte[] decoded = decodeBody(body);
+            Map<String, BigDecimal> prices = parsePrices(decoded);
+            long modified = response.getHeaders().getLastModified();
+            if (modified > clock.instant().plusSeconds(300).toEpochMilli()
+                    || (previous != null && modified > 0 && previous.modifiedMillis() > modified)) {
+                throw new ExternalServiceException("The price source returned an invalid publication date");
+            }
+            String etag = response.getHeaders().getETag();
+            String version = buildSourceVersion(etag, modified, decoded);
+            boolean samePublication = previous != null && version.equals(previous.sourceVersion());
+            if (samePublication && !prices.equals(previous.pricesUsd())) {
+                throw new ExternalServiceException("The price publication changed without a new source version");
+            }
+            Optional<MarketPricePersistenceService.RecordedPublication> recorded = persistence.findRecordedPublication(version);
+            BigDecimal rate = samePublication ? previous.usdToEurRate()
+                    : recorded.map(MarketPricePersistenceService.RecordedPublication::rate).orElseGet(this::fetchUsdToEurRate);
+            Instant observedAt = modified > 0 ? Instant.ofEpochMilli(modified)
+                    : samePublication ? previous.observedAt()
+                    : recorded.map(MarketPricePersistenceService.RecordedPublication::observedAt).orElseGet(clock::instant);
+            PriceFeedSnapshot next = new PriceFeedSnapshot(prices, rate, version, observedAt, etag, modified);
+            // Publish only after the transaction commits, retaining the previous cache on failure.
+            int count = persistence.persistFeed(next);
+            currentFeed = next;
+            lastCacheCheck = clock.instant();
+            retryAfter = null;
+            log.info("Loaded {} CSGOTrader prices; recorded {} observations (source date {})", prices.size(), count, observedAt);
+            return count;
+        } catch (Exception failure) {
+            retryAfter = nextRetryAt(failure);
+            log.warn("Price refresh failed ({}); retaining previous data, next attempt after {}",
+                    failure.getClass().getSimpleName(), retryAfter);
+            throw new ExternalServiceException("Price feed refresh failed; previous data was retained");
         }
-        return new String(body, StandardCharsets.UTF_8);
     }
 
-    private Map<String, ItemPriceData> parsePrices(String json) throws Exception {
+    private byte[] decodeBody(byte[] body) throws Exception {
+        boolean gzip = body.length >= 2 && (body[0] & 0xff) == 0x1f && (body[1] & 0xff) == 0x8b;
+        InputStream input = new ByteArrayInputStream(body);
+        if (gzip) input = new GZIPInputStream(input);
+        try (InputStream bounded = new BoundedInputStream(input, properties.getMaximumDecodedBytes())) {
+            return bounded.readAllBytes();
+        }
+    }
+
+    private Map<String, BigDecimal> parsePrices(byte[] json) throws Exception {
         JsonNode root = objectMapper.readTree(json);
-        Map<String, ItemPriceData> prices = new HashMap<>();
-        root.properties().forEach(entry -> {
-            JsonNode last24h = entry.getValue().get("last_24h");
-            if (last24h != null && last24h.isNumber() && last24h.asDouble() > 0) {
-                prices.put(entry.getKey(), new ItemPriceData(last24h.decimalValue()));
-            }
-        });
+        if (root == null || !root.isObject()) throw new ExternalServiceException("Invalid price feed format");
+        Map<String, BigDecimal> prices = new HashMap<>();
+        for (var entry : root.properties()) {
+            JsonNode value = entry.getValue().path("last_24h");
+            if (entry.getKey().isBlank() || entry.getKey().length() > 500 || !value.isNumber()) continue;
+            BigDecimal usd = value.decimalValue().setScale(4, RoundingMode.HALF_UP);
+            if (usd.signum() > 0 && usd.precision() <= 18) prices.put(entry.getKey(), usd);
+        }
+        if (prices.isEmpty()) throw new ExternalServiceException("No usable 24-hour prices were returned");
         return prices;
     }
 
-    private String buildSourceVersion(String etag, long modifiedMillis, byte[] body) throws Exception {
-        // The publication date is part of the observation identity. The provider
-        // may upload the same values again with a new Last-Modified date but the
-        // same ETag; that is a new observation, not a changed price.
-        if (modifiedMillis > 0) {
-            String contentIdentity = etag != null && !etag.isBlank()
-                    ? etag
-                    : HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
-            String identityHash = HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256")
-                            .digest(contentIdentity.getBytes(StandardCharsets.UTF_8))
-            );
-            return "published-" + modifiedMillis + "-" + identityHash;
-        }
+    private String buildSourceVersion(String etag, long modified, byte[] decoded) throws Exception {
+        String identity = etag == null || etag.isBlank() ? hash(decoded) : etag;
+        // Hash untrusted ETags so the stored identifier always fits the existing column.
+        String identityHash = hash(identity.getBytes(StandardCharsets.UTF_8));
+        if (modified > 0) return "published-" + modified + "-" + identityHash;
         if (etag != null && !etag.isBlank()) {
-            return etag.replace("W/", "").replace("\"", "");
+            String legacyVersion = etag.replace("W/", "").replace("\"", "");
+            if (!legacyVersion.isBlank() && legacyVersion.length() <= 128) return legacyVersion;
+            return "content-" + identityHash;
         }
+        return hash(decoded);
+    }
+
+    private String hash(byte[] body) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
     }
 
-    private BigDecimal fetchFreshUsdToEurRate() {
+    private BigDecimal fetchUsdToEurRate() {
         try {
-            ResponseEntity<String> response = restTemplate.getForEntity(
-                    "https://open.er-api.com/v6/latest/USD",
-                    String.class
-            );
-            if (response.getBody() != null) {
-                JsonNode root = objectMapper.readTree(response.getBody());
-                JsonNode eur = root.path("rates").path("EUR");
-                if (eur.isNumber() && eur.asDouble() > 0) {
-                    return eur.decimalValue();
-                }
+            ResponseEntity<String> response = restTemplate.getForEntity(FX_URL, String.class);
+            JsonNode eur = objectMapper.readTree(response.getBody()).path("rates").path("EUR");
+            if (response.getStatusCode().is2xxSuccessful() && eur.isNumber()) {
+                BigDecimal rate = eur.decimalValue().setScale(8, RoundingMode.HALF_UP);
+                if (rate.signum() > 0 && rate.precision() <= 18) return rate;
             }
-        } catch (Exception e) {
-            log.warn("Failed to fetch USD/EUR rate; using fallback {}: {}", DEFAULT_EUR_RATE, e.getMessage());
+        } catch (Exception failure) {
+            log.warn("USD/EUR lookup failed ({}); checking the last received or stored rate", failure.getClass().getSimpleName());
         }
-        return DEFAULT_EUR_RATE;
+        PriceFeedSnapshot previous = currentFeed;
+        return previous != null ? previous.usdToEurRate() : persistence.findLastKnownRate()
+                .orElseThrow(() -> new ExternalServiceException("No received or stored USD/EUR conversion rate is available"));
     }
 
-    private BigDecimal getUsdToEurRate() {
-        if (cachedEurRate == null) {
-            cachedEurRate = fetchFreshUsdToEurRate();
+    private Instant nextRetryAt(Exception failure) {
+        Instant minimum = clock.instant().plusMillis(properties.getFailureRetryIntervalMs());
+        if (failure instanceof RestClientResponseException response
+                && (response.getStatusCode().value() == 429 || response.getStatusCode().value() == 503)
+                && response.getResponseHeaders() != null) {
+            String retry = response.getResponseHeaders().getFirst(HttpHeaders.RETRY_AFTER);
+            if (retry != null) {
+                try {
+                    Instant requested = retry.matches("[0-9]+") ? clock.instant().plusSeconds(Long.parseLong(retry))
+                            : ZonedDateTime.parse(retry, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+                    if (requested.isAfter(minimum)) return requested;
+                } catch (RuntimeException ignored) { /* Invalid provider header: use the configured cooldown. */ }
+            }
         }
-        return cachedEurRate;
+        return minimum;
     }
 
-    private BigDecimal toEur(BigDecimal usdPrice, BigDecimal rate) {
-        return usdPrice.multiply(rate).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private int persistTrackedSnapshots(
-            Map<String, ItemPriceData> prices,
-            BigDecimal eurRate,
-            String sourceVersion,
-            Instant observedAt
-    ) {
-        synchronized (snapshotWriteLock) {
-            List<Item> trackedItems = itemRepository.findAllSteamTrackedItems();
-            if (trackedItems.isEmpty()) {
-                return 0;
-            }
-
-            List<Item> itemsToUpdate = new ArrayList<>();
-            List<MarketPriceSnapshot> snapshots = new ArrayList<>();
-            Set<String> processedMarketNames = new HashSet<>();
-
-            for (Item item : trackedItems) {
-                String marketHashName = item.getMarketHashName();
-                ItemPriceData data = marketHashName == null ? null : prices.get(marketHashName);
-                if (data == null || data.price24h == null) {
-                    continue;
-                }
-
-                BigDecimal priceEur = toEur(data.price24h, eurRate);
-                item.setPrice(priceEur);
-                item.setSteamFoundCheck(true);
-                itemsToUpdate.add(item);
-
-                if (processedMarketNames.add(marketHashName)
-                        && !marketPriceSnapshotRepository.existsByMarketHashNameAndSourceAndSourceVersion(
-                        marketHashName,
-                        MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
-                        sourceVersion
-                )) {
-                    snapshots.add(new MarketPriceSnapshot(
-                            marketHashName,
-                            MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
-                            sourceVersion,
-                            observedAt,
-                            data.price24h,
-                            eurRate,
-                            priceEur
-                    ));
-                }
-            }
-
-            if (!itemsToUpdate.isEmpty()) {
-                itemRepository.saveAll(itemsToUpdate);
-            }
-            if (!snapshots.isEmpty()) {
-                marketPriceSnapshotRepository.saveAll(snapshots);
-            }
-            return snapshots.size();
-        }
-    }
-
-    /**
-     * Gives a newly tracked item its first real observation from the currently
-     * loaded feed. It never creates backdated points from rolling averages.
-     */
     public void recordCurrentSnapshotForItem(Item item) {
+        if (item == null || item.getId() == null || item.getMarketHashName() == null) return;
         refreshPriceCacheIfNeeded();
-        if (item == null || item.getMarketHashName() == null
-                || lastFeedVersion == null || lastFeedObservedAt == null) {
-            return;
-        }
-
-        ItemPriceData data = priceCache.get(item.getMarketHashName());
-        if (data == null || data.price24h == null) {
-            return;
-        }
-
-        synchronized (snapshotWriteLock) {
-            if (marketPriceSnapshotRepository.existsByMarketHashNameAndSourceAndSourceVersion(
-                    item.getMarketHashName(),
-                    MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
-                    lastFeedVersion
-            )) {
-                return;
-            }
-
-            BigDecimal rate = getUsdToEurRate();
-            marketPriceSnapshotRepository.save(new MarketPriceSnapshot(
-                    item.getMarketHashName(),
-                    MarketPriceSnapshot.SOURCE_CSGOTRADER_24H,
-                    lastFeedVersion,
-                    lastFeedObservedAt,
-                    data.price24h,
-                    rate,
-                    toEur(data.price24h, rate)
-            ));
-        }
+        refreshLock.lock();
+        try {
+            if (currentFeed != null) persistence.applySelected(currentFeed, List.of(item.getId()));
+        } finally { refreshLock.unlock(); }
     }
 
     public ItemPriceData getItemPriceData(String marketHashName) {
         refreshPriceCacheIfNeeded();
-        ItemPriceData data = priceCache.get(marketHashName);
-        if (data == null) {
-            return null;
-        }
-        BigDecimal eur = toEur(data.price24h, getUsdToEurRate());
-        return new ItemPriceData(eur);
+        PriceFeedSnapshot feed = currentFeed;
+        BigDecimal eur = feed == null || marketHashName == null ? null : feed.priceEur(marketHashName);
+        return eur == null ? null : new ItemPriceData(eur);
     }
 
-    /**
-     * Returns the latest CSGOTrader 24-hour average converted to EUR.
-     * No hidden request to Steam is made when the item is missing.
-     */
+    /** CSGOTrader 24-hour average in EUR; no hidden request to Steam for a missing item. */
     public BigDecimal fetchCurrentPrice(String marketHashName) {
         ItemPriceData data = getItemPriceData(marketHashName);
-        if (data == null || data.currentPrice == null) {
-            throw new IllegalStateException("No CSGOTrader price is available for: " + marketHashName);
-        }
+        if (data == null) throw new ExternalServiceException("No CSGOTrader price is available for this item");
         return data.currentPrice;
     }
 
     public void updatePricesForItems(List<Long> itemIds) {
-        if (itemIds == null || itemIds.isEmpty()) {
-            return;
-        }
-
-        refreshPriceCacheIfNeeded();
-        BigDecimal rate = getUsdToEurRate();
-        List<Item> modifiedItems = new ArrayList<>();
-
-        for (Item item : itemRepository.findAllById(itemIds)) {
-            ItemPriceData data = item.getMarketHashName() == null
-                    ? null
-                    : priceCache.get(item.getMarketHashName());
-            if (data == null || data.price24h == null) {
-                continue;
-            }
-            item.setPrice(toEur(data.price24h, rate));
-            item.setSteamFoundCheck(true);
-            modifiedItems.add(item);
-        }
-
-        if (!modifiedItems.isEmpty()) {
-            itemRepository.saveAll(modifiedItems);
-        }
-        log.info("Updated {} tracked items from the current CSGOTrader feed", modifiedItems.size());
+        if (itemIds == null || itemIds.isEmpty()) return;
+        refreshPriceCache(false, true);
+        refreshLock.lock();
+        try { if (currentFeed != null) persistence.applySelected(currentFeed, itemIds); }
+        finally { refreshLock.unlock(); }
     }
 
-    public int updateAllTrackedItems() {
-        return refreshPriceCache(false, true);
-    }
-
-    public int forceUpdateAllTrackedItems() {
-        return forceRefreshPriceCache();
-    }
-
+    public int updateAllTrackedItems() { return refreshPriceCache(false, true); }
+    public int forceUpdateAllTrackedItems() { return forceRefreshPriceCache(); }
     public void updateAllDashboardItems() {
-        refreshPriceCacheIfNeeded();
-        List<Long> itemIds = itemRepository.findAllSteamTrackedItems().stream()
-                .filter(item -> Boolean.TRUE.equals(item.getShowInDashboard()))
-                .map(Item::getId)
-                .toList();
-        updatePricesForItems(itemIds);
+        refreshPriceCache(false, true);
+        refreshLock.lock();
+        try { if (currentFeed != null) persistence.applyDashboard(currentFeed); }
+        finally { refreshLock.unlock(); }
     }
-
     public Optional<BigDecimal> tryFetchPrice(String marketHashName) {
-        try {
-            return Optional.of(fetchCurrentPrice(marketHashName));
-        } catch (Exception e) {
-            log.warn("CSGOTrader price is unavailable for '{}': {}", marketHashName, e.getMessage());
-            return Optional.empty();
-        }
+        try { return Optional.of(fetchCurrentPrice(marketHashName)); }
+        catch (ExternalServiceException unavailable) { return Optional.empty(); }
     }
-
-    public boolean validateItemOnSteam(String marketHashName) {
-        return tryFetchPrice(marketHashName).isPresent();
-    }
+    public boolean validateItemOnSteam(String marketHashName) { return tryFetchPrice(marketHashName).isPresent(); }
 }

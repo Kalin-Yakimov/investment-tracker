@@ -1,11 +1,8 @@
 package com.kalin.investment_tracker.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -24,10 +21,12 @@ class SteamPriceCacheMeasurement {
     @Disabled("Manual network measurement; excluded from the deterministic test suite")
     void measureColdAndWarmPriceLookup() throws Exception {
         SteamPriceService service = new SteamPriceService(
-                new RestTemplate(),
+                new com.kalin.investment_tracker.config.ExternalHttpConfig(
+                        new com.kalin.investment_tracker.config.ExternalHttpProperties()).restTemplate(),
                 new ObjectMapper(),
-                mock(MarketPriceSnapshotRepository.class),
-                mock(ItemRepository.class)
+                mock(MarketPricePersistenceService.class),
+                new PriceFeedProperties(),
+                java.time.Clock.systemUTC()
         );
 
         long coldStarted = System.nanoTime();

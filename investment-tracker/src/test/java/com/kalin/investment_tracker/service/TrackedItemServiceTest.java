@@ -3,6 +3,7 @@ package com.kalin.investment_tracker.service;
 import com.kalin.investment_tracker.admin.ActivityEventService;
 import com.kalin.investment_tracker.dto.TrackedItemCreateRequest;
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.repository.CsItemRepository;
@@ -17,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,6 +32,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
 class TrackedItemServiceTest {
@@ -65,6 +69,34 @@ class TrackedItemServiceTest {
         trackedItem.setPrice(new BigDecimal("45.00"));
         trackedItem.setSteamFoundCheck(true);
         trackedItem.setUser(user);
+    }
+
+    @Test
+    void queuedUpdatesAreLimitedToOnePerAccountAndReleasedAfterExecution() {
+        when(itemRepository.findAllByIdInAndUserIdAndSteamFoundCheckTrue(List.of(42L), 7)).thenReturn(List.of(trackedItem));
+        service.requestPriceUpdate(List.of(42L), user);
+        assertThrows(IllegalArgumentException.class, () -> service.requestPriceUpdate(List.of(42L), user));
+        ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
+        verify(applicationTaskExecutor).execute(task.capture());
+        task.getValue().run();
+        service.requestPriceUpdate(List.of(42L), user);
+    }
+
+    @Test
+    void queueRejectionReleasesAccountForALaterAttempt() {
+        when(itemRepository.findAllByIdInAndUserIdAndSteamFoundCheckTrue(List.of(42L), 7)).thenReturn(List.of(trackedItem));
+        doThrow(new TaskRejectedException("queue full")).doNothing().when(applicationTaskExecutor).execute(any());
+        assertThrows(ExternalServiceException.class, () -> service.requestPriceUpdate(List.of(42L), user));
+        service.requestPriceUpdate(List.of(42L), user);
+    }
+
+    @Test
+    void failedBackgroundUpdateAlsoReleasesAccount() {
+        when(itemRepository.findAllByIdInAndUserIdAndSteamFoundCheckTrue(List.of(42L), 7)).thenReturn(List.of(trackedItem));
+        doAnswer(call -> { ((Runnable) call.getArgument(0)).run(); return null; }).when(applicationTaskExecutor).execute(any());
+        doThrow(new IllegalStateException()).when(steamPriceService).updatePricesForItems(List.of(42L));
+        service.requestPriceUpdate(List.of(42L), user);
+        service.requestPriceUpdate(List.of(42L), user);
     }
 
     @Test

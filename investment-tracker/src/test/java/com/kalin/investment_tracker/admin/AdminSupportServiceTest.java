@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.admin;
 
 import com.kalin.investment_tracker.auth.AuthenticationService;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
 import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
@@ -19,6 +20,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.data.domain.Page;
 import org.springframework.security.access.AccessDeniedException;
 
@@ -34,6 +36,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 
 @ExtendWith(MockitoExtension.class)
 class AdminSupportServiceTest {
@@ -164,6 +168,34 @@ class AdminSupportServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.getAdministrativeAudit(-1, 10));
         assertThrows(IllegalArgumentException.class, () -> service.getAdministrativeAudit(0, 101));
         assertThrows(IllegalArgumentException.class, () -> service.searchUsers("", 0, 51));
+    }
+
+    @Test
+    void rejectedBackgroundJobDoesNotRemainRunning() {
+        when(activityEventService.requireReason("reason")).thenReturn("reason");
+        when(jobStatusService.tryStart(SystemJobStatusService.PRICE_UPDATE, "Manual operation is running")).thenReturn(true);
+        doThrow(new TaskRejectedException("queue full")).when(applicationTaskExecutor).execute(any());
+        assertThrows(ExternalServiceException.class, () -> service.startPriceUpdate(user(1, RoleNames.ADMIN), "reason", "127.0.0.1"));
+        verify(jobStatusService).failed(SystemJobStatusService.PRICE_UPDATE, "The background task queue is full; try again later");
+        verify(steamPriceService, never()).forceUpdateAllTrackedItems();
+    }
+
+    @Test
+    void unsuccessfulCatalogueJobNeverReportsSuccessOrLeaksDetails() {
+        when(activityEventService.requireReason("reason")).thenReturn("reason");
+        when(jobStatusService.tryStart(SystemJobStatusService.CATALOGUE_SYNC, "Manual operation is running")).thenReturn(true);
+        doAnswer(call -> { ((Runnable) call.getArgument(0)).run(); return null; }).when(applicationTaskExecutor).execute(any());
+        doThrow(new IllegalStateException("private SQL details")).when(csItemService).fetchAndSaveItems();
+        service.startCatalogueSync(user(1, RoleNames.ADMIN), "reason", "127.0.0.1");
+        verify(jobStatusService).failed(SystemJobStatusService.CATALOGUE_SYNC, "The operation failed; try again later");
+        verify(jobStatusService, never()).succeeded(any(), any());
+    }
+
+    @Test
+    void secondJobIsRejectedBeforeSubmittingOrRecordingAnotherStart() {
+        when(activityEventService.requireReason("reason")).thenReturn("reason");
+        assertThrows(IllegalArgumentException.class, () -> service.startPriceUpdate(user(1, RoleNames.ADMIN), "reason", "127.0.0.1"));
+        verify(applicationTaskExecutor, never()).execute(any());
     }
 
     private User user(int id, String roleName) {

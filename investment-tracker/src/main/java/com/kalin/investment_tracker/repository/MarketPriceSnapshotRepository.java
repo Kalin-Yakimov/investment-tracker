@@ -9,9 +9,17 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Collection;
+import java.util.Optional;
 
 @Repository
 public interface MarketPriceSnapshotRepository extends JpaRepository<MarketPriceSnapshot, Long> {
+
+    Optional<MarketPriceSnapshot> findFirstBySourceAndSourceVersionOrderByIdAsc(String source, String sourceVersion);
+
+    Optional<MarketPriceSnapshot> findFirstBySourceOrderByCreatedAtDescIdDesc(String source);
+
+    List<MarketPriceSnapshot> findBySourceAndSourceVersionAndMarketHashNameIn(String source, String version, Collection<String> names);
 
     boolean existsByMarketHashNameAndSourceAndSourceVersion(
             String marketHashName,

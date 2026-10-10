@@ -91,3 +91,10 @@ remain historical reference points; they are not the current test totals.
 Stage 3 API validation, type-scoped ownership checks, portfolio transaction
 boundaries and verified results are recorded in [API_VALIDATION.md](API_VALIDATION.md).
 Earlier stage totals above are retained as historical checkpoints.
+
+## Separately approved Stage 4 checkpoint
+
+Stage 4 external HTTP limits, price-publication/cache transaction boundaries,
+background-job guards and catalogue synchronization are documented in
+[EXTERNAL_SERVICES.md](EXTERNAL_SERVICES.md). This stage does not change the
+database schema or frontend. Earlier totals remain historical checkpoints.

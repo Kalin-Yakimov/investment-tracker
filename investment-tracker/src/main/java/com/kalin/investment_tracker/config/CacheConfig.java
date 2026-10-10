@@ -35,7 +35,7 @@ public class CacheConfig {
     ) {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(List.of(
-                buildCache(CS_ITEMS_SEARCH_CACHE, csItemsSearchTtl, initialCapacity, maximumSize),
+                new TransactionAwareCacheDecorator(buildCache(CS_ITEMS_SEARCH_CACHE, csItemsSearchTtl, initialCapacity, maximumSize)),
                 buildCache(PRICE_HISTORY_CHART_CACHE, priceHistoryChartTtl, initialCapacity, maximumSize),
                 new TransactionAwareCacheDecorator(buildCache(PORTFOLIO_SUMMARY_CACHE, portfolioSummaryTtl, initialCapacity, maximumSize)),
                 buildCache(TRACKED_ITEMS_CACHE, trackedItemsTtl, initialCapacity, maximumSize),

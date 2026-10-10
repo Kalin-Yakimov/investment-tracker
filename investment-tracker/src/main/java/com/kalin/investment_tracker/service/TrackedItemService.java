@@ -10,6 +10,7 @@ import com.kalin.investment_tracker.dto.SteamItemDto;
 import com.kalin.investment_tracker.dto.TrackedItemCreateRequest;
 import com.kalin.investment_tracker.dto.TrackedItemUpdateRequest;
 import com.kalin.investment_tracker.exeption.ItemNotFoundException;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.model.CsItem;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.model.MarketPriceSnapshot;
@@ -30,6 +31,9 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +49,7 @@ public class TrackedItemService {
     private final CsItemRepository csItemRepository;
     private final TaskExecutor applicationTaskExecutor;
     private final ActivityEventService activityEventService;
+    private final Set<Integer> pendingPriceUpdates = ConcurrentHashMap.newKeySet();
 
     public List<SteamItemDto> getTrackedItems(User user, boolean dashboardOnly) {
         List<Item> items = itemRepository.findSteamTrackedItemsByUserId(user.getId());
@@ -109,20 +114,25 @@ public class TrackedItemService {
         }
 
         List<Long> ownedItemIds = ownedItems.stream().map(Item::getId).toList();
-        applicationTaskExecutor.execute(() -> {
-            try {
-                steamPriceService.updatePricesForItems(ownedItemIds);
-            } catch (Exception exception) {
-                log.error("Error in asynchronous price update", exception);
-            }
-        });
-
-        activityEventService.recordUserAction(
-                user,
-                "PRICE_UPDATE_REQUESTED",
-                "Requested a price update for " + ownedItemIds.size() + " tracked item(s)",
-                null
-        );
+        Integer userId = user.getId();
+        if (!pendingPriceUpdates.add(userId)) {
+            throw new IllegalArgumentException("A price update for this account is already pending");
+        }
+        try {
+            activityEventService.recordUserAction(user, "PRICE_UPDATE_REQUESTED",
+                    "Requested a price update for " + ownedItemIds.size() + " tracked item(s)", null);
+            applicationTaskExecutor.execute(() -> {
+                try { steamPriceService.updatePricesForItems(ownedItemIds); }
+                catch (Exception failure) { log.warn("Asynchronous price update failed ({})", failure.getClass().getSimpleName()); }
+                finally { pendingPriceUpdates.remove(userId); }
+            });
+        } catch (RejectedExecutionException busy) {
+            pendingPriceUpdates.remove(userId);
+            throw new ExternalServiceException("The background task queue is full; try again later");
+        } catch (RuntimeException failure) {
+            pendingPriceUpdates.remove(userId);
+            throw failure;
+        }
 
         return new PriceUpdateResponse(
                 "Price update started for " + ownedItemIds.size() + " items",

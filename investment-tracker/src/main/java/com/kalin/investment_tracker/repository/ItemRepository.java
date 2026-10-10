@@ -72,6 +72,27 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     List<Item> findAllByIdInAndUserIdAndSteamFoundCheckTrue(Collection<Long> ids, Integer userId);
 
+    @Query("SELECT DISTINCT i.marketHashName FROM Item i WHERE i.steamFoundCheck = true AND i.marketHashName IS NOT NULL")
+    List<String> findDistinctTrackedMarketHashNames();
+
+    @Query("SELECT DISTINCT i.marketHashName FROM Item i WHERE i.steamFoundCheck = true AND i.id IN :ids AND i.marketHashName IS NOT NULL")
+    List<String> findDistinctTrackedMarketHashNamesByIds(@Param("ids") Collection<Long> ids);
+
+    @Query("SELECT DISTINCT i.marketHashName FROM Item i WHERE i.steamFoundCheck = true AND i.showInDashboard = true AND i.marketHashName IS NOT NULL")
+    List<String> findDistinctDashboardMarketHashNames();
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Item i SET i.price = :price WHERE i.steamFoundCheck = true AND i.marketHashName = :name")
+    int updateTrackedPrice(@Param("name") String name, @Param("price") java.math.BigDecimal price);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Item i SET i.price = :price WHERE i.steamFoundCheck = true AND i.marketHashName = :name AND i.id IN :ids")
+    int updateSelectedTrackedPrice(@Param("name") String name, @Param("price") java.math.BigDecimal price, @Param("ids") Collection<Long> ids);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Item i SET i.price = :price WHERE i.steamFoundCheck = true AND i.showInDashboard = true AND i.marketHashName = :name")
+    int updateDashboardTrackedPrice(@Param("name") String name, @Param("price") java.math.BigDecimal price);
+
     // Total count of all non-Steam items for a user
     @Query("SELECT COUNT(i) FROM Item i WHERE i.user.id = :userId AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false)")
     long countAllUserItems(@Param("userId") Integer userId);

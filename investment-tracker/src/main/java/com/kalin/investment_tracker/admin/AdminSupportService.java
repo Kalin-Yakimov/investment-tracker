@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.admin;
 
 import com.kalin.investment_tracker.auth.AuthenticationService;
+import com.kalin.investment_tracker.exeption.ExternalServiceException;
 import com.kalin.investment_tracker.model.Item;
 import com.kalin.investment_tracker.repository.CsItemRepository;
 import com.kalin.investment_tracker.repository.ItemRepository;
@@ -34,6 +35,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Supplier;
 
 @Service
 @RequiredArgsConstructor
@@ -356,59 +359,43 @@ public class AdminSupportService {
     }
 
     public AdminDtos.ActionResult startCatalogueSync(User actor, String reason, String ipAddress) {
-        String cleanReason = activityEventService.requireReason(reason);
-        if ("RUNNING".equals(jobStatusService.get(SystemJobStatusService.CATALOGUE_SYNC).status())) {
-            throw new IllegalArgumentException("A catalogue synchronization is already running");
-        }
-        activityEventService.recordSystemAction(
-                actor,
-                "CATALOGUE_SYNC_STARTED",
-                cleanReason,
-                "Started a manual CS item catalogue synchronization",
-                ipAddress
-        );
-        jobStatusService.started(SystemJobStatusService.CATALOGUE_SYNC, "Manual synchronization is running");
-        applicationTaskExecutor.execute(() -> {
-            try {
-                csItemService.fetchAndSaveItems();
-                jobStatusService.succeeded(
-                        SystemJobStatusService.CATALOGUE_SYNC,
-                        "Catalogue synchronization completed successfully"
-                );
-            } catch (Exception exception) {
-                jobStatusService.failed(SystemJobStatusService.CATALOGUE_SYNC, safeMessage(exception));
-            }
-        });
+        submitSystemJob(actor, reason, ipAddress, SystemJobStatusService.CATALOGUE_SYNC,
+                "CATALOGUE_SYNC_STARTED", "Started a manual CS item catalogue synchronization", () -> {
+                    csItemService.fetchAndSaveItems();
+                    return "Catalogue synchronization completed successfully";
+                });
         return new AdminDtos.ActionResult("Catalogue synchronization started");
     }
 
     public AdminDtos.ActionResult startPriceUpdate(User actor, String reason, String ipAddress) {
-        String cleanReason = activityEventService.requireReason(reason);
-        if ("RUNNING".equals(jobStatusService.get(SystemJobStatusService.PRICE_UPDATE).status())) {
-            throw new IllegalArgumentException("A price update is already running");
-        }
-        activityEventService.recordSystemAction(
-                actor,
-                "PRICE_UPDATE_STARTED",
-                cleanReason,
-                "Started a manual update for all tracked prices",
-                ipAddress
-        );
-        jobStatusService.started(SystemJobStatusService.PRICE_UPDATE, "Manual price update is running");
-        applicationTaskExecutor.execute(() -> {
-            try {
-                int recordedSnapshots = steamPriceService.forceUpdateAllTrackedItems();
-                jobStatusService.succeeded(
-                        SystemJobStatusService.PRICE_UPDATE,
-                        recordedSnapshots > 0
-                                ? "Recorded " + recordedSnapshots + " new price observations"
-                                : "No new price observations were available from CSGOTrader"
-                );
-            } catch (Exception exception) {
-                jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, safeMessage(exception));
-            }
+        submitSystemJob(actor, reason, ipAddress, SystemJobStatusService.PRICE_UPDATE,
+                "PRICE_UPDATE_STARTED", "Started a manual update for all tracked prices", () -> {
+            int count = steamPriceService.forceUpdateAllTrackedItems();
+            return count > 0 ? "Recorded " + count + " new price observations"
+                    : "No new price observations were available from CSGOTrader";
         });
         return new AdminDtos.ActionResult("Price update started");
+    }
+
+    private void submitSystemJob(User actor, String reason, String ipAddress, String job, String action,
+                                 String description, Supplier<String> operation) {
+        String cleanReason = activityEventService.requireReason(reason);
+        if (!jobStatusService.tryStart(job, "Manual operation is running")) {
+            throw new IllegalArgumentException("This operation is already running");
+        }
+        try {
+            activityEventService.recordSystemAction(actor, action, cleanReason, description, ipAddress);
+            applicationTaskExecutor.execute(() -> {
+                try { jobStatusService.succeeded(job, operation.get()); }
+                catch (Exception failure) { jobStatusService.failed(job, safeMessage(failure)); }
+            });
+        } catch (RejectedExecutionException busy) {
+            jobStatusService.failed(job, "The background task queue is full; try again later");
+            throw new ExternalServiceException("The background task queue is full; try again later");
+        } catch (RuntimeException failure) {
+            jobStatusService.failed(job, "The operation could not be started");
+            throw failure;
+        }
     }
 
     private User requireAccessibleTarget(User actor, Integer userId) {
@@ -511,7 +498,6 @@ public class AdminSupportService {
     }
 
     private String safeMessage(Exception exception) {
-        String message = exception.getMessage();
-        return message == null || message.isBlank() ? "The operation failed" : message;
+        return exception instanceof ExternalServiceException ? exception.getMessage() : "The operation failed; try again later";
     }
 }

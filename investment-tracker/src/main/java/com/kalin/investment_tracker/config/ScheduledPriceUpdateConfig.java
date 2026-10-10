@@ -46,8 +46,8 @@ public class ScheduledPriceUpdateConfig {
         initialDelayString = "${price.update.initial-delay-ms:5000}"
     )
     public void scheduledPriceUpdate() {
+        if (!jobStatusService.tryStart(SystemJobStatusService.PRICE_UPDATE, "Scheduled price update is running")) return;
         log.info("Starting scheduled price update for all tracked items");
-        jobStatusService.started(SystemJobStatusService.PRICE_UPDATE, "Scheduled price update is running");
         try {
             int recordedSnapshots = steamPriceService.updateAllTrackedItems();
             jobStatusService.succeeded(
@@ -58,8 +58,8 @@ public class ScheduledPriceUpdateConfig {
             );
             log.info("Scheduled price update completed; {} new observations", recordedSnapshots);
         } catch (Exception e) {
-            jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, e.getMessage());
-            log.error("Error during scheduled price update: {}", e.getMessage(), e);
+            jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, "Scheduled price update failed; try again later");
+            log.warn("Scheduled price update failed ({})", e.getClass().getSimpleName());
         }
     }
 
@@ -74,15 +74,11 @@ public class ScheduledPriceUpdateConfig {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(historyRetentionDays);
         log.info("Starting daily PriceHistory prune — removing entries older than {} days (before {})",
                 historyRetentionDays, cutoff);
-        try {
-            int deleted = priceHistoryRepository.deleteByDateExtractedBefore(cutoff);
-            int deletedSnapshots = marketPriceSnapshotRepository.deleteByObservedAtBefore(
-                    java.time.Instant.now().minus(java.time.Duration.ofDays(snapshotRetentionDays))
-            );
-            log.info("Price history prune completed — {} legacy records and {} market snapshots deleted",
-                    deleted, deletedSnapshots);
-        } catch (Exception e) {
-            log.error("Error during PriceHistory prune: {}", e.getMessage(), e);
-        }
+        // Let failure leave the transaction so both deletions roll back together.
+        int deleted = priceHistoryRepository.deleteByDateExtractedBefore(cutoff);
+        int deletedSnapshots = marketPriceSnapshotRepository.deleteByObservedAtBefore(
+                java.time.Instant.now().minus(java.time.Duration.ofDays(snapshotRetentionDays)));
+        log.info("Price history prune completed — {} legacy records and {} market snapshots deleted",
+                deleted, deletedSnapshots);
     }
 }

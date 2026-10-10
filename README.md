@@ -10,6 +10,7 @@ The repository contains both parts of the application:
 - `docs/DATABASE_MIGRATIONS.md` — safeguards for introducing controlled schema migrations.
 - `docs/AUTH_SECURITY.md` — verification-code safeguards, limits and deployment boundaries.
 - `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
+- `docs/EXTERNAL_SERVICES.md` — external HTTP limits, atomic price refreshes and background-job policies.
 
 ## Main functionality
 
