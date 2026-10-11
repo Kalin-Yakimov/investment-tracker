@@ -1,3 +1,6 @@
+import { apiClient } from "./ApiClient";
+import PortfolioService from "./PortfolioService";
+import PriceService from "./PriceService";
 import axios from "axios";
 import UserService from "./UserService";
 import deferred from "../testUtils/deferred";
@@ -22,7 +25,7 @@ beforeEach(() => {
   UserService.sessionVersion = 0;
   UserService.sessionChanges = 0;
   UserService.authListeners.clear();
-  axios.defaults.adapter = jest.fn((config) => {
+  apiClient.defaults.adapter = jest.fn((config) => {
     const response = deferred();
     pending.push({ ...response, config });
     return response.promise;
@@ -31,8 +34,8 @@ beforeEach(() => {
 
 test("concurrent unauthorized reads share one refresh and retry with the refreshed token", async () => {
   UserService.saveToken(token(42, "old"));
-  const first = UserService.getTrackedItems();
-  const second = UserService.getPortfolioSummary();
+  const first = PriceService.getTrackedItems();
+  const second = PortfolioService.getPortfolioSummary();
   await flush();
   fail401(0); fail401(1);
   await flush();
@@ -53,7 +56,7 @@ test("an aborted read's unauthorized response cannot trigger refresh or logout",
   const current = token(42);
   UserService.saveToken(current);
   const controller = new AbortController();
-  const result = UserService.getTrackedItems({ signal: controller.signal }).catch((error) => error);
+  const result = PriceService.getTrackedItems({ signal: controller.signal }).catch((error) => error);
   await flush();
   controller.abort();
   fail401(0);
@@ -64,7 +67,7 @@ test("an aborted read's unauthorized response cannot trigger refresh or logout",
 
 test("an old session's 401 cannot refresh or clear the newly signed-in account", async () => {
   UserService.saveToken(token(1));
-  const result = UserService.getTrackedItems().catch((error) => error);
+  const result = PriceService.getTrackedItems().catch((error) => error);
   await flush();
   const next = token(2);
   UserService.saveToken(next);
@@ -76,7 +79,7 @@ test("an old session's 401 cannot refresh or clear the newly signed-in account",
 
 test("a successful old-account response is also rejected after the account changes", async () => {
   UserService.saveToken(token(1));
-  const result = UserService.getTrackedItems().catch((error) => error);
+  const result = PriceService.getTrackedItems().catch((error) => error);
   await flush();
   UserService.saveToken(token(2));
   succeed(0, [{ id: 10, itemName: "Private old record" }]);
@@ -128,6 +131,7 @@ test("a password change from an old session cannot sign out a new account", asyn
 
 test("credentials are not attached to an unrelated origin with a similar URL prefix", async () => {
   UserService.saveToken(token(42));
+  axios.defaults.adapter = apiClient.defaults.adapter;
   const result = axios.get(UserService.BASE_URL + ".example.test/public");
   await flush();
   expect(pending[0].config.headers.Authorization).toBeUndefined();
@@ -139,7 +143,7 @@ test("history preserves cancellation errors without accessing a missing response
   UserService.saveToken(token(42));
   const controller = new AbortController();
   controller.abort();
-  const result = await UserService.getItemByName("Case", 0, 10, { signal: controller.signal }).catch((error) => error);
+  const result = await PortfolioService.getItemByName("Case", 0, 10, { signal: controller.signal }).catch((error) => error);
   expect(axios.isCancel(result)).toBe(true);
   expect(pending).toHaveLength(0);
 });
@@ -147,7 +151,7 @@ test("history preserves cancellation errors without accessing a missing response
 test("canceling while a shared refresh is pending prevents that read from being retried", async () => {
   UserService.saveToken(token(42, "old"));
   const controller = new AbortController();
-  const result = UserService.getTrackedItems({ signal: controller.signal }).catch((error) => error);
+  const result = PriceService.getTrackedItems({ signal: controller.signal }).catch((error) => error);
   await flush();
   fail401(0);
   await flush();

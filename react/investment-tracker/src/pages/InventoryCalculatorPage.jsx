@@ -1,3 +1,4 @@
+import InventoryService from "../service/InventoryService";
 import React, { useState } from "react";
 import UserService from "../service/UserService";
 import useRequestScope from "../hooks/useRequestScope";
@@ -38,7 +39,7 @@ function InventoryCalculatorPage() {
     setPrivacyError(false);
 
     try {
-      const data = await UserService.calculateSteamInventory(requestedSteamUrl, { signal: request.signal });
+      const data = await InventoryService.calculateSteamInventory(requestedSteamUrl, { signal: request.signal });
       if (!request.isCurrent()) return;
       setResult(data);
       setActiveCategory("All");
@@ -47,7 +48,7 @@ function InventoryCalculatorPage() {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
       console.error("Error calculating inventory:", err);
       const errMsg = err.error || err.message || "Failed to calculate inventory value";
-      
+
       if (err.code === "PRIVACY_PRIVATE" || errMsg.toLowerCase().includes("private")) {
         setPrivacyError(true);
         setError("Steam inventory is set to Private or Friends Only.");

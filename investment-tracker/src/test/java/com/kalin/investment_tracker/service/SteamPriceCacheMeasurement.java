@@ -20,14 +20,16 @@ class SteamPriceCacheMeasurement {
     @Test
     @Disabled("Manual network measurement; excluded from the deterministic test suite")
     void measureColdAndWarmPriceLookup() throws Exception {
+        var http = new com.kalin.investment_tracker.config.ExternalHttpConfig(
+                new com.kalin.investment_tracker.config.ExternalHttpProperties()).restTemplate();
+        var settings = new PriceFeedProperties();
+        var persistence = mock(MarketPricePersistenceService.class);
+        var clock = java.time.Clock.systemUTC();
         SteamPriceService service = new SteamPriceService(
-                new com.kalin.investment_tracker.config.ExternalHttpConfig(
-                        new com.kalin.investment_tracker.config.ExternalHttpProperties()).restTemplate(),
-                new ObjectMapper(),
-                mock(MarketPricePersistenceService.class),
-                new PriceFeedProperties(),
-                java.time.Clock.systemUTC()
-        );
+                new CsgotraderFeedClient(http, new ObjectMapper(), settings),
+                new UsdToEurRateService(http, new ObjectMapper(), persistence),
+                new PriceRefreshCooldown(settings, clock), persistence, settings, clock);
+
 
         long coldStarted = System.nanoTime();
         BigDecimal coldPrice = service.fetchCurrentPrice(MARKET_HASH_NAME);

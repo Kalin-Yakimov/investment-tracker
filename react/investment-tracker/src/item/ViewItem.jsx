@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
-import axios from "axios";
-import UserService from "../service/UserService";
+import PortfolioService from "../service/PortfolioService";
 import useRequestScope from "../hooks/useRequestScope";
 import { isRequestCanceled } from "../service/RequestScope";
 import { Table } from "react-bootstrap";
@@ -34,16 +33,10 @@ export default function ViewItem() {
     setError("");
     scope.cancel("history");
     try {
-      const token = UserService.getToken();
-      const result = await axios.get(`${UserService.BASE_URL}/item/${id}`, {
-        signal: request.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const result = await PortfolioService.getItem(id, { signal: request.signal });
       if (!request.isCurrent()) return;
-      setItem(result.data);
-      setActiveItem(result.data);
+      setItem(result);
+      setActiveItem(result);
     } catch (error) {
       if (request.isCurrent() && !isRequestCanceled(error)) {
         console.error("Error fetching item:", error);
@@ -61,7 +54,7 @@ export default function ViewItem() {
       if (!request) return;
       setHistoryLoading(true);
       try {
-        const result = await UserService.getItemByName(
+        const result = await PortfolioService.getItemByName(
           item.itemName,
           page,
           itemsPerPage,
@@ -97,13 +90,8 @@ export default function ViewItem() {
     const request = scope.begin("delete", { replace: false, abortable: false });
     if (!request) return;
     try {
-      const token = UserService.getToken();
       const targetId = activeItem?.id || id;
-      await axios.delete(`${UserService.BASE_URL}/item/${targetId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      await PortfolioService.deleteItem(targetId);
       if (request.isCurrent()) window.location.href = "/";
     } catch (error) {
       if (request.isCurrent() && !isRequestCanceled(error)) console.error("Error deleting item:", error);

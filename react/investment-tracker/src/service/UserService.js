@@ -1,4 +1,5 @@
 import axios from "axios";
+import { apiClient, API_BASE_URL, configureSessionInterceptors } from "./ApiClient";
 import { clearInventoryCalculatorSession } from "./InventoryCalculatorSession";
 import { AUTH_REFRESH_TIMEOUT_MS } from "../config/uiConfig";
 
@@ -6,7 +7,7 @@ let refreshPromise = null;
 let refreshVersion = null;
 
 class UserService {
-  static BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080";
+  static BASE_URL = API_BASE_URL;
   static accessToken = null;
   static authListeners = new Set();
   static sessionVersion = 0;
@@ -88,7 +89,7 @@ class UserService {
       refreshVersion = version;
       const requestNewToken = () => {
         if (version !== UserService.sessionVersion || UserService.sessionChanges > 0) return Promise.resolve(false);
-        return axios
+        return apiClient
           .post(
             `${UserService.BASE_URL}/api/v1/auth/refresh`,
             {},
@@ -123,7 +124,7 @@ class UserService {
     try {
       if (refreshPromise) await refreshPromise;
       if (version !== UserService.sessionVersion) throw new axios.CanceledError("Session changed");
-      const response = await axios.post(
+      const response = await apiClient.post(
         `${UserService.BASE_URL}/api/v1/auth/authenticate`,
         { email, password, rememberMe },
         { withCredentials: true, skipAuthRefresh: true },
@@ -145,7 +146,7 @@ class UserService {
     try {
       if (refreshPromise) await refreshPromise;
       if (version !== UserService.sessionVersion) return;
-      await axios.post(
+      await apiClient.post(
         `${UserService.BASE_URL}/api/v1/auth/logout`,
         {},
         { withCredentials: true, skipAuthRefresh: true },
@@ -158,7 +159,7 @@ class UserService {
 
   static async register(userData) {
     try {
-      const response = await axios.post(
+      const response = await apiClient.post(
         `${UserService.BASE_URL}/api/v1/auth/register`,
         userData,
       );
@@ -170,7 +171,7 @@ class UserService {
 
   static async confirm(code, email) {
     try {
-      const response = await axios.post(
+      const response = await apiClient.post(
         `${UserService.BASE_URL}/api/v1/auth/activate-account`,
         { email: email.trim(), code },
       );
@@ -182,7 +183,7 @@ class UserService {
 
   static async resendActivation(email) {
     try {
-      const response = await axios.post(
+      const response = await apiClient.post(
         `${UserService.BASE_URL}/api/v1/auth/resend-activation`,
         { email: email.trim() },
       );
@@ -194,7 +195,7 @@ class UserService {
 
   static async forgotPassword(email) {
     try {
-      const response = await axios.post(
+      const response = await apiClient.post(
         `${UserService.BASE_URL}/api/v1/auth/forgot-password`,
         { email },
       );
@@ -207,7 +208,7 @@ class UserService {
   static async resetPassword(email, code, newPassword) {
     const version = UserService.sessionVersion;
     try {
-      const response = await axios.post(
+      const response = await apiClient.post(
         `${UserService.BASE_URL}/api/v1/auth/reset-password`,
         { email, code, newPassword },
       );
@@ -221,15 +222,9 @@ class UserService {
   static async changePassword(passwordsData) {
     const version = UserService.sessionVersion;
     try {
-      const token = UserService.getToken();
-      const response = await axios.patch(
+      const response = await apiClient.patch(
         `${UserService.BASE_URL}/api/v1/auth/change-password`,
         passwordsData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
       );
       if (version !== UserService.sessionVersion) throw new axios.CanceledError("Session changed");
       UserService.removeToken();
@@ -242,15 +237,9 @@ class UserService {
   static async changeUsername(newUsername) {
     const version = UserService.sessionVersion;
     try {
-      const token = UserService.getToken();
-      const response = await axios.patch(
+      const response = await apiClient.patch(
         `${UserService.BASE_URL}/api/v1/auth/change-username`,
         { newUsername },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
       );
       if (version !== UserService.sessionVersion) throw new axios.CanceledError("Session changed");
       if (response.data && response.data.token) {
@@ -262,327 +251,8 @@ class UserService {
     }
   }
 
-  static async createContactTicket(email, message) {
-    try {
-      const response = await axios.post(
-        `${UserService.BASE_URL}/api/contact`,
-        { email, message },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async getUserItems(page = 0, size = 10, filter = "newest_date", config = {}) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(
-        `${UserService.BASE_URL}/get-user-items`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          params: {
-            page,
-            size,
-            filter,
-          },
-          signal: config.signal,
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async getPortfolioSummary(config = {}) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(
-        `${UserService.BASE_URL}/portfolio-summary`,
-        {
-          signal: config.signal,
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async getItemByName(name, page = 0, size = 10, config = {}) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(`${UserService.BASE_URL}/item/history`, {
-        signal: config.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        params: {
-          name,
-          page,
-          size,
-        },
-      });
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async searchCsItems(query, config = {}) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(
-        `${UserService.BASE_URL}/api/cs-items/search`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          params: {
-            query,
-          },
-          ...config,
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async getTrackedItems(config = {}) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(`${UserService.BASE_URL}/api/items`, {
-        signal: config.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async validateSteamItem(marketHashName) {
-    try {
-      const response = await axios.post(
-        `${UserService.BASE_URL}/api/prices/validate`,
-        { marketHashName },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async addSteamTrackerItem(itemData) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.post(
-        `${UserService.BASE_URL}/api/items`,
-        itemData,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async addTrackedItem(itemData) {
-    return UserService.addSteamTrackerItem(itemData);
-  }
-
-  static async getPriceHistoryByItem(itemId, config = {}) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.get(
-        `${UserService.BASE_URL}/api/price-history/${itemId}`,
-        {
-          signal: config.signal,
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async getPriceHistory(itemId, config = {}) {
-    return UserService.getPriceHistoryByItem(itemId, config);
-  }
-
-  static async toggleBookmark(itemId) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.patch(
-        `${UserService.BASE_URL}/api/items/${itemId}/bookmark`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async updatePrices(itemIds) {
-    try {
-      const response = await axios.post(
-        `${UserService.BASE_URL}/api/prices/update`,
-        { itemIds },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async deleteTrackedItem(itemId) {
-    try {
-      const token = UserService.getToken();
-      const response = await axios.delete(
-        `${UserService.BASE_URL}/api/items/${itemId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
-
-  static async calculateSteamInventory(steamUrl, config = {}) {
-    try {
-      const token = UserService.getToken();
-      const headers = {};
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-      const response = await axios.post(
-        `${UserService.BASE_URL}/api/v1/inventory/calculate`,
-        { steamUrl },
-        { headers, signal: config.signal }
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  }
 }
 
-axios.defaults.withCredentials = true;
-
-axios.interceptors.request.use((config) => {
-  const token = UserService.getToken();
-  const url = config.url || "";
-  let isBackendRequest = false;
-  try {
-    isBackendRequest = new URL(url, UserService.BASE_URL).origin === new URL(UserService.BASE_URL).origin;
-  } catch { /* Invalid URLs must never receive credentials. */ }
-  const isPublicAuthRequest = [
-    "/api/v1/auth/authenticate",
-    "/api/v1/auth/register",
-    "/api/v1/auth/activate-account",
-    "/api/v1/auth/resend-activation",
-    "/api/v1/auth/forgot-password",
-    "/api/v1/auth/reset-password",
-    "/api/v1/auth/refresh",
-  ].some((path) => url.includes(path));
-
-  if (isPublicAuthRequest) config.skipAuthRefresh = true;
-  if (isBackendRequest && !isPublicAuthRequest) {
-    if (config._sessionVersion !== undefined && config._sessionVersion !== UserService.sessionVersion) {
-      throw new axios.CanceledError("Session changed");
-    }
-    config._sessionVersion = UserService.sessionVersion;
-    config.headers = config.headers || {};
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    else delete config.headers.Authorization;
-  }
-  return config;
-});
-
-axios.interceptors.response.use(
-  (response) => {
-    const version = response.config?._sessionVersion;
-    if (version !== undefined && version !== UserService.sessionVersion) {
-      throw new axios.CanceledError("Session changed");
-    }
-    return response;
-  },
-  async (error) => {
-    const originalRequest = error.config;
-    const status = error.response?.status;
-    const isSessionRequest = originalRequest?._sessionVersion !== undefined;
-    if (
-      axios.isCancel(error) || originalRequest?.signal?.aborted ||
-      (isSessionRequest && (originalRequest._sessionVersion !== UserService.sessionVersion || UserService.sessionChanges > 0))
-    ) {
-      return Promise.reject(new axios.CanceledError("Request no longer belongs to the active session"));
-    }
-
-    if (
-      status === 401 &&
-      isSessionRequest &&
-      originalRequest &&
-      !originalRequest._retry &&
-      !originalRequest.skipAuthRefresh
-    ) {
-      originalRequest._retry = true;
-      const refreshed = await UserService.refreshAccessToken();
-      if (originalRequest.signal?.aborted || originalRequest._sessionVersion !== UserService.sessionVersion) {
-        return Promise.reject(new axios.CanceledError("Session changed"));
-      }
-      if (refreshed) {
-        originalRequest.headers = originalRequest.headers || {};
-        originalRequest.headers.Authorization = `Bearer ${UserService.getToken()}`;
-        return axios(originalRequest);
-      }
-    }
-
-    if (status === 401 && isSessionRequest && !originalRequest?.skipAuthRefresh) {
-      UserService.removeToken();
-      const publicPaths = ["/login", "/registration", "/forgot-password", "/activate-account"];
-      if (!publicPaths.includes(window.location.pathname)) {
-        window.location.href = "/login?expired=true";
-      }
-    }
-    return Promise.reject(error);
-  },
-);
+configureSessionInterceptors(UserService);
 
 export default UserService;

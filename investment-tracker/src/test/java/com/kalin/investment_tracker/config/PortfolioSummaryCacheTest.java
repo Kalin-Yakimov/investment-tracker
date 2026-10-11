@@ -53,7 +53,7 @@ class PortfolioSummaryCacheTest {
 
     private Cache cache() {
         Duration ttl = Duration.ofMinutes(15);
-        SimpleCacheManager manager = (SimpleCacheManager) new CacheConfig().cacheManager(ttl, ttl, ttl, ttl, ttl, 1, 10);
+        SimpleCacheManager manager = (SimpleCacheManager) new CacheConfig().cacheManager(ttl, ttl, ttl, 1, 10);
         manager.initializeCaches();
         Cache cache = manager.getCache(CacheConfig.PORTFOLIO_SUMMARY_CACHE);
         assertNotNull(cache);

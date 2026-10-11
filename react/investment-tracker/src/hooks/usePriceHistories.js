@@ -1,5 +1,5 @@
+import PriceService from "../service/PriceService";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import UserService from "../service/UserService";
 import { isRequestCanceled } from "../service/RequestScope";
 import useRequestScope from "./useRequestScope";
 import { PRICE_HISTORY_CONCURRENCY } from "../config/uiConfig";
@@ -22,7 +22,7 @@ export default function usePriceHistories(items, revision = 0) {
       Promise.resolve()
         .then(() => {
           if (!request.isCurrent()) return null;
-          return UserService.getPriceHistory(id, { signal: request.signal });
+          return PriceService.getPriceHistory(id, { signal: request.signal });
         })
         .then((response) => {
           if (request.isCurrent() && work.current.wanted.has(id)) {

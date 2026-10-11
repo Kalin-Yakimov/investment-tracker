@@ -83,7 +83,21 @@ class SteamPriceServiceTest {
         });
     }
     private SteamPriceService newService() {
-        return new SteamPriceService(http, new ObjectMapper(), new MarketPricePersistenceService(items, snapshots, writeLocks), settings, clock);
+        MarketPricePersistenceService persistence = new MarketPricePersistenceService(items, snapshots, writeLocks);
+        return new SteamPriceService(new CsgotraderFeedClient(http, new ObjectMapper(), settings),
+                new UsdToEurRateService(http, new ObjectMapper(), persistence),
+                new PriceRefreshCooldown(settings, clock), persistence, settings, clock);
+    }
+
+    @Test void cachedDisplayReadDoesNotTriggerHttpOrPersistence() {
+        assertNull(service.getCachedItemPriceData(NAME));
+        verifyNoInteractions(http, items, snapshots, writeLocks);
+        arrangeFeed();
+        service.refreshPriceCacheIfNeeded();
+        clearInvocations(http, items, snapshots, writeLocks);
+        clock.advance(settings.getCheckIntervalMs() + 1);
+        assertEquals(new BigDecimal("40.08"), service.getCachedItemPriceData(NAME).currentPrice);
+        verifyNoInteractions(http, items, snapshots, writeLocks);
     }
 
     @Test void loadsLast24hPriceAndStoresOneRealSnapshot() {

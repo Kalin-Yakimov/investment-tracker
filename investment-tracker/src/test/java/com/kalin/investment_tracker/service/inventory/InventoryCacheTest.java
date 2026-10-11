@@ -104,7 +104,7 @@ class InventoryCacheTest {
         @Bean Clock clock() { return Clock.systemUTC(); }
         @Bean CacheManager cacheManager() {
             Duration ttl = Duration.ofMinutes(15);
-            return new CacheConfig().cacheManager(ttl, ttl, ttl, ttl, ttl, 1, 10);
+            return new CacheConfig().cacheManager(ttl, ttl, ttl, 1, 10);
         }
         @Bean SteamCommunityClient steam(RestTemplate http, SteamInventoryProperties settings, Clock clock) {
             return new SteamCommunityClient(http, new ObjectMapper(), settings, clock);

@@ -1,3 +1,4 @@
+import InventoryService from "../service/InventoryService";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import deferred from "../testUtils/deferred";
 import InventoryCalculatorPage from "./InventoryCalculatorPage";
@@ -12,7 +13,7 @@ jest.mock("../service/UserService", () => ({
   __esModule: true,
   default: {
     getCurrentUser: jest.fn(),
-    calculateSteamInventory: jest.fn(),
+
   },
 }));
 
@@ -34,7 +35,7 @@ beforeEach(() => {
 });
 
 test("shows the saved result after returning to the calculator", async () => {
-  UserService.calculateSteamInventory.mockResolvedValue(makeResult("First Profile", "123"));
+  InventoryService.calculateSteamInventory.mockResolvedValue(makeResult("First Profile", "123"));
   const { unmount } = render(<InventoryCalculatorPage />);
 
   fireEvent.change(screen.getByPlaceholderText(/paste steam profile url/i), {
@@ -48,12 +49,12 @@ test("shows the saved result after returning to the calculator", async () => {
 
   expect(screen.getByRole("heading", { name: "First Profile" })).toBeInTheDocument();
   expect(screen.getByDisplayValue("profile-a")).toBeInTheDocument();
-  expect(UserService.calculateSteamInventory).toHaveBeenCalledTimes(1);
+  expect(InventoryService.calculateSteamInventory).toHaveBeenCalledTimes(1);
 });
 
 test("replaces the old result after a successful search for another profile", async () => {
   saveInventoryCalculatorSession(42, "profile-a", makeResult("First Profile", "123"));
-  UserService.calculateSteamInventory.mockResolvedValue(makeResult("Second Profile", "456"));
+  InventoryService.calculateSteamInventory.mockResolvedValue(makeResult("Second Profile", "456"));
   render(<InventoryCalculatorPage />);
 
   fireEvent.change(screen.getByPlaceholderText(/paste steam profile url/i), {
@@ -68,7 +69,7 @@ test("replaces the old result after a successful search for another profile", as
 
 test("keeps the previous result when a new search fails", async () => {
   saveInventoryCalculatorSession(42, "profile-a", makeResult("First Profile", "123"));
-  UserService.calculateSteamInventory.mockRejectedValue({ error: "Profile unavailable" });
+  InventoryService.calculateSteamInventory.mockRejectedValue({ error: "Profile unavailable" });
   const logError = jest.spyOn(console, "error").mockImplementation(() => {});
 
   try {
@@ -129,11 +130,11 @@ test("explains a successful empty inventory without an error", () => {
 
 test("leaving the page aborts the calculation and prevents a late browser-session write", async () => {
   const pending = deferred();
-  UserService.calculateSteamInventory.mockReturnValue(pending.promise);
+  InventoryService.calculateSteamInventory.mockReturnValue(pending.promise);
   const { unmount } = render(<InventoryCalculatorPage />);
   fireEvent.change(screen.getByPlaceholderText(/paste steam profile url/i), { target: { value: "profile-a" } });
   fireEvent.click(screen.getByRole("button", { name: /calculate value/i }));
-  const signal = UserService.calculateSteamInventory.mock.calls[0][1].signal;
+  const signal = InventoryService.calculateSteamInventory.mock.calls[0][1].signal;
   unmount();
   await act(async () => pending.resolve(makeResult("Late Profile", "123")));
   expect(signal.aborted).toBe(true);
@@ -142,13 +143,17 @@ test("leaving the page aborts the calculation and prevents a late browser-sessio
 
 test("duplicate form events cannot start two inventory calculations", async () => {
   const pending = deferred();
-  UserService.calculateSteamInventory.mockReturnValue(pending.promise);
+  InventoryService.calculateSteamInventory.mockReturnValue(pending.promise);
   render(<InventoryCalculatorPage />);
   fireEvent.change(screen.getByPlaceholderText(/paste steam profile url/i), { target: { value: "profile-a" } });
   const form = screen.getByPlaceholderText(/paste steam profile url/i).closest("form");
   fireEvent.submit(form);
   fireEvent.submit(form);
-  expect(UserService.calculateSteamInventory).toHaveBeenCalledTimes(1);
+  expect(InventoryService.calculateSteamInventory).toHaveBeenCalledTimes(1);
   await act(async () => pending.resolve(makeResult("One Profile", "123")));
   expect(screen.getByRole("heading", { name: "One Profile" })).toBeInTheDocument();
 });
+
+jest.mock("../service/InventoryService", () => ({
+  __esModule: true, default: { calculateSteamInventory: jest.fn() },
+}));

@@ -127,3 +127,15 @@ targeted MySQL schema/data adoption after a verified private backup and temporar
 table restore rehearsal. Details and verification are recorded in
 [DAILY_PRICE_HISTORY.md](DAILY_PRICE_HISTORY.md). No commit, push or merge was
 performed as part of this correction.
+
+## Separately approved Stage 7 checkpoint
+
+Stage 7 page/component extraction, shared price-chart presentation, isolated
+frontend HTTP/domain services, separated backend price responsibilities and
+unused-cache cleanup are recorded in
+[STRUCTURAL_REFACTOR.md](STRUCTURAL_REFACTOR.md). Backend checks: 295 tests,
+294 passed and the same 1 skipped; frontend checks: 84 passed. Both application
+builds succeeded. Database schema/data, external API routes, price-publication
+policy and UI styling are unchanged. Manual review and publication/merging
+remain separate steps. The remaining sequence is saved in
+[REFACTOR_PLAN.md](REFACTOR_PLAN.md).

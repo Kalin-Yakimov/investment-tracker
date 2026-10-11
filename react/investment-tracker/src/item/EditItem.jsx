@@ -1,7 +1,6 @@
-import axios from "axios";
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import UserService from "../service/UserService";
+import PortfolioService from "../service/PortfolioService";
 import useRequestScope from "../hooks/useRequestScope";
 import { isRequestCanceled } from "../service/RequestScope";
 import DatePicker from "react-datepicker";
@@ -37,15 +36,9 @@ export default function EditItem() {
     const request = scope.begin("item");
     if (!request) return;
     try {
-      const token = UserService.getToken();
-      const result = await axios.get(`${UserService.BASE_URL}/item/${id}`, {
-        signal: request.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const result = await PortfolioService.getItem(id, { signal: request.signal });
       if (!request.isCurrent()) return;
-      let item = { ...result.data };
+      let item = { ...result };
 
       if (item.date) {
         if (item.date.includes(".")) {
@@ -79,17 +72,7 @@ export default function EditItem() {
     if (!request) return;
     try {
       const formattedDate = format(date, "dd.MM.yyyy");
-      const token = UserService.getToken();
-      await axios.put(
-        `${UserService.BASE_URL}/item/${id}`,
-        { ...item, date: formattedDate },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      await PortfolioService.updateItem(id, { ...item, date: formattedDate });
       // Navigate back to the Item Details / Item History page
       if (request.isCurrent()) navigate(`/viewItem/${id}`);
     } catch (error) {

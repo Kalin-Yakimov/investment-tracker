@@ -1,159 +1,14 @@
+import PortfolioService from "../service/PortfolioService";
+import PriceService from "../service/PriceService";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import UserService from "../service/UserService";
 import useRequestScope from "../hooks/useRequestScope";
 import usePriceHistories from "../hooks/usePriceHistories";
 import { isRequestCanceled } from "../service/RequestScope";
-import useChartPointTooltip from "../hooks/useChartPointTooltip";
-import { buildDailyPricePoints as getItemPoints } from "../utils/priceHistory";
-import { Table } from "react-bootstrap";
+import PortfolioHistorySection from "../components/portfolio/PortfolioHistorySection";
+import PinnedMarketItemsSection from "../components/portfolio/PinnedMarketItemsSection";
 import "../styles/Home.css";
 import "../styles/PriceTracker.css";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from "chart.js";
-import { Line } from "react-chartjs-2";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
-
-const formatCurrency = (value) => {
-  if (value == null || Number.isNaN(Number(value))) return "-";
-  return `€${Number(value).toFixed(2)}`;
-};
-
-const formatDateDDMMYYYY = (dateStr) => {
-  if (!dateStr) return "-";
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
-};
-
-/**
- * Calculates percentage change between earliest and latest point in the selected timeframe
- */
-const getPeriodChange = (points) => {
-  if (!points || points.length < 2) {
-    return { pct: null, direction: "neutral" };
-  }
-
-  const latest = points[points.length - 1].price;
-  const first = points[0].price;
-
-  if (!first || first === 0) {
-    return { pct: null, direction: "neutral" };
-  }
-
-  const pct = ((latest - first) / first) * 100;
-  const direction = pct > 0 ? "positive" : pct < 0 ? "negative" : "neutral";
-  return { pct, direction };
-};
-
-/**
- * Compact Sparkline Component for Home Pinned Items Table
- */
-function HomePinnedSparkline({ points, strokeColor }) {
-  const showPointTooltip = useChartPointTooltip(points, formatCurrency);
-
-  if (!points || points.length === 0) {
-    return (
-      <div
-        className="sparkline-chart-frame sparkline-empty-label"
-      >
-        No data
-      </div>
-    );
-  }
-
-  const prices = points.map((p) => p.price);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const priceRange = maxPrice - minPrice;
-  const padding = priceRange > 0 ? priceRange * 0.15 : (minPrice > 0 ? minPrice * 0.05 : 0.5);
-
-  const isPositive = prices[prices.length - 1] >= prices[0];
-  const mainColor = strokeColor || (isPositive ? "#10b981" : "#ef4444");
-
-  const data = {
-    labels: points.map((p) => p.label || ""),
-    datasets: [
-      {
-        data: prices,
-        borderColor: mainColor,
-        borderWidth: 2,
-        tension: 0.35,
-        pointRadius: points.length === 1 ? 3 : 0,
-        pointHoverRadius: 5,
-        pointHoverBackgroundColor: "#ffffff",
-        pointHoverBorderColor: mainColor,
-        pointHoverBorderWidth: 2,
-        fill: true,
-        backgroundColor: (context) => {
-          const chart = context.chart;
-          const { ctx, chartArea } = chart;
-          if (!chartArea) return null;
-          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, mainColor + "33");
-          gradient.addColorStop(1, mainColor + "00");
-          return gradient;
-        },
-      },
-    ],
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        enabled: false,
-        mode: "index",
-        intersect: false,
-        external: showPointTooltip,
-      },
-    },
-    scales: {
-      x: { display: false },
-      y: {
-        display: false,
-        suggestedMin: Math.max(0, minPrice - padding),
-        suggestedMax: maxPrice + padding,
-      },
-    },
-    interaction: {
-      mode: "nearest",
-      axis: "x",
-      intersect: false,
-    },
-  };
-
-  return (
-    <div className="sparkline-chart-frame">
-      <Line data={data} options={options} />
-    </div>
-  );
-}
-
 export default function Home() {
   const scope = useRequestScope();
   const [items, setItems] = useState([]);
@@ -230,7 +85,7 @@ export default function Home() {
       if (!request) return;
       try {
         setLoading(true);
-        const result = await UserService.getUserItems(page, itemsPerPage, filter, { signal: request.signal });
+        const result = await PortfolioService.getUserItems(page, itemsPerPage, filter, { signal: request.signal });
         if (!request.isCurrent()) return;
         setItems(result.content || []);
         setTotalPages(result.totalPages || 0);
@@ -252,7 +107,7 @@ export default function Home() {
     const request = scope.begin("pinned");
     if (!request) return;
     try {
-      const data = await UserService.getTrackedItems({ signal: request.signal });
+      const data = await PriceService.getTrackedItems({ signal: request.signal });
       if (!request.isCurrent()) return;
       if (Array.isArray(data)) {
         const bookmarked = data.filter((item) => item.showInDashboard === true);
@@ -319,7 +174,7 @@ export default function Home() {
     if (!request) return;
     scope.cancel("pinned");
     try {
-      await UserService.toggleBookmark(itemId);
+      await PriceService.toggleBookmark(itemId);
       if (!request.isCurrent()) return;
       setAllPinnedItems((prev) => prev.filter((i) => i.id !== itemId));
     } catch (err) {
@@ -336,7 +191,7 @@ export default function Home() {
     const request = scope.begin("summary");
     if (!request) return;
     try {
-      const summary = await UserService.getPortfolioSummary({ signal: request.signal });
+      const summary = await PortfolioService.getPortfolioSummary({ signal: request.signal });
       if (!request.isCurrent()) return;
       setStats({
         count: summary.count || 0,
@@ -353,54 +208,6 @@ export default function Home() {
     loadPortfolioSummary();
     return () => scope.cancel("summary");
   }, [loadPortfolioSummary, scope]);
-
-  const renderPagination = () => (
-    <div className="d-flex align-items-center justify-content-between pt-3 px-2">
-      <span className="text-white-50 small">
-        Page {currentPage + 1} of {totalPages || 1}
-      </span>
-      <nav aria-label="Portfolio pagination">
-        <ul className="pagination pagination-sm mb-0">
-          <li className={`page-item ${currentPage === 0 ? "disabled" : ""}`}>
-            <button
-              className="page-link"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 0}
-            >
-              Previous
-            </button>
-          </li>
-          {Array.from({ length: totalPages }, (_, index) => (
-            <li
-              key={index}
-              className={`page-item ${index === currentPage ? "active" : ""}`}
-            >
-              <button
-                className="page-link"
-                onClick={() => handlePageChange(index)}
-              >
-                {index + 1}
-              </button>
-            </li>
-          ))}
-          <li
-            className={`page-item ${
-              currentPage >= totalPages - 1 ? "disabled" : ""
-            }`}
-          >
-            <button
-              className="page-link"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages - 1}
-            >
-              Next
-            </button>
-          </li>
-        </ul>
-      </nav>
-    </div>
-  );
-
   return (
     <div className="container pb-5">
       {/* Portfolio Summary Metric Cards */}
@@ -420,216 +227,30 @@ export default function Home() {
       </div>
 
       {/* Main Portfolio Table Card */}
-      <div className="card portfolio-table-card shadow-lg p-4 mb-5">
-        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-          <h3 className="portfolio-table-title mb-0">Portfolio History</h3>
-          
-          {/* Dynamic Portfolio Filter Dropdown */}
-          <div className="d-flex align-items-center gap-2">
-            <select
-              className="form-select form-select-sm text-white border-0 shadow-sm"
-              value={filterSortOption}
-              onChange={(e) => setFilterSortOption(e.target.value)}
-              style={{
-                backgroundColor: "#161b26",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-                borderRadius: "8px",
-                padding: "0.45rem 2.2rem 0.45rem 0.85rem",
-                fontWeight: "600",
-                fontSize: "0.875rem",
-                cursor: "pointer",
-                minWidth: "220px",
-                color: "#ffffff",
-              }}
-            >
-              <option value="newest_date">Filter by newest date</option>
-              <option value="oldest_date">Filter by oldest date</option>
-              <option value="bought">Filter by bought</option>
-              <option value="sold">Filter by sold</option>
-              <option value="highest_quantity">Filter by highest quantity</option>
-              <option value="highest_total_price">Filter by highest total price</option>
-              <option value="lowest_total_price">Filter by lowest total price</option>
-              <option value="highest_unit_price">Filter by highest unit price</option>
-              <option value="lowest_unit_price">Filter by lowest unit price</option>
-            </select>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="d-flex justify-content-center align-items-center py-5">
-            <div className="spinner-border text-info" role="status" style={{ width: "2.2rem", height: "2.2rem" }}>
-              <span className="visually-hidden">Loading...</span>
-            </div>
-          </div>
-        ) : items.length > 0 ? (
-          <>
-            <div className="table-responsive">
-              <Table hover responsive className="portfolio-table align-middle">
-                <thead>
-                  <tr>
-                    <th scope="col" style={{ width: "70px" }}>Item</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Date</th>
-                    <th scope="col" className="text-center">Quantity</th>
-                    <th scope="col" className="text-end">Unit Price</th>
-                    <th scope="col" className="text-end">Total Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedFilteredItems.map((item) => {
-                    const isBought = item.itemStatus === "BOUGHT";
-                    const totalPrice = Number(item.price || 0) * Number(item.quantity || 1);
-                    return (
-                      <tr
-                        key={item.id}
-                        onClick={() => handleRowClick(item.id)}
-                        className="portfolio-row-clickable"
-                      >
-                        <td>
-                          {item.image ? (
-                            <img
-                              src={item.image}
-                              alt={item.itemName}
-                              className="portfolio-item-thumb"
-                            />
-                          ) : (
-                            <div className="portfolio-item-thumb-placeholder">📷</div>
-                          )}
-                        </td>
-                        <td className="fw-semibold">{item.itemName}</td>
-                        <td>
-                          <span className={`badge-status ${isBought ? "badge-bought" : "badge-sold"}`}>
-                            {isBought ? "Bought" : "Sold"}
-                          </span>
-                        </td>
-                        <td className="text-muted small">{formatDateDDMMYYYY(item.date)}</td>
-                        <td className="text-center font-mono">{item.quantity}</td>
-                        <td className="text-end font-mono">€{Number(item.price).toFixed(2)}</td>
-                        <td className="text-end font-mono fw-bold">
-                          €{totalPrice.toFixed(2)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            </div>
-            {renderPagination()}
-          </>
-        ) : (
-          <div className="alert alert-warning text-center py-4 mb-0" role="alert">
-            No portfolio items registered yet. Use the form above to register your first item!
-          </div>
-        )}
-      </div>
+      <PortfolioHistorySection
+        currentPage={currentPage}
+        totalPages={totalPages}
+        handlePageChange={handlePageChange}
+        filterSortOption={filterSortOption}
+        setFilterSortOption={setFilterSortOption}
+        loading={loading}
+        items={items}
+        sortedFilteredItems={sortedFilteredItems}
+        handleRowClick={handleRowClick}
+      />
 
       {/* Pinned Market Items Section (Infinite Scroll & Timeframe Selector) */}
-      <div className="card portfolio-table-card shadow-lg p-4">
-        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-          <h3 className="portfolio-table-title mb-0">Pinned Market Items</h3>
-          
-          {/* Trend Period Control Group in Header */}
-          <div className="btn-group timeframe-toggle-group" role="group">
-            {["7D", "1M", "3M"].map((tf) => (
-              <button
-                key={tf}
-                type="button"
-                className={`btn btn-sm timeframe-toggle-btn ${selectedTimeframe === tf ? "active" : ""}`}
-                onClick={() => setSelectedTimeframe(tf)}
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {allPinnedItems.length === 0 ? (
-          <div className="p-4 text-center text-white my-2" style={{ background: "rgba(255, 255, 255, 0.02)", borderRadius: "12px", border: "1px dashed rgba(255, 255, 255, 0.1)" }}>
-            <h6 className="mb-0 text-white fw-normal">No pinned items at the moment.</h6>
-          </div>
-        ) : (
-          <div className="table-responsive">
-            <Table hover responsive className="portfolio-table align-middle mb-0">
-              <thead>
-                <tr>
-                  <th scope="col" style={{ width: "45px" }} className="text-center">Unpin</th>
-                  <th scope="col" style={{ width: "60px" }}>Image</th>
-                  <th scope="col">Item Name</th>
-                  <th scope="col">Current Price</th>
-                  <th scope="col">% Change</th>
-                  <th scope="col" style={{ width: "200px" }}>Chart ({selectedTimeframe})</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiblePinnedItems.map((item) => {
-                  const history = pinnedHistories[item.id] || [];
-                  const points = getItemPoints(history, selectedTimeframe);
-                  const trend = getPeriodChange(points);
-                  const strokeColor = trend.direction === "positive" ? "#10b981" : trend.direction === "negative" ? "#ef4444" : "#6b7280";
-
-                  return (
-                    <tr key={item.id} className="portfolio-row-clickable" onClick={() => navigate("/tracker")}>
-                      <td className="text-center" onClick={(e) => handleUnpin(item.id, e)}>
-                        <button
-                          type="button"
-                          className="btn btn-sm p-1 border-0 text-warning"
-                          title="Unpin from Main Dashboard"
-                          style={{ fontSize: "1.2rem", background: "transparent" }}
-                        >
-                          ⭐
-                        </button>
-                      </td>
-                      <td>
-                        {item.image ? (
-                          <img
-                            src={item.image}
-                            alt={item.itemName}
-                            className="portfolio-item-thumb"
-                          />
-                        ) : (
-                          <div className="portfolio-item-thumb-placeholder">📷</div>
-                        )}
-                      </td>
-                      <td>
-                        <div className="fw-semibold text-white">{item.itemName}</div>
-                      </td>
-                      <td className="font-mono fw-bold text-success">
-                        {formatCurrency(item.price)}
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            trend.direction === "positive"
-                              ? "bg-success"
-                              : trend.direction === "negative"
-                              ? "bg-danger"
-                              : "bg-secondary"
-                          }`}
-                        >
-                          {trend.pct == null
-                            ? "—"
-                            : `${trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}${trend.pct.toFixed(2)}%`}
-                        </span>
-                      </td>
-                      <td>
-                        <HomePinnedSparkline points={points} strokeColor={strokeColor} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </Table>
-
-            {/* Infinite Scroll Sentinel / Loader */}
-            {pinnedVisibleCount < allPinnedItems.length && (
-              <div ref={loaderRef} className="text-center py-3 text-muted small">
-                ⚡ Loading more pinned items...
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <PinnedMarketItemsSection
+        allPinnedItems={allPinnedItems}
+        visiblePinnedItems={visiblePinnedItems}
+        selectedTimeframe={selectedTimeframe}
+        setSelectedTimeframe={setSelectedTimeframe}
+        pinnedHistories={pinnedHistories}
+        pinnedVisibleCount={pinnedVisibleCount}
+        loaderRef={loaderRef}
+        handleUnpin={handleUnpin}
+        navigate={navigate}
+      />
     </div>
   );
 }

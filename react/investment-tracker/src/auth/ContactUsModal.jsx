@@ -1,5 +1,5 @@
+import ContactService from "../service/ContactService";
 import React, { useEffect, useState } from "react";
-import UserService from "../service/UserService";
 import useModalRequestScope from "../hooks/useModalRequestScope";
 import { isRequestCanceled } from "../service/RequestScope";
 import "../styles/ContactUsModal.css";
@@ -48,7 +48,7 @@ function ContactUsModal({ show, onClose, defaultEmail }) {
     const request = scope.begin("submit", { replace: false, abortable: false });
     if (!request) return;
     try {
-      await UserService.createContactTicket(email.trim(), message.trim());
+      await ContactService.createContactTicket(email.trim(), message.trim());
       if (!request.isCurrent()) return;
       setSuccess(true);
       setMessage("");

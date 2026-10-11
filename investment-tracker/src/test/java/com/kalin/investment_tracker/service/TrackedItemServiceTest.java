@@ -106,6 +106,8 @@ class TrackedItemServiceTest {
         var result = service.getTrackedItems(user, false);
 
         assertEquals(1, result.size());
+        verify(steamPriceService).refreshPriceCacheIfNeeded();
+        verify(steamPriceService, never()).getItemPriceData(any());
         verify(itemRepository).findSteamTrackedItemsByUserId(7);
         verify(itemRepository, never()).findAllSteamTrackedItems();
     }
@@ -113,7 +115,7 @@ class TrackedItemServiceTest {
     @Test
     void currentFeedPriceOverridesStoredDisplayPrice() {
         when(itemRepository.findSteamTrackedItemsByUserId(7)).thenReturn(List.of(trackedItem));
-        when(steamPriceService.getItemPriceData(trackedItem.getMarketHashName()))
+        when(steamPriceService.getCachedItemPriceData(trackedItem.getMarketHashName()))
                 .thenReturn(new SteamPriceService.ItemPriceData(new BigDecimal("52.75")));
 
         var result = service.getTrackedItems(user, false);

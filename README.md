@@ -14,6 +14,8 @@ The repository contains both parts of the application:
 - `docs/DAILY_PRICE_HISTORY.md` — daily price observations, stale-publication protection and existing-database adoption.
 - `docs/INVENTORY_CALCULATOR.md` — bounded Steam inventory loading, quantity/price semantics and verification.
 - `docs/FRONTEND_REQUEST_LIFECYCLE.md` — request cancellation, stale-response guards, polling and frontend verification.
+- `docs/STRUCTURAL_REFACTOR.md` — frontend/backend responsibility boundaries, shared charts and verification.
+- `docs/REFACTOR_PLAN.md` — approved refactoring order and current stage status.
 
 ## Main functionality
 

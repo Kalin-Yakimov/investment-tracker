@@ -18,18 +18,14 @@ import java.util.List;
 public class CacheConfig {
 
     public static final String CS_ITEMS_SEARCH_CACHE = "csItemsSearch";
-    public static final String PRICE_HISTORY_CHART_CACHE = "priceHistoryChart";
     public static final String PORTFOLIO_SUMMARY_CACHE = "portfolioSummary";
-    public static final String TRACKED_ITEMS_CACHE = "trackedItems";
     public static final String INVENTORY_CALCULATOR_CACHE = "inventoryCalculatorCache";
     public static final String STEAM_PROFILE_RESOLUTION_CACHE = "steamProfileResolution";
 
     @Bean
     public CacheManager cacheManager(
             @Value("${cache.cs-items-search.ttl:12h}") Duration csItemsSearchTtl,
-            @Value("${cache.price-history-chart.ttl:15m}") Duration priceHistoryChartTtl,
             @Value("${cache.portfolio-summary.ttl:15m}") Duration portfolioSummaryTtl,
-            @Value("${cache.tracked-items.ttl:15m}") Duration trackedItemsTtl,
             @Value("${cache.inventory-calculator.ttl:15m}") Duration inventoryCalculatorTtl,
             @Value("${cache.initial-capacity:100}") int initialCapacity,
             @Value("${cache.maximum-size:1000}") long maximumSize
@@ -37,9 +33,7 @@ public class CacheConfig {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(List.of(
                 new TransactionAwareCacheDecorator(buildCache(CS_ITEMS_SEARCH_CACHE, csItemsSearchTtl, initialCapacity, maximumSize)),
-                buildCache(PRICE_HISTORY_CHART_CACHE, priceHistoryChartTtl, initialCapacity, maximumSize),
                 new TransactionAwareCacheDecorator(buildCache(PORTFOLIO_SUMMARY_CACHE, portfolioSummaryTtl, initialCapacity, maximumSize)),
-                buildCache(TRACKED_ITEMS_CACHE, trackedItemsTtl, initialCapacity, maximumSize),
                 buildCache(INVENTORY_CALCULATOR_CACHE, inventoryCalculatorTtl, initialCapacity, maximumSize),
                 buildCache(STEAM_PROFILE_RESOLUTION_CACHE, inventoryCalculatorTtl, initialCapacity, maximumSize)
         ));

@@ -27,7 +27,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -59,8 +58,11 @@ public class TrackedItemService {
                     .toList();
         }
 
+        if (items.stream().anyMatch(item -> hasText(item.getMarketHashName()))) {
+            steamPriceService.refreshPriceCacheIfNeeded();
+        }
         return items.stream()
-                .map(this::toDto)
+                .map(item -> TrackedItemMapper.toDto(item, steamPriceService.getCachedItemPriceData(item.getMarketHashName())))
                 .toList();
     }
 
@@ -97,7 +99,7 @@ public class TrackedItemService {
         log.info("Item '{}' saved for user {} (price={})",
                 savedItem.getMarketHashName(), user.getId(),
                 savedItem.getPrice() != null ? savedItem.getPrice() : "pending scheduler");
-        return toDto(savedItem);
+        return TrackedItemMapper.toDto(savedItem, steamPriceService.getItemPriceData(savedItem.getMarketHashName()));
     }
 
     public PriceUpdateResponse requestPriceUpdate(List<Long> requestedIds, User user) {
@@ -178,7 +180,7 @@ public class TrackedItemService {
                 "Updated tracking settings for '" + updatedItem.getItemName() + "'",
                 null
         );
-        return toDto(updatedItem);
+        return TrackedItemMapper.toDto(updatedItem, steamPriceService.getItemPriceData(updatedItem.getMarketHashName()));
     }
 
     @Transactional
@@ -196,7 +198,7 @@ public class TrackedItemService {
 
         return new BookmarkResponse(
                 Boolean.TRUE.equals(updatedItem.getShowInDashboard()),
-                toDto(updatedItem)
+                TrackedItemMapper.toDto(updatedItem, steamPriceService.getItemPriceData(updatedItem.getMarketHashName()))
         );
     }
 
@@ -224,7 +226,7 @@ public class TrackedItemService {
 
     public SteamItemDto getTrackedItemDetails(Long id, User user) {
         Item item = findOwnedItem(id, user);
-        return toDto(item);
+        return TrackedItemMapper.toDto(item, steamPriceService.getItemPriceData(item.getMarketHashName()));
     }
 
     private ResolvedCatalogueItem resolveCatalogueItem(TrackedItemCreateRequest request) {
@@ -264,35 +266,6 @@ public class TrackedItemService {
     private Item findOwnedItem(Long itemId, User user) {
         return itemRepository.findTrackedItemByIdAndUserId(itemId, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(itemId));
-    }
-
-    private SteamItemDto toDto(Item item) {
-        CsItem catalogueItem = item.getCatalogueItem();
-        BigDecimal currentPrice = item.getPrice();
-        BigDecimal price24h = null;
-        if (hasText(item.getMarketHashName())) {
-            SteamPriceService.ItemPriceData priceData = steamPriceService.getItemPriceData(item.getMarketHashName());
-            if (priceData != null) {
-                currentPrice = priceData.currentPrice;
-                price24h = priceData.price24h;
-            }
-        }
-
-        return SteamItemDto.builder()
-                .id(item.getId())
-                .itemName(item.getItemName())
-                .marketHashName(item.getMarketHashName())
-                .csItemId(catalogueItem != null ? catalogueItem.getId() : null)
-                .quantity(item.getQuantity())
-                .price(currentPrice)
-                .boughtPrice(item.getBoughtPrice())
-                .boughtDate(item.getBoughtDate())
-                .showInDashboard(item.getShowInDashboard())
-                .priceNotification(item.getPriceNotification())
-                .steamFoundCheck(item.getSteamFoundCheck())
-                .image(catalogueItem != null ? catalogueItem.getImage() : null)
-                .price24h(price24h)
-                .build();
     }
 
     private boolean hasText(String value) {

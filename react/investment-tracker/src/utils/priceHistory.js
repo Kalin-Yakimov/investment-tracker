@@ -45,3 +45,20 @@ export function buildDailyPricePoints(history = [], timeframe = "7D", now = Date
       label: formatPriceDate(point.dateObj),
     }));
 }
+
+export const getPeriodChange = (points) => {
+  if (!points || points.length < 2) {
+    return { pct: null, direction: "neutral" };
+  }
+
+  const latest = points[points.length - 1].price;
+  const first = points[0].price;
+
+  if (!first || first === 0) {
+    return { pct: null, direction: "neutral" };
+  }
+
+  const pct = ((latest - first) / first) * 100;
+  const direction = pct > 0 ? "positive" : pct < 0 ? "negative" : "neutral";
+  return { pct, direction };
+};

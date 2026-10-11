@@ -1,6 +1,5 @@
-import axios from "axios";
 import React, { useState } from "react";
-import UserService from "../service/UserService";
+import PortfolioService from "../service/PortfolioService";
 import DatePicker from "react-datepicker";
 import { format } from "date-fns";
 import "react-datepicker/dist/react-datepicker.module.css";
@@ -82,17 +81,7 @@ export default function AddItem({ onItemAdded }) {
     if (!request) return;
     try {
       const formattedDate = format(date, "dd.MM.yyyy");
-      const token = UserService.getToken();
-      await axios.post(
-        `${UserService.BASE_URL}/item`,
-        { ...item, date: formattedDate },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
+      await PortfolioService.createItem({ ...item, date: formattedDate });
       if (!request.isCurrent()) return;
       clearForm();
       if (onItemAdded) onItemAdded();
