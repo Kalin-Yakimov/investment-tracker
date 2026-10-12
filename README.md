@@ -21,6 +21,7 @@ The repository contains both parts of the application:
 - [docs/FINAL_VERIFICATION.md](docs/FINAL_VERIFICATION.md) — integrated checks, GitLab CI and remaining delivery boundaries.
 - [docs/MANUAL_VERIFICATION.md](docs/MANUAL_VERIFICATION.md) — short browser acceptance checklist (Bulgarian).
 - [docs/CATALOGUE_SEARCH.md](docs/CATALOGUE_SEARCH.md) — shared word matching, relevance ranking, caching and verification.
+- [docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) — GitHub verification workflow and safe history-transfer boundaries.
 - `docs/REFACTOR_PLAN.md` — approved refactoring order and current stage status.
 
 ## Main functionality
@@ -105,8 +106,10 @@ npm run smoke:build
 
 `npm run verify` runs all four frontend checks. The smoke check serves the built
 files temporarily on loopback; it does not start the backend or use real data.
-GitLab CI runs frontend/backend verification and collects test reports after
-an approved push. It does not deploy the application. See
+GitLab CI and GitHub Actions run frontend/backend verification and collect test
+reports after an approved push to the respective site. Neither deploys the
+application. See [GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for the second hosting
+destination and explicit dual-push commands, and
 [FINAL_VERIFICATION.md](docs/FINAL_VERIFICATION.md) for coverage and limitations.
 
 ## External data
