@@ -12,8 +12,8 @@ Install the following tools before cloning the project:
 |---|---:|---|
 | Git for Windows | Current stable version | Clone and update the repository |
 | Java JDK | 21 | Run and build the Spring Boot backend |
-| Node.js | 20.x | Run and build the React frontend |
-| npm | Included with Node.js 20 | Install frontend dependencies |
+| Node.js | 24 LTS, at least 24.15 | Run and build the React frontend |
+| npm | Included with Node.js 24 | Install frontend dependencies |
 | MySQL Server | 8.0 or newer | Store application data |
 | MySQL Workbench | Optional | Graphical database administration |
 
@@ -29,7 +29,16 @@ npm --version
 mysql --version
 ```
 
-Java must report version 21. Node.js should report a 20.x version. Gradle does not need a separate installation because `gradlew.bat` downloads Gradle 8.8 when it is first used.
+Java must report version 21. Use Node.js 24 LTS (24.15 or newer). Node.js 20 is
+not supported by the current frontend toolchain. A compatible Node.js 22.22.2+
+installation is also accepted, but Node.js 24 LTS is recommended for a new setup.
+Gradle does not need a separate installation because `gradlew.bat` downloads
+Gradle 8.8 when it is first used.
+
+Download the Windows x64 `.msi` installer from [the official Node.js site](https://nodejs.org/en/download),
+choose the 24 LTS line and keep the normal installer defaults. After installing,
+close and reopen PowerShell and your IDE before checking `node --version`.
+Only a normal Node.js installation is required; no machine-specific runtime paths are configured.
 
 ## 2. Clone the repository
 
@@ -148,10 +157,17 @@ Copy-Item .env.example .env
 The default local value is:
 
 ```text
-REACT_APP_API_URL=http://localhost:8080
+VITE_API_URL=http://localhost:8080
 ```
 
-Do not place database, Gmail or JWT secrets in any React variable. React variables are included in the browser build and can be read by users.
+`VITE_ITEM_SEARCH_DEBOUNCE_MS=1000` configures the existing one-second search
+delay. The previous `REACT_APP_API_URL` and `REACT_APP_ITEM_SEARCH_DEBOUNCE_MS`
+names remain supported as fallbacks, so an existing ignored `.env` does not
+need to be edited just to migrate. Explicit `VITE_` settings take precedence.
+
+Do not place database, Gmail or JWT secrets in any frontend variable. `VITE_`
+variables are public and included in the browser build. Restart the frontend
+after changing its `.env`; backend secret configuration is separate and unchanged.
 
 Return to the repository root before following the next sections:
 
@@ -184,7 +200,12 @@ npm start
 
 `npm ci` installs exactly the dependency versions recorded in `package-lock.json`. Run it after a new clone or when the lock file changes.
 
-The browser should open `http://localhost:3000`. Keep both PowerShell windows open while using the application.
+Open `http://localhost:3000` in your browser. Vite is bound to localhost on port
+3000 and will fail clearly if that port is already in use instead of silently
+choosing another port. Keep both PowerShell windows open while using the application.
+
+If `npm ci` reports an unsupported Node version, update Node.js first; do not
+disable `engine-strict` or use `--force`/`--legacy-peer-deps` to bypass it.
 
 ## 9. Create the initial administrator
 
@@ -221,15 +242,31 @@ cd investment-tracker
 .\gradlew.bat test
 ```
 
-Frontend production build:
+Frontend verification:
 
 ```powershell
 cd react\investment-tracker
 npm ci
+npm run lint
+npm test
 npm run build
+npm run smoke:build
 ```
 
-The React development tooling may print maintenance warnings from Create React App. A successful build must still finish with `Compiled successfully`.
+`npm test` runs Vitest once and exits; `npm run test:watch` enables watch mode.
+`npm run verify` runs lint, tests, build and production HTTP smoke together.
+The smoke check opens a temporary loopback port and closes it after checking
+the built files; it does not start the backend or access your database.
+Production output remains
+in `react/investment-tracker/build/`. `npm run preview` serves that output locally
+on port 3000 for checking; it is not a production hosting server.
+
+Create React App and its maintenance warnings are no longer part of the setup.
+See [the tooling migration notes](docs/FRONTEND_TOOLING.md) for verification and
+remaining limitations.
+The final browser checklist is in [MANUAL_VERIFICATION.md](docs/MANUAL_VERIFICATION.md).
+GitLab verification requires no personal application secrets; it does not
+deploy the website. See [FINAL_VERIFICATION.md](docs/FINAL_VERIFICATION.md).
 
 ## 12. Back up the local database
 

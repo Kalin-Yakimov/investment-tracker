@@ -1,4 +1,3 @@
-import React from "react";
 import { Pagination, StatusBadge } from "./SupportControls";
 import UserSupportView from "./UserSupportView";
 

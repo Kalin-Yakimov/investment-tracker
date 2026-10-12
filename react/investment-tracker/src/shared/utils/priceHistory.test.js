@@ -1,3 +1,4 @@
+import { expect, test } from "vitest";
 import { buildDailyPricePoints, formatPriceDate, formatPriceDateTime, sortPriceHistoryNewestFirst } from "./priceHistory";
 
 const entry = (id, dateExtracted, price = 5) => ({ id, dateExtracted, price });

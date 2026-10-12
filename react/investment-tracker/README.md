@@ -1,70 +1,51 @@
-# Getting Started with Create React App
+# Investment Tracker frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React 18 interface built with Vite. Backend endpoints, page URLs and the visual
+design are retained; this is not a React Router framework/SSR application.
 
-## Available Scripts
+## Requirements
 
-In the project directory, you can run:
+Use Node.js 24 LTS (24.15 or newer). Node.js 22.22.2+ is also accepted by the
+current dependency set. Node.js 20 is not supported. Reopen the terminal after
+installing/updating Node, then check `node --version`.
 
-### `npm start`
+## Local development
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```powershell
+npm ci
+npm start
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Open `http://localhost:3000`. `npm run dev` is an alias. The dev server is local
+only and will not silently switch ports when port 3000 is occupied.
 
-### `npm test`
+For local public settings, copy `.env.example` to `.env` if needed. Set
+`VITE_API_URL` and optionally `VITE_ITEM_SEARCH_DEBOUNCE_MS`. Existing
+`REACT_APP_API_URL` and `REACT_APP_ITEM_SEARCH_DEBOUNCE_MS` values remain fallback
+settings. Do not put passwords, JWT secrets or private API keys in frontend
+configuration: values in the browser bundle are public.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Verification and build
 
-### `npm run build`
+```powershell
+npm run lint
+npm test
+npm run build
+npm run smoke:build
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+`npm run verify` runs all four. The smoke check serves the built files on a
+temporary loopback port and closes its own server; it does not access the API.
+`npm run test:watch` is interactive watch mode;
+`npm test` runs once. Vitest uses simulated DOM/test adapters, not real user data.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+The production output stays in `build/`. `npm run preview` serves the built files
+locally on port 3000; it is not intended as a public production server. Hosting
+must serve `index.html` for client-side page URLs, just as before.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+For the database, email, backend secrets and a full clean-computer setup, see
+[LOCAL_SETUP.md](../../LOCAL_SETUP.md). Source organization is in
+[CODEBASE_STRUCTURE.md](../../docs/CODEBASE_STRUCTURE.md); migration boundaries
+and verification are in [FRONTEND_TOOLING.md](../../docs/FRONTEND_TOOLING.md).
+Final integrated/CI checks and the remaining acceptance steps are in
+[FINAL_VERIFICATION.md](../../docs/FINAL_VERIFICATION.md).

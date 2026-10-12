@@ -1,5 +1,4 @@
 import PriceTimeframeSelector from "../../shared/components/PriceTimeframeSelector";
-import React from "react";
 import usePriceTracker from "./hooks/usePriceTracker";
 import TrackerSearch from "./components/TrackerSearch";
 import TrackerDetailModal from "./components/TrackerDetailModal";

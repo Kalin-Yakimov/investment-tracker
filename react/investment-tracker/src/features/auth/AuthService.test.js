@@ -1,3 +1,4 @@
+import { beforeEach, expect, test, vi } from "vitest";
 import { apiClient } from "../../shared/api/ApiClient";
 import PortfolioApi from "../portfolio/PortfolioApi";
 import PriceTrackerApi from "../price-tracker/PriceTrackerApi";
@@ -5,9 +6,6 @@ import axios from "axios";
 import AuthService from "./AuthService";
 import deferred from "../../testUtils/deferred";
 
-// CRA's Jest resolver selects Axios' ESM entry. Use its official CJS build for
-// these tests only; every request uses the in-memory adapter below, never HTTP.
-jest.mock("axios", () => jest.requireActual("../../../node_modules/axios/dist/node/axios.cjs"));
 
 let pending;
 const token = (id, marker = "token") => "header." + btoa(JSON.stringify({ sub: String(id), email: "user@example.test", marker })) + ".signature";
@@ -25,7 +23,7 @@ beforeEach(() => {
   AuthService.sessionVersion = 0;
   AuthService.sessionChanges = 0;
   AuthService.authListeners.clear();
-  apiClient.defaults.adapter = jest.fn((config) => {
+  apiClient.defaults.adapter = vi.fn((config) => {
     const response = deferred();
     pending.push({ ...response, config });
     return response.promise;

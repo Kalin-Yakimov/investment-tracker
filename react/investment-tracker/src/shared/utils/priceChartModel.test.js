@@ -1,3 +1,4 @@
+import { expect, test, vi } from "vitest";
 import { buildPriceChartModel } from "./priceChartModel";
 import { getPeriodChange } from "./priceHistory";
 const points = [{ label: "09/10/2026", price: 10 }, { label: "10/10/2026", price: 12 }];
@@ -31,7 +32,7 @@ test("neutral/down trends and row colours remain unchanged", () => {
 });
 
 test("both chart modes delegate to the same external tooltip and never overlay a native tooltip", () => {
-  const tooltip = jest.fn();
+  const tooltip = vi.fn();
   for (const detailed of [false, true]) {
     const model = buildPriceChartModel(points, { detailed, tooltip });
     expect(model.options.plugins.tooltip.enabled).toBe(false);

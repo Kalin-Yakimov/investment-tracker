@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, useParams } from "react-router-dom";
-import "../node_modules/bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./layout/Navbar";
 import PortfolioOverviewPage from "./features/portfolio/PortfolioOverviewPage";
 import PriceTrackerPage from "./features/price-tracker/PriceTrackerPage";

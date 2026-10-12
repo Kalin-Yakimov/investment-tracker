@@ -7,3 +7,6 @@
 /backups/
 *.sql.gz
 *.dump
+
+# GitLab job-local tool cache
+/.gradle-ci/

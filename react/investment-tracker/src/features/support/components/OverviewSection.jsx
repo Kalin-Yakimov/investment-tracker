@@ -1,4 +1,3 @@
-import React from "react";
 import { formatDate } from "../utils/supportFormat";
 
 export default function OverviewSection({ overview }) {

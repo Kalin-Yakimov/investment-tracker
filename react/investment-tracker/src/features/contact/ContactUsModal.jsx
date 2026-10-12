@@ -1,5 +1,5 @@
 import ContactApi from "./ContactApi";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import useModalRequestScope from "../../shared/hooks/useModalRequestScope";
 import { isRequestCanceled } from "../../shared/utils/RequestScope";
 import "./ContactUsModal.css";

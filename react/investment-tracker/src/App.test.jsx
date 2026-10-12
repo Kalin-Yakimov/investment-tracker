@@ -1,11 +1,11 @@
+import { expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import RegistrationPage from "./features/auth/pages/RegistrationPage";
 
-jest.mock("./features/auth/AuthService", () => ({
-  __esModule: true,
+vi.mock("./features/auth/AuthService", () => ({
   default: {
-    register: jest.fn(),
+    register: vi.fn(),
   },
 }));
 

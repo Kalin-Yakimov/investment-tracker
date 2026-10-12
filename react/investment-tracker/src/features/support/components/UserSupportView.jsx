@@ -1,4 +1,3 @@
-import React from "react";
 import SupportPanelApi from "../SupportPanelApi";
 import { formatDate } from "../utils/supportFormat";
 import { StatusBadge } from "./SupportControls";

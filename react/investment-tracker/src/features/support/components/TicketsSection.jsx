@@ -1,4 +1,3 @@
-import React from "react";
 import { formatDate } from "../utils/supportFormat";
 import { Pagination, StatusBadge } from "./SupportControls";
 

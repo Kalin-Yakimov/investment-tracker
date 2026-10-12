@@ -1,5 +1,4 @@
 import TablePagination from "../../../shared/components/TablePagination";
-import React from "react";
 import { Table } from "react-bootstrap";
 import { formatDateDDMMYYYY } from "../utils/portfolioFormat";
 

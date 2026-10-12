@@ -1,7 +1,7 @@
+import { expect, test } from "vitest";
 import axios from "axios";
 import { apiData, apiError } from "./ApiClient";
 
-jest.mock("axios", () => jest.requireActual("../../../node_modules/axios/dist/node/axios.cjs"));
 
 test("shared response handling unwraps data and preserves the server error object", async () => {
   const payload = { error: "Invalid request" };

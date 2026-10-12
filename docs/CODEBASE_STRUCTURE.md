@@ -15,7 +15,7 @@ Source root: `react/investment-tracker/src/`.
 ```text
 src/
   App.jsx                        Route composition
-  index.js                       Application bootstrap
+  index.jsx                      Application bootstrap
   config/                        Existing UI timing/settings
   layout/                        Navbar and its styles
   features/
@@ -60,7 +60,14 @@ search implementation into each consumer.
 CSS is relocated with its feature without changing selectors or page layout.
 The portfolio overview still imports the PriceTracker stylesheet for existing
 shared market-chart/button styles; no new global styling system is introduced.
-`reportWebVitals.js` and the current build toolchain are retained for Stage 8.
+Stage 8 replaces CRA with Vite/Vitest and moves the HTML entry to the frontend
+root. The unconfigured `reportWebVitals.js` callback scaffold is removed; it
+never received a callback in the application. Tooling configuration is in
+`vite.config.js`, `eslint.config.js` and `scripts/check-runtime.cjs`. See
+[FRONTEND_TOOLING.md](FRONTEND_TOOLING.md) for details.
+Stage 9 adds `scripts/smoke-build.js`, frontend route integration tests, backend
+`workflow/` integration tests and root `.gitlab-ci.yml`. These are verification
+entry points, not new production features; see [FINAL_VERIFICATION.md](FINAL_VERIFICATION.md).
 
 ## Backend
 
@@ -104,6 +111,15 @@ real database access is part of this organization change.
 `PriceFeedService` coordinates CSGOTrader refreshes. Its name no longer implies
 that prices come directly from Steam. Feed downloading, currency conversion,
 retry policy, persistence and pure DTO mapping keep their separate classes.
+
+The separately approved catalogue search improvement adds `CatalogueSearchQuery`
+for bounded normalization and the `CsItemSearchRepository` fragment implemented
+by `CsItemSearchRepositoryImpl`. Matching and relevance ranking happen in the
+database before the eight-result limit. `CsItemService` coordinates the existing
+cache; it no longer ranks a truncated candidate list. The obsolete
+`CsItemSpecification` and unused `searchByName` method were removed. Entity/table
+names and internal `findBestMatch` metadata lookup are unchanged. See
+[CATALOGUE_SEARCH.md](CATALOGUE_SEARCH.md) for behavior and verification boundaries.
 
 ## Important renames
 

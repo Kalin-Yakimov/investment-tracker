@@ -1,4 +1,3 @@
-import React from "react";
 
 // Shared by portfolio records and transaction history; the markup stays identical.
 export default function TablePagination({ currentPage, totalPages, onPageChange, label = "Table pagination" }) {

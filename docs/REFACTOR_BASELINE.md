@@ -167,3 +167,91 @@ contracts, support-access recording, trusted catalogue metadata and Retry-After
 parsing. Frontend/resource/entity hashes are unchanged from this follow-up's
 starting point. Earlier checkpoints remain historical. Publication/merge and
 Stage 8 are still separate user decisions.
+
+## Separately approved Stage 8 checkpoint (2026-10-12)
+
+Vite/Vitest migration and compatible frontend dependency/tool updates are in
+[FRONTEND_TOOLING.md](FRONTEND_TOOLING.md). Verified using Node.js 24.19.0:
+94 frontend tests in 22 files, all passed; lint has 0 errors/warnings; production
+build and 18 local HTTP smoke checks passed. All 89 existing frontend test cases,
+14 source stylesheets and 63 production module bodies are retained, excluding
+imports and the two explicitly migrated public environment accesses. Backend
+files and real MySQL data are unchanged by this stage.
+
+The current npm audit reports 0 findings (previously 82, including development
+tooling). This is not a production-security certification. A bundle-size warning
+remains; at the initial migration checkpoint, system Node.js 20.14.0 had not yet
+been updated for manual startup.
+The new lock file was verified through a clean `npm ci`; publication/merge and
+Stage 9 are separate decisions.
+
+## Separately approved system runtime update (2026-10-12)
+
+System Node.js was upgraded from 20.14.0 to 24.20.0 LTS using the standard
+Windows package manager and the official Node.js MSI, whose hash was verified.
+The old global npm override was upgraded to npm 11.19.0, matching the new
+installer's bundled version. Commands resolve through the normal installation,
+not an alternate runtime path. Source code, backend/database settings and real
+data are unchanged by this installation. No commit, push or merge was performed.
+Clean `npm ci` and `npm run verify` passed using these normal system tools:
+94 tests in 22 files, lint with no warnings/errors, successful production build,
+no lock-file change and the same 0 npm audit findings.
+
+## Separately approved Stage 9 checkpoint (2026-10-12)
+
+Final automated verification, integrated workflows, GitLab CI configuration and
+browser acceptance boundaries are recorded in [FINAL_VERIFICATION.md](FINAL_VERIFICATION.md).
+Frontend: 108 tests in 23 files, all passed, lint has no warnings/errors,
+production build and 17 production HTTP smoke checks succeeded. Backend:
+358 tests in 40 suites, 357 passed and the same 1 skipped, no failures/errors;
+`test bootJar` succeeded without personal application secrets in the test
+process. Existing tests remain; 16 backend workflow and 14 frontend route cases
+were added. Earlier checkpoints remain historical.
+
+No real MySQL/provider/SMTP operations, changes to production business logic or
+styling, commit, push or merge were performed in this stage. The actual GitLab
+runner/pipeline and manual browser checklist remain pending; no production
+readiness or full browser E2E claim is made.
+
+## Browser date-picker regression follow-up (2026-10-12)
+
+The subsequent user browser check found the blank portfolio caused by the
+`react-datepicker` UMD browser entry selected by Vite. An exact-match ESM alias,
+a real client-resolution test (failing before the fix) and an unmocked calendar
+form test correct that tooling boundary. Frontend checks now pass 110 tests in
+25 files with clean lint, successful build and 17 HTTP smoke checks. Backend
+was unchanged; its preceding 357 passed / 1 skipped checkpoint remains valid.
+Targeted Chrome navigation verified the existing-session portfolio, its date
+picker, item details and edit date picker, without saving or deleting records.
+The original automated checkpoint above remains historical; full manual
+acceptance, GitLab execution and publication/merge remain pending.
+
+## Stable catalogue dropdown follow-up (2026-10-12)
+
+Following user approval, valid search edits retain previous suggestions during
+debounce/loading, with latest-response replacement and unchanged cancellation
+guards. Clear, selection, short input, empty results and current failures clear
+them. The shared Portfolio/PriceTracker hook is the only production-source change;
+the 1000 ms default, backend and CSS remain unchanged. Six hook cases and one
+unmocked form/dropdown identity case were added. All 117 frontend tests in 26
+files, lint, build and 17 HTTP smoke checks pass. A separate temporary Chrome tab
+verified the dropdown staying visible through a keystroke, refreshing results
+and closing on clear, without record submissions. Publication/merge remain pending.
+
+## Generic catalogue relevance follow-up (2026-10-12)
+
+The separately approved improvement replaces substring/candidate-cutoff ranking
+with bounded word-prefix matching and database ordering before the eight-result
+limit. Generic name normalization, repository fragment and cache validation are
+documented in [CATALOGUE_SEARCH.md](CATALOGUE_SEARCH.md). The old specification,
+unused search query and Java relevance scorer were removed. API/DTO contracts,
+entity/schema mappings, internal metadata lookup and UI/cache timings remain.
+
+34 new regression cases pass. Full backend `test bootJar`: 392 tests in 43
+suites, 391 passed and the existing one skipped, no failures/errors. The actual
+production SQL and parameters were additionally checked in a read-only local
+MySQL 8.0.37 transaction against 44,635 catalogue rows for nine query examples.
+No catalogue/portfolio writes, migration or app restart were performed. Frontend
+code was unchanged by this follow-up, so its preceding 117-test checkpoint remains
+historical. Browser acceptance after backend restart and publication/merge remain
+separate user decisions; earlier checkpoints above are not overwritten.

@@ -1,5 +1,5 @@
 import InventoryApi from "./InventoryApi";
-import React, { useState } from "react";
+import { useState } from "react";
 import AuthService from "../auth/AuthService";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../shared/utils/RequestScope";

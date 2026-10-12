@@ -1,4 +1,3 @@
-import React from "react";
 import { PriceSparkline } from "../../../shared/components/PriceCharts";
 import { formatCurrency } from "../../../shared/utils/formatCurrency";
 

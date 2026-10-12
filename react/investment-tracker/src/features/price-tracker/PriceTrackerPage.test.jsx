@@ -1,18 +1,19 @@
+import { beforeEach, expect, test, vi } from "vitest";
 import PriceTrackerApi from "./PriceTrackerApi";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import PriceTrackerPage from "./PriceTrackerPage";
 import AuthService from "../auth/AuthService";
 import deferred from "../../testUtils/deferred";
 
-jest.mock("../auth/AuthService", () => ({
-  __esModule: true, default: {
-    getSessionVersion: jest.fn(),
+vi.mock("../auth/AuthService", () => ({
+  default: {
+    getSessionVersion: vi.fn(),
 
   },
 }));
-jest.mock("react-chartjs-2", () => ({ Line: () => null }));
+vi.mock("react-chartjs-2", () => ({ Line: () => null }));
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   AuthService.getSessionVersion.mockReturnValue(1);
   PriceTrackerApi.getTrackedItems.mockResolvedValue([
     { id: 1, itemName: "Case One", marketHashName: "Case One", currentPrice: 2, showInDashboard: false },
@@ -56,10 +57,10 @@ test("the historical log shows newest publication first without reversing chart 
   expect(history.map((point) => point.id)).toEqual([1, 2]);
 });
 
-jest.mock("./PriceTrackerApi", () => ({
-  __esModule: true, default: { getTrackedItems: jest.fn(), getPriceHistory: jest.fn(), toggleBookmark: jest.fn() },
+vi.mock("./PriceTrackerApi", () => ({
+  default: { getTrackedItems: vi.fn(), getPriceHistory: vi.fn(), toggleBookmark: vi.fn() },
 }));
 
-jest.mock("../catalogue/CatalogueApi", () => ({
-  __esModule: true, default: { searchCsItems: jest.fn() },
+vi.mock("../catalogue/CatalogueApi", () => ({
+  default: { searchCsItems: vi.fn() },
 }));

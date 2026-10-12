@@ -1,3 +1,4 @@
+import { expect, test, vi } from "vitest";
 import { createRequestScope, isRequestCanceled } from "./RequestScope";
 
 test("only the newest read can update the screen; older completion cannot finish it", () => {
@@ -42,7 +43,7 @@ test("session changes cancel reads and prevent old-account results", () => {
 });
 
 test("unmount cancels reads and does not notify; StrictMode reactivation does not revive old work", () => {
-  const notify = jest.fn();
+  const notify = vi.fn();
   const scope = createRequestScope(() => null, notify);
   expect(scope.begin("before-mount")).toBeNull();
   scope.activate();

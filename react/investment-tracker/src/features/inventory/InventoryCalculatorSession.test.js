@@ -1,3 +1,4 @@
+import { beforeEach, expect, test, vi } from "vitest";
 import {
   clearInventoryCalculatorSession,
   loadInventoryCalculatorSession,
@@ -18,13 +19,12 @@ test("restores the last calculation for the same user", () => {
   });
 });
 
-test("restores the calculation after a page reload", () => {
+test("restores the calculation after a page reload", async () => {
   saveInventoryCalculatorSession(42, "profile-a", result);
 
-  jest.isolateModules(() => {
-    const { loadInventoryCalculatorSession: loadAfterReload } = require("./InventoryCalculatorSession");
-    expect(loadAfterReload(42)?.result).toEqual(result);
-  });
+  vi.resetModules();
+  const { loadInventoryCalculatorSession: loadAfterReload } = await import("./InventoryCalculatorSession");
+  expect(loadAfterReload(42)?.result).toEqual(result);
 });
 
 test("does not reveal a previous user's calculation", () => {

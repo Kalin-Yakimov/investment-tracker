@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import PriceTrackerApi from "../../features/price-tracker/PriceTrackerApi";
 import CatalogueApi from "../../features/catalogue/CatalogueApi";
 import React from "react";
@@ -9,41 +10,40 @@ import useRequestScope from "./useRequestScope";
 import deferred from "../../testUtils/deferred";
 import { ITEM_SEARCH_DEBOUNCE_MS } from "../../config/uiConfig";
 
-jest.mock("../../features/auth/AuthService", () => ({
-  __esModule: true,
-  default: { getSessionVersion: jest.fn(), subscribe: jest.fn(),   },
+vi.mock("../../features/auth/AuthService", () => ({
+  default: { getSessionVersion: vi.fn(), subscribe: vi.fn(),   },
 }));
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   AuthService.getSessionVersion.mockReturnValue(1);
   AuthService.subscribe.mockReturnValue(() => {});
 });
-afterEach(() => jest.useRealTimers());
+afterEach(() => vi.useRealTimers());
 
 test("search debounces, aborts the old query and ignores a late old response", async () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   const first = deferred(), second = deferred();
   CatalogueApi.searchCsItems.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
   const { result, rerender } = renderHook(({ query }) => useCatalogueSearch(query), { initialProps: { query: "AK" } });
-  act(() => jest.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS - 1));
+  act(() => vi.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS - 1));
   expect(CatalogueApi.searchCsItems).not.toHaveBeenCalled();
-  act(() => jest.advanceTimersByTime(1));
+  act(() => vi.advanceTimersByTime(1));
   const oldSignal = CatalogueApi.searchCsItems.mock.calls[0][1].signal;
   rerender({ query: "Case" });
   expect(oldSignal.aborted).toBe(true);
-  act(() => jest.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS));
+  act(() => vi.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS));
   await act(async () => second.resolve([{ id: "new", name: "Case" }]));
   await act(async () => first.resolve([{ id: "old", name: "AK" }]));
   expect(result.current).toEqual([{ id: "new", name: "Case" }]);
 });
 
 test("clearing or selecting a query cancels pending work and prevents dropdown resurrection", async () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   const response = deferred();
   CatalogueApi.searchCsItems.mockReturnValue(response.promise);
   const { result, rerender } = renderHook(({ enabled }) => useCatalogueSearch("AK", enabled), { initialProps: { enabled: true } });
-  act(() => jest.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS));
+  act(() => vi.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS));
   const signal = CatalogueApi.searchCsItems.mock.calls[0][1].signal;
   rerender({ enabled: false });
   await act(async () => response.resolve([{ id: 1 }]));
@@ -52,10 +52,10 @@ test("clearing or selecting a query cancels pending work and prevents dropdown r
 });
 
 test("unmount clears an unsent debounce timer", () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   const { unmount } = renderHook(() => useCatalogueSearch("AK"));
   unmount();
-  act(() => jest.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS));
+  act(() => vi.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS));
   expect(CatalogueApi.searchCsItems).not.toHaveBeenCalled();
 });
 
@@ -90,7 +90,7 @@ test("removed item history is aborted and cannot reappear in the result map", as
 });
 
 test("failed histories are not repeatedly retried; explicit revision permits a new load", async () => {
-  const log = jest.spyOn(console, "error").mockImplementation(() => {});
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
   PriceTrackerApi.getPriceHistory.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValue([]);
   try {
     const { rerender } = renderHook(({ revision }) => usePriceHistories([{ id: 1 }], revision), { initialProps: { revision: 0 } });
@@ -122,7 +122,7 @@ test("histories start when the item list arrives after the initial empty render"
 });
 
 test("a session notification invalidates old private requests and cleans up its subscription", () => {
-  const unsubscribe = jest.fn();
+  const unsubscribe = vi.fn();
   AuthService.subscribe.mockReturnValue(unsubscribe);
   const { result, unmount } = renderHook(() => useRequestScope());
   let request;
@@ -135,10 +135,10 @@ test("a session notification invalidates old private requests and cleans up its 
   expect(unsubscribe).toHaveBeenCalledTimes(1);
 });
 
-jest.mock("../../features/price-tracker/PriceTrackerApi", () => ({
-  __esModule: true, default: { getPriceHistory: jest.fn() },
+vi.mock("../../features/price-tracker/PriceTrackerApi", () => ({
+  default: { getPriceHistory: vi.fn() },
 }));
 
-jest.mock("../../features/catalogue/CatalogueApi", () => ({
-  __esModule: true, default: { searchCsItems: jest.fn() },
+vi.mock("../../features/catalogue/CatalogueApi", () => ({
+  default: { searchCsItems: vi.fn() },
 }));

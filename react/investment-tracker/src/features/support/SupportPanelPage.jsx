@@ -1,4 +1,3 @@
-import React from "react";
 import useSupportPanel from "./hooks/useSupportPanel";
 import { StatusBadge } from "./components/SupportControls";
 import OverviewSection from "./components/OverviewSection";

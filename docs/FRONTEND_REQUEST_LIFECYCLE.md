@@ -29,6 +29,10 @@ React StrictMode setup/cleanup is covered by tests.
 - Catalogue search is shared between Portfolio registration and PriceTracker.
   Its existing configurable 1000 ms default debounce remains unchanged. Old
   queries cannot resurrect a dropdown after a newer query, selection or clear.
+  The later user-approved 2026-10-12 follow-up retains successful suggestions
+  while a valid edited query debounces/loads, replacing them only with the
+  current response. Clearing/selecting, short input, empty results or a current
+  failure clears the list. This is UI continuity, not an additional cache.
 - Portfolio filtering/pagination loads only the requested records. It no longer
   reloads unrelated pinned items or totals on every filter/page change.
   Adding a portfolio record still refreshes the Home component and its totals.

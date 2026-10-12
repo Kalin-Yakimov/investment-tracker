@@ -1,14 +1,15 @@
+import { beforeEach, expect, test, vi } from "vitest";
 import ContactApi from "./ContactApi";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import ContactUsModal from "./ContactUsModal";
 import AuthService from "../auth/AuthService";
 import deferred from "../../testUtils/deferred";
 
-jest.mock("../auth/AuthService", () => ({
-  __esModule: true, default: { getSessionVersion: jest.fn(),  },
+vi.mock("../auth/AuthService", () => ({
+  default: { getSessionVersion: vi.fn(),  },
 }));
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   AuthService.getSessionVersion.mockReturnValue(1);
 });
 const submit = () => {
@@ -30,7 +31,7 @@ test("rapid repeated submissions send one contact request", async () => {
 test("closing and reopening a modal ignores the previous submission's late success", async () => {
   const pending = deferred();
   ContactApi.createContactTicket.mockReturnValue(pending.promise);
-  const onClose = jest.fn();
+  const onClose = vi.fn();
   const { rerender } = render(<ContactUsModal show onClose={onClose} defaultEmail="user@example.test" />);
   submit();
   rerender(<ContactUsModal show={false} onClose={onClose} defaultEmail="user@example.test" />);
@@ -41,6 +42,6 @@ test("closing and reopening a modal ignores the previous submission's late succe
   expect(onClose).not.toHaveBeenCalled();
 });
 
-jest.mock("./ContactApi", () => ({
-  __esModule: true, default: { createContactTicket: jest.fn() },
+vi.mock("./ContactApi", () => ({
+  default: { createContactTicket: vi.fn() },
 }));

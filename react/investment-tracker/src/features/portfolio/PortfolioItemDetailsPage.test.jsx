@@ -1,20 +1,19 @@
+import { beforeEach, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PortfolioApi from "./PortfolioApi";
 import AuthService from "../auth/AuthService";
 import PortfolioItemDetailsPage from "./PortfolioItemDetailsPage";
 
-jest.mock("./PortfolioApi", () => ({
-  __esModule: true,
+vi.mock("./PortfolioApi", () => ({
   default: {
-    getItem: jest.fn(),
-    getItemByName: jest.fn(),
-    deleteItem: jest.fn(),
+    getItem: vi.fn(),
+    getItemByName: vi.fn(),
+    deleteItem: vi.fn(),
   },
 }));
-jest.mock("../auth/AuthService", () => ({
-  __esModule: true,
-  default: { getSessionVersion: jest.fn() },
+vi.mock("../auth/AuthService", () => ({
+  default: { getSessionVersion: vi.fn() },
 }));
 
 const record = {
@@ -28,7 +27,7 @@ const openItem = () => render(
 );
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   AuthService.getSessionVersion.mockReturnValue(1);
   PortfolioApi.getItem.mockResolvedValue(record);
   PortfolioApi.getItemByName.mockResolvedValue({ content: [record], totalPages: 2 });
@@ -50,7 +49,7 @@ test("item details and transaction pagination use the portfolio service payload"
 });
 
 test("an unavailable portfolio item retains the error view without loading its history", async () => {
-  const log = jest.spyOn(console, "error").mockImplementation(() => {});
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     PortfolioApi.getItem.mockRejectedValue({ response: { status: 404 } });
     const { unmount } = openItem();

@@ -1,13 +1,12 @@
-import React from "react";
+import { beforeEach, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ActivateAccountPage from "./ActivateAccountPage";
 import AuthService from "../AuthService";
 import { rememberActivationEmail } from "../authFeedback";
 
-jest.mock("../AuthService", () => ({
-  __esModule: true,
-  default: { confirm: jest.fn(), resendActivation: jest.fn() },
+vi.mock("../AuthService", () => ({
+  default: { confirm: vi.fn(), resendActivation: vi.fn() },
 }));
 
 function openActivation(state) {
@@ -22,7 +21,7 @@ function openActivation(state) {
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   sessionStorage.clear();
 });
 

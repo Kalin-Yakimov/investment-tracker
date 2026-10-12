@@ -1,4 +1,3 @@
-import React from "react";
 import useChartPointTooltip from "../hooks/useChartPointTooltip";
 import { buildPriceChartModel } from "../utils/priceChartModel";
 import { formatCurrency } from "../utils/formatCurrency";

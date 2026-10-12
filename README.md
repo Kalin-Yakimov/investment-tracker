@@ -17,6 +17,10 @@ The repository contains both parts of the application:
 - `docs/STRUCTURAL_REFACTOR.md` — frontend/backend responsibility boundaries, shared charts and verification.
 - [docs/CODEBASE_STRUCTURE.md](docs/CODEBASE_STRUCTURE.md) — source tree, feature ownership, naming and shared code.
 - [docs/BACKEND_REUSE.md](docs/BACKEND_REUSE.md) — shared backend pagination, response/cookie builders and provider-header parsing.
+- [docs/FRONTEND_TOOLING.md](docs/FRONTEND_TOOLING.md) — Vite/Vitest setup, supported Node versions and migration verification.
+- [docs/FINAL_VERIFICATION.md](docs/FINAL_VERIFICATION.md) — integrated checks, GitLab CI and remaining delivery boundaries.
+- [docs/MANUAL_VERIFICATION.md](docs/MANUAL_VERIFICATION.md) — short browser acceptance checklist (Bulgarian).
+- [docs/CATALOGUE_SEARCH.md](docs/CATALOGUE_SEARCH.md) — shared word matching, relevance ranking, caching and verification.
 - `docs/REFACTOR_PLAN.md` — approved refactoring order and current stage status.
 
 ## Main functionality
@@ -39,8 +43,10 @@ The repository contains both parts of the application:
 | Spring Boot | 3.5.16 |
 | Gradle | 8.8 wrapper included in the repository |
 | MySQL | 8.0 or newer |
-| Node.js | 20.x |
+| Node.js | 24 LTS, at least 24.15 |
 | React | 18.3.1 |
+| Vite | 8.3.4 |
+| Vitest | 5.0.3 |
 | Chart.js | 4.5.1 |
 
 Gradle does not have to be installed separately because the project contains the Gradle Wrapper. MySQL Workbench and development IDEs are optional.
@@ -87,12 +93,21 @@ Backend tests from `investment-tracker/`:
 .\gradlew.bat test
 ```
 
-Frontend production build from `react/investment-tracker/`:
+Frontend checks from `react/investment-tracker/`:
 
 ```powershell
 npm ci
+npm run lint
+npm test
 npm run build
+npm run smoke:build
 ```
+
+`npm run verify` runs all four frontend checks. The smoke check serves the built
+files temporarily on loopback; it does not start the backend or use real data.
+GitLab CI runs frontend/backend verification and collects test reports after
+an approved push. It does not deploy the application. See
+[FINAL_VERIFICATION.md](docs/FINAL_VERIFICATION.md) for coverage and limitations.
 
 ## External data
 

@@ -1,8 +1,9 @@
+import { expect, test, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import TablePagination from "./TablePagination";
 
 test("both edges disable navigation and keep the existing page labels", () => {
-  const onPageChange = jest.fn();
+  const onPageChange = vi.fn();
   const { rerender } = render(<TablePagination currentPage={0} totalPages={3} onPageChange={onPageChange} label="Portfolio pagination" />);
   expect(screen.getByRole("navigation", { name: "Portfolio pagination" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
@@ -16,7 +17,7 @@ test("both edges disable navigation and keep the existing page labels", () => {
 });
 
 test("empty results retain the one-page display and disabled arrows", () => {
-  const onPageChange = jest.fn();
+  const onPageChange = vi.fn();
   render(<TablePagination currentPage={0} totalPages={0} onPageChange={onPageChange} />);
   expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();

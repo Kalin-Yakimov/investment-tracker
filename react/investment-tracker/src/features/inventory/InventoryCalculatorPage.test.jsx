@@ -1,3 +1,4 @@
+import { beforeEach, expect, test, vi } from "vitest";
 import InventoryApi from "./InventoryApi";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import deferred from "../../testUtils/deferred";
@@ -9,10 +10,9 @@ import {
   saveInventoryCalculatorSession,
 } from "./InventoryCalculatorSession";
 
-jest.mock("../auth/AuthService", () => ({
-  __esModule: true,
+vi.mock("../auth/AuthService", () => ({
   default: {
-    getCurrentUser: jest.fn(),
+    getCurrentUser: vi.fn(),
 
   },
 }));
@@ -30,7 +30,7 @@ const makeResult = (profileName, steamId64) => ({
 
 beforeEach(() => {
   clearInventoryCalculatorSession();
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   AuthService.getCurrentUser.mockReturnValue({ id: 42 });
 });
 
@@ -70,7 +70,7 @@ test("replaces the old result after a successful search for another profile", as
 test("keeps the previous result when a new search fails", async () => {
   saveInventoryCalculatorSession(42, "profile-a", makeResult("First Profile", "123"));
   InventoryApi.calculateSteamInventory.mockRejectedValue({ error: "Profile unavailable" });
-  const logError = jest.spyOn(console, "error").mockImplementation(() => {});
+  const logError = vi.spyOn(console, "error").mockImplementation(() => {});
 
   try {
     render(<InventoryCalculatorPage />);
@@ -154,6 +154,6 @@ test("duplicate form events cannot start two inventory calculations", async () =
   expect(screen.getByRole("heading", { name: "One Profile" })).toBeInTheDocument();
 });
 
-jest.mock("./InventoryApi", () => ({
-  __esModule: true, default: { calculateSteamInventory: jest.fn() },
+vi.mock("./InventoryApi", () => ({
+  default: { calculateSteamInventory: vi.fn() },
 }));

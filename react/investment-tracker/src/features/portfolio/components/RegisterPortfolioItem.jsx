@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import PortfolioApi from "../PortfolioApi";
 import DatePicker from "react-datepicker";
 import { format } from "date-fns";

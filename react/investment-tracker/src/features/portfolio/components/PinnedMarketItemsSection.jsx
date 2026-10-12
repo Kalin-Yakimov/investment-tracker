@@ -1,5 +1,4 @@
 import PriceTimeframeSelector from "../../../shared/components/PriceTimeframeSelector";
-import React from "react";
 import { Table } from "react-bootstrap";
 import { PriceSparkline } from "../../../shared/components/PriceCharts";
 import { buildDailyPricePoints as getItemPoints, getPeriodChange } from "../../../shared/utils/priceHistory";

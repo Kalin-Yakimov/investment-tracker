@@ -1,4 +1,3 @@
-import React from "react";
 import { formatDate, readableEventType } from "../utils/supportFormat";
 import { Pagination } from "./SupportControls";
 

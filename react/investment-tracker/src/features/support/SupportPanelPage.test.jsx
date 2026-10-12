@@ -1,20 +1,20 @@
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import SupportPanelPage from "./SupportPanelPage";
 import SupportPanelApi from "./SupportPanelApi";
 import AuthService from "../auth/AuthService";
 import deferred from "../../testUtils/deferred";
 
-jest.mock("./SupportPanelApi", () => ({
-  __esModule: true,
+vi.mock("./SupportPanelApi", () => ({
   default: {
-    getOverview: jest.fn(), searchUsers: jest.fn(), getNewTicketCount: jest.fn(),
-    getUserDetails: jest.fn(), getPortfolio: jest.fn(), getTrackedItems: jest.fn(),
-    getSessions: jest.fn(), getActivity: jest.fn(), getAudit: jest.fn(), getTickets: jest.fn(),
-    startCatalogueSync: jest.fn(),
+    getOverview: vi.fn(), searchUsers: vi.fn(), getNewTicketCount: vi.fn(),
+    getUserDetails: vi.fn(), getPortfolio: vi.fn(), getTrackedItems: vi.fn(),
+    getSessions: vi.fn(), getActivity: vi.fn(), getAudit: vi.fn(), getTickets: vi.fn(),
+    startCatalogueSync: vi.fn(),
   },
 }));
-jest.mock("../auth/AuthService", () => ({
-  __esModule: true, default: { getCurrentUser: jest.fn(), hasAuthority: jest.fn(), getSessionVersion: jest.fn() },
+vi.mock("../auth/AuthService", () => ({
+  default: { getCurrentUser: vi.fn(), hasAuthority: vi.fn(), getSessionVersion: vi.fn() },
 }));
 
 const empty = { content: [], number: 0, totalPages: 0, totalElements: 0 };
@@ -34,7 +34,7 @@ async function openPanel() {
   return view;
 }
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   AuthService.getCurrentUser.mockReturnValue({ id: 99 });
   AuthService.getSessionVersion.mockReturnValue(1);
   AuthService.hasAuthority.mockReturnValue(true);
@@ -50,7 +50,7 @@ beforeEach(() => {
   SupportPanelApi.getTickets.mockResolvedValue(empty);
   SupportPanelApi.startCatalogueSync.mockResolvedValue({ message: "Synchronization started" });
 });
-afterEach(() => jest.useRealTimers());
+afterEach(() => vi.useRealTimers());
 
 test("late details for Alice cannot replace the selected Bob support view", async () => {
   const first = deferred();
@@ -104,33 +104,33 @@ test("tab cancellation cannot hide the pending indicator of a newer tab request"
 });
 
 test("job polling never overlaps a pending overview and stops after completion", async () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   const pending = deferred();
   SupportPanelApi.getOverview.mockResolvedValueOnce({ priceUpdate: { status: "RUNNING" } }).mockReturnValueOnce(pending.promise);
   const { unmount } = render(<SupportPanelPage />);
   await act(async () => {});
   expect(SupportPanelApi.getOverview).toHaveBeenCalledTimes(1);
-  await act(async () => jest.advanceTimersByTime(10000));
+  await act(async () => vi.advanceTimersByTime(10000));
   expect(SupportPanelApi.getOverview).toHaveBeenCalledTimes(2);
   await act(async () => pending.resolve({ priceUpdate: { status: "SUCCEEDED" } }));
-  await act(async () => jest.advanceTimersByTime(10000));
+  await act(async () => vi.advanceTimersByTime(10000));
   expect(SupportPanelApi.getOverview).toHaveBeenCalledTimes(2);
   unmount();
-  expect(jest.getTimerCount()).toBe(0);
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 test("ticket-count polling does not overlap and is canceled on unmount", async () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   const pending = deferred();
   SupportPanelApi.getNewTicketCount.mockResolvedValueOnce(0).mockReturnValueOnce(pending.promise);
   const { unmount } = render(<SupportPanelPage />);
   await act(async () => {});
-  await act(async () => jest.advanceTimersByTime(90000));
+  await act(async () => vi.advanceTimersByTime(90000));
   expect(SupportPanelApi.getNewTicketCount).toHaveBeenCalledTimes(2);
   const signal = SupportPanelApi.getNewTicketCount.mock.calls[1][0].signal;
   unmount();
   expect(signal.aborted).toBe(true);
-  expect(jest.getTimerCount()).toBe(0);
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 test("newer contact-request filters cannot be overwritten by old results", async () => {
@@ -151,25 +151,25 @@ test("newer contact-request filters cannot be overwritten by old results", async
 });
 
 test("an older notice timer cannot dismiss the replacement notice early", async () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   SupportPanelApi.getAudit.mockRejectedValue(new Error("First notice"));
   render(<SupportPanelPage />);
   await act(async () => {});
   fireEvent.click(screen.getByRole("button", { name: "Audit log" }));
   await act(async () => {});
   expect(screen.getByText("First notice")).toBeInTheDocument();
-  act(() => jest.advanceTimersByTime(4000));
+  act(() => vi.advanceTimersByTime(4000));
   SupportPanelApi.getOverview.mockRejectedValueOnce(new Error("Second notice"));
   fireEvent.click(screen.getByRole("button", { name: "Overview" }));
   await act(async () => {});
-  act(() => jest.advanceTimersByTime(1000));
+  act(() => vi.advanceTimersByTime(1000));
   expect(screen.getByText("Second notice")).toBeInTheDocument();
-  act(() => jest.advanceTimersByTime(4000));
+  act(() => vi.advanceTimersByTime(4000));
   expect(screen.queryByText("Second notice")).not.toBeInTheDocument();
 });
 
 test("starting a maintenance job replaces a pre-action overview request", async () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   const stale = deferred();
   SupportPanelApi.getOverview
     .mockResolvedValueOnce({ priceUpdate: { status: "RUNNING" } })
@@ -177,7 +177,7 @@ test("starting a maintenance job replaces a pre-action overview request", async 
     .mockResolvedValue({ priceUpdate: { status: "RUNNING" }, catalogueSync: { status: "RUNNING" } });
   render(<SupportPanelPage />);
   await act(async () => {});
-  await act(async () => jest.advanceTimersByTime(2000));
+  await act(async () => vi.advanceTimersByTime(2000));
   const signal = SupportPanelApi.getOverview.mock.calls[1][0].signal;
   fireEvent.click(screen.getByRole("button", { name: "Catalogue & prices" }));
   fireEvent.change(screen.getByLabelText("Reason for manual operation"), { target: { value: "Refresh the catalogue" } });

@@ -1,6 +1,7 @@
+import { afterEach, expect, test, vi } from "vitest";
 import { authErrorMessage, pendingActivationEmail, rememberActivationEmail } from "./authFeedback";
 
-afterEach(() => { jest.restoreAllMocks(); sessionStorage.clear(); });
+afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
 test("displays API validation and error responses safely", () => {
   expect(authErrorMessage({ error: "Wait before retrying" }, "Fallback")).toBe("Wait before retrying");
@@ -18,8 +19,8 @@ test("stores only the pending email and removes it when finished", () => {
 });
 
 test("unavailable session storage does not break authentication forms", () => {
-  jest.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("unavailable"); });
-  jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("unavailable"); });
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("unavailable"); });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("unavailable"); });
   expect(pendingActivationEmail()).toBe("");
   expect(() => rememberActivationEmail("person@example.com")).not.toThrow();
 });

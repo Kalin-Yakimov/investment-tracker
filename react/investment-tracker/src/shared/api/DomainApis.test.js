@@ -1,3 +1,4 @@
+import { beforeEach, expect, test } from "vitest";
 import axios from "axios";
 import { apiClient } from "./ApiClient";
 import AuthService from "../../features/auth/AuthService";
@@ -8,7 +9,6 @@ import CatalogueApi from "../../features/catalogue/CatalogueApi";
 import ContactApi from "../../features/contact/ContactApi";
 import SupportPanelApi from "../../features/support/SupportPanelApi";
 
-jest.mock("axios", () => jest.requireActual("../../../node_modules/axios/dist/node/axios.cjs"));
 let requests;
 beforeEach(() => {
   requests = [];

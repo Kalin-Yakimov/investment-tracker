@@ -1,4 +1,3 @@
-import React from "react";
 
 export default function TrackerDeleteModal({ deleteConfirmId, setDeleteConfirmId, handleDeleteItem, pending }) {
   return (

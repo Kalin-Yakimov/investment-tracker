@@ -1,4 +1,3 @@
-import React from "react";
 import { DetailedPriceChart } from "../../../shared/components/PriceCharts";
 import { formatCurrency } from "../../../shared/utils/formatCurrency";
 import { formatPriceDateTime as formatDateDDMMYYYY } from "../../../shared/utils/priceHistory";

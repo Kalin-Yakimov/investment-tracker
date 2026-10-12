@@ -6,7 +6,6 @@ import com.kalin.investment_tracker.exception.ExternalServiceException;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -150,69 +149,10 @@ public class CsItemService {
     }
 
     @org.springframework.cache.annotation.Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.CS_ITEMS_SEARCH_CACHE,
-            key = "#query.toLowerCase().trim()", condition = "#query != null && !#query.isBlank()")
+            key = "T(com.kalin.investment_tracker.catalogue.CatalogueSearchQuery).parse(#query).phrase()",
+            condition = "#query != null && !#query.isBlank()")
     public List<CsItem> searchItems(String query) {
-        if (query == null || query.trim().isEmpty()) {
-            return List.of();
-        }
-
-        String cleanQuery = query.trim().toLowerCase();
-        List<CsItem> candidates = csItemRepository.findAll(
-                CsItemSpecification.containsTextInName(cleanQuery),
-                PageRequest.of(0, 40)
-        ).getContent();
-
-        String[] queryWords = cleanQuery.split("\\s+");
-        String firstWord = queryWords[0];
-
-        return candidates.stream()
-                .sorted((a, b) -> {
-                    int scoreA = calculateRelevanceScore(a.getName().toLowerCase(), cleanQuery, queryWords, firstWord);
-                    int scoreB = calculateRelevanceScore(b.getName().toLowerCase(), cleanQuery, queryWords, firstWord);
-                    return Integer.compare(scoreB, scoreA);
-                })
-                .limit(8)
-                .toList();
-    }
-
-    private int calculateRelevanceScore(String name, String fullQuery, String[] queryWords, String firstWord) {
-        int score = 0;
-
-        // 1. Name starts with full query
-        if (name.startsWith(fullQuery)) {
-            score += 300;
-        }
-
-        // 2. Name starts with first word (e.g. "ak" at start of "ak-47 | redline")
-        if (name.startsWith(firstWord)) {
-            score += 200;
-        } else if (name.startsWith("stattrak™ " + firstWord) || name.startsWith("★ " + firstWord)) {
-            score += 150;
-        }
-
-        // 3. Contains full exact query string
-        if (name.contains(fullQuery)) {
-            score += 100;
-        }
-
-        // 4. Matches all query tokens in order
-        boolean allWordsMatch = true;
-        int lastIdx = -1;
-        for (String word : queryWords) {
-            int idx = name.indexOf(word);
-            if (idx == -1 || idx < lastIdx) {
-                allWordsMatch = false;
-                break;
-            }
-            lastIdx = idx;
-        }
-        if (allWordsMatch) {
-            score += 80;
-        }
-
-        // 5. Prefer shorter overall item names to avoid verbose sticker descriptions taking priority over main skins
-        score -= name.length();
-
-        return score;
+        CatalogueSearchQuery search = CatalogueSearchQuery.parse(query);
+        return search.tokens().isEmpty() ? List.of() : csItemRepository.searchCatalogue(search, 8);
     }
 }

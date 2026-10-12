@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import AuthService from "../AuthService";
 import useRequestScope from "../../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../../shared/utils/RequestScope";

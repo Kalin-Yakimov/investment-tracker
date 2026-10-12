@@ -1,4 +1,3 @@
-import React from "react";
 
 export function StatusBadge({ children, tone = "neutral" }) {
   return <span className={`admin-status-badge ${tone}`}>{children}</span>;

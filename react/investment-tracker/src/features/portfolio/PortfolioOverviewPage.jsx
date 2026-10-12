@@ -1,6 +1,6 @@
 import PortfolioApi from "./PortfolioApi";
 import PriceTrackerApi from "../price-tracker/PriceTrackerApi";
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import usePriceHistories from "../../shared/hooks/usePriceHistories";

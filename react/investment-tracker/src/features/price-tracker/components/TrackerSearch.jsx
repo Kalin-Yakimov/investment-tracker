@@ -1,4 +1,3 @@
-import React from "react";
 
 export default function TrackerSearch({ query, setQuery, setSelectedSearchItem, searchResults, handleSelectSearchItem }) {
   return (

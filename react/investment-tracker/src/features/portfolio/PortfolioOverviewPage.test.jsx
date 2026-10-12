@@ -1,3 +1,4 @@
+import { beforeEach, expect, test, vi } from "vitest";
 import PortfolioApi from "./PortfolioApi";
 import PriceTrackerApi from "../price-tracker/PriceTrackerApi";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -6,20 +7,22 @@ import PortfolioOverviewPage from "./PortfolioOverviewPage";
 import AuthService from "../auth/AuthService";
 import deferred from "../../testUtils/deferred";
 
-jest.mock("../auth/AuthService", () => ({
-  __esModule: true, default: {
-    getSessionVersion: jest.fn(),
+vi.mock("../auth/AuthService", () => ({
+  default: {
+    getSessionVersion: vi.fn(),
 
   },
 }));
-jest.mock("react-chartjs-2", () => ({ Line: () => null }));
+vi.mock("react-chartjs-2", () => ({ Line: () => null }));
 const page = (name) => ({ content: [{ id: 1, itemName: name, itemStatus: "BOUGHT", quantity: 1, price: 2 }], totalPages: 2 });
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   AuthService.getSessionVersion.mockReturnValue(1);
   PriceTrackerApi.getTrackedItems.mockResolvedValue([]);
   PortfolioApi.getPortfolioSummary.mockResolvedValue({ count: 1, totalInvestmentValue: 2 });
-  global.IntersectionObserver = jest.fn(() => ({ observe: jest.fn(), disconnect: jest.fn() }));
+  globalThis.IntersectionObserver = vi.fn(function () {
+    return { observe: vi.fn(), disconnect: vi.fn() };
+  });
 });
 
 test("new filter wins even when the initial request finishes later", async () => {
@@ -47,13 +50,13 @@ test("pagination does not reload unrelated pinned items or portfolio totals", as
   expect(PriceTrackerApi.getTrackedItems).toHaveBeenCalledTimes(1);
   expect(PortfolioApi.getPortfolioSummary).toHaveBeenCalledTimes(1);
   unmount();
-  expect(global.IntersectionObserver.mock.results[0].value.disconnect).toHaveBeenCalled();
+  expect(globalThis.IntersectionObserver.mock.results[0].value.disconnect).toHaveBeenCalled();
 });
 
-jest.mock("./PortfolioApi", () => ({
-  __esModule: true, default: { getUserItems: jest.fn(), getPortfolioSummary: jest.fn() },
+vi.mock("./PortfolioApi", () => ({
+  default: { getUserItems: vi.fn(), getPortfolioSummary: vi.fn() },
 }));
 
-jest.mock("../price-tracker/PriceTrackerApi", () => ({
-  __esModule: true, default: { getTrackedItems: jest.fn() },
+vi.mock("../price-tracker/PriceTrackerApi", () => ({
+  default: { getTrackedItems: vi.fn() },
 }));

@@ -1,5 +1,5 @@
 import TablePagination from "../../shared/components/TablePagination";
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import PortfolioApi from "./PortfolioApi";
 import useRequestScope from "../../shared/hooks/useRequestScope";
