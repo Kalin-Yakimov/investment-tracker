@@ -3,6 +3,7 @@ package com.kalin.investment_tracker.admin;
 import com.kalin.investment_tracker.support.SupportTicketDtos;
 import com.kalin.investment_tracker.support.SupportTicketService;
 import com.kalin.investment_tracker.support.SupportTicketStatus;
+import com.kalin.investment_tracker.shared.web.PageResponse;
 import com.kalin.investment_tracker.user.User;
 import jakarta.mail.MessagingException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,12 +48,12 @@ public class AdminSupportController {
     }
 
     @GetMapping("/users")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.UserSummary>> users(
+    public ResponseEntity<PageResponse<AdminDtos.UserSummary>> users(
             @RequestParam(defaultValue = "") @Size(max = ApiRequestLimits.ITEM_TEXT_LENGTH) String query,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(service.searchUsers(query, page, size)));
+        return ResponseEntity.ok(PageResponse.from(service.searchUsers(query, page, size)));
     }
 
     @GetMapping("/users/{userId}")
@@ -66,7 +67,7 @@ public class AdminSupportController {
     }
 
     @GetMapping("/users/{userId}/portfolio")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.PortfolioItem>> portfolio(
+    public ResponseEntity<PageResponse<AdminDtos.PortfolioItem>> portfolio(
             @AuthenticationPrincipal User actor,
             @PathVariable @Positive Integer userId,
             @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
@@ -74,7 +75,7 @@ public class AdminSupportController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size,
             HttpServletRequest request
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(
+        return ResponseEntity.ok(PageResponse.from(
                 service.getPortfolio(actor, userId, reason, page, size, request.getRemoteAddr())
         ));
     }
@@ -100,7 +101,7 @@ public class AdminSupportController {
     }
 
     @GetMapping("/users/{userId}/activity")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.Activity>> userActivity(
+    public ResponseEntity<PageResponse<AdminDtos.Activity>> userActivity(
             @AuthenticationPrincipal User actor,
             @PathVariable @Positive Integer userId,
             @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
@@ -108,27 +109,27 @@ public class AdminSupportController {
             @RequestParam(defaultValue = "30") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size,
             HttpServletRequest request
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(
+        return ResponseEntity.ok(PageResponse.from(
                 service.getUserActivity(actor, userId, reason, page, size, request.getRemoteAddr())
         ));
     }
 
     @GetMapping("/audit")
     @PreAuthorize("hasAuthority('ADMIN')")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.Activity>> audit(
+    public ResponseEntity<PageResponse<AdminDtos.Activity>> audit(
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "50") @Min(1) @Max(ApiRequestLimits.PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(service.getAdministrativeAudit(page, size)));
+        return ResponseEntity.ok(PageResponse.from(service.getAdministrativeAudit(page, size)));
     }
 
     @GetMapping("/tickets")
-    public ResponseEntity<AdminDtos.PageResponse<SupportTicketDtos.TicketResponse>> tickets(
+    public ResponseEntity<PageResponse<SupportTicketDtos.TicketResponse>> tickets(
             @RequestParam(required = false) SupportTicketStatus status,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(
+        return ResponseEntity.ok(PageResponse.from(
                 supportTicketService.findAll(status, page, size)
         ));
     }

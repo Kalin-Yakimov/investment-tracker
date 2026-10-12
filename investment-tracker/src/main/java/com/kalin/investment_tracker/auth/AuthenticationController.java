@@ -156,12 +156,7 @@ public class AuthenticationController {
             boolean remembered,
             LocalDateTime expiresAt
     ) {
-        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie
-                .from(authSessionProperties.getRefreshCookieName(), value)
-                .httpOnly(true)
-                .secure(authSessionProperties.isCookieSecure())
-                .sameSite(authSessionProperties.getCookieSameSite())
-                .path("/api/v1/auth");
+        ResponseCookie.ResponseCookieBuilder builder = refreshCookieBuilder(value);
 
         if (remembered) {
             long maxAgeSeconds = Math.max(0, Duration.between(LocalDateTime.now(), expiresAt).toSeconds());
@@ -171,14 +166,17 @@ public class AuthenticationController {
     }
 
     private ResponseCookie clearRefreshCookie() {
+        return refreshCookieBuilder("").maxAge(Duration.ZERO).build();
+    }
+
+    // Issuing and clearing must always use the same cookie name, path and flags.
+    private ResponseCookie.ResponseCookieBuilder refreshCookieBuilder(String value) {
         return ResponseCookie
-                .from(authSessionProperties.getRefreshCookieName(), "")
+                .from(authSessionProperties.getRefreshCookieName(), value)
                 .httpOnly(true)
                 .secure(authSessionProperties.isCookieSecure())
                 .sameSite(authSessionProperties.getCookieSameSite())
-                .path("/api/v1/auth")
-                .maxAge(Duration.ZERO)
-                .build();
+                .path("/api/v1/auth");
     }
 
     private String readRefreshToken(HttpServletRequest request) {

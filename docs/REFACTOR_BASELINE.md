@@ -139,3 +139,31 @@ builds succeeded. Database schema/data, external API routes, price-publication
 policy and UI styling are unchanged. Manual review and publication/merging
 remain separate steps. The remaining sequence is saved in
 [REFACTOR_PLAN.md](REFACTOR_PLAN.md).
+
+## Separately approved organization and DRY follow-up
+
+After the initial Stage 7 commit, feature folders and clearer class/file names
+were approved, together with a review of duplicated code. Backend checks:
+299 tests in 35 suites, 298 passed and the same 1 skipped. Frontend checks:
+89 tests in 21 suites, all passed. Both application builds succeeded.
+The skipped measurement is now named `PriceFeedCacheMeasurement`; its manual,
+external-network nature is unchanged. Earlier names and totals above describe
+the corresponding historical checkpoints.
+
+Shared table navigation, price-period selection, response/error handling and
+portfolio request mapping were extracted without changing API routes, JSON
+fields, entity/table names, daily-history rules, cache settings or UI styles.
+See [CODEBASE_STRUCTURE.md](CODEBASE_STRUCTURE.md) for the current organization.
+This follow-up does not start Stage 8. Commit/push were separately approved on
+2026-10-12; merge remains a separate user decision.
+
+## Separately approved backend reuse follow-up (2026-10-12)
+
+The additional backend DRY review is recorded in
+[BACKEND_REUSE.md](BACKEND_REUSE.md). Backend checks: 342 tests in 39 suites,
+341 passed and the same 1 skipped, no failures/errors; `test bootJar` succeeded.
+43 new regression cases cover shared pagination, cookie settings, error-response
+contracts, support-access recording, trusted catalogue metadata and Retry-After
+parsing. Frontend/resource/entity hashes are unchanged from this follow-up's
+starting point. Earlier checkpoints remain historical. Publication/merge and
+Stage 8 are still separate user decisions.

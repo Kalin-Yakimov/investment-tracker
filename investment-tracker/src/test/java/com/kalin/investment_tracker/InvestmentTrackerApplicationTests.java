@@ -1,6 +1,6 @@
 package com.kalin.investment_tracker;
 
-import com.kalin.investment_tracker.service.CsItemService;
+import com.kalin.investment_tracker.catalogue.CsItemService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -134,7 +134,8 @@ or real MySQL databases were used/changed by this stage's verification.
 
 - Backend: **281 tests in 33 suites; 280 passed, 1 skipped, 0 failures/errors**.
   This adds 91 tests to the Stage 4 checkpoint. The same skipped
-  SteamPriceCacheMeasurement remains an explicitly manual network measurement.
+  SteamPriceCacheMeasurement (renamed PriceFeedCacheMeasurement in the Stage 7
+  organization follow-up) remains an explicitly manual network measurement.
 - Backend application archive (bootJar): successfully built.
 - Frontend: **19 tests in 5 suites, all passed**.
 - Frontend production build: successful.

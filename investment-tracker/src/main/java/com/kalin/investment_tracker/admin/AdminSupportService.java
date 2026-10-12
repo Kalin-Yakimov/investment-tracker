@@ -1,18 +1,18 @@
 package com.kalin.investment_tracker.admin;
 
 import com.kalin.investment_tracker.auth.AuthenticationService;
-import com.kalin.investment_tracker.exeption.ExternalServiceException;
-import com.kalin.investment_tracker.model.Item;
-import com.kalin.investment_tracker.repository.CsItemRepository;
-import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
+import com.kalin.investment_tracker.exception.ExternalServiceException;
+import com.kalin.investment_tracker.item.Item;
+import com.kalin.investment_tracker.catalogue.CsItemRepository;
+import com.kalin.investment_tracker.item.ItemRepository;
+import com.kalin.investment_tracker.pricing.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.role.Role;
 import com.kalin.investment_tracker.role.RoleNames;
 import com.kalin.investment_tracker.role.RoleRepository;
 import com.kalin.investment_tracker.security.AuthSessionRepository;
 import com.kalin.investment_tracker.security.AuthSessionService;
-import com.kalin.investment_tracker.service.CsItemService;
-import com.kalin.investment_tracker.service.SteamPriceService;
+import com.kalin.investment_tracker.catalogue.CsItemService;
+import com.kalin.investment_tracker.pricing.PriceFeedService;
 import com.kalin.investment_tracker.user.User;
 import com.kalin.investment_tracker.user.UserRepository;
 import jakarta.mail.MessagingException;
@@ -60,7 +60,7 @@ public class AdminSupportService {
     private final ActivityEventService activityEventService;
     private final AuthenticationService authenticationService;
     private final CsItemService csItemService;
-    private final SteamPriceService steamPriceService;
+    private final PriceFeedService priceFeedService;
     private final SystemJobStatusService jobStatusService;
     private final TaskExecutor applicationTaskExecutor;
 
@@ -107,14 +107,7 @@ public class AdminSupportService {
             String ipAddress
     ) {
         User target = requireAccessibleTarget(actor, userId);
-        activityEventService.recordSupportAccess(
-                actor,
-                target,
-                "SUPPORT_VIEW_OPENED",
-                reason,
-                "Opened the read-only support view",
-                ipAddress
-        );
+        recordSupportViewAccess(actor, target, reason, ipAddress);
         return new AdminDtos.UserDetails(
                 toUserSummary(target),
                 authSessionRepository.findLastActivityForUser(target.getId())
@@ -370,7 +363,7 @@ public class AdminSupportService {
     public AdminDtos.ActionResult startPriceUpdate(User actor, String reason, String ipAddress) {
         submitSystemJob(actor, reason, ipAddress, SystemJobStatusService.PRICE_UPDATE,
                 "PRICE_UPDATE_STARTED", "Started a manual update for all tracked prices", () -> {
-            int count = steamPriceService.forceUpdateAllTrackedItems();
+            int count = priceFeedService.forceUpdateAllTrackedItems();
             return count > 0 ? "Stored " + count + " daily price observations"
                     : "No newer price observations were available from CSGOTrader";
         });

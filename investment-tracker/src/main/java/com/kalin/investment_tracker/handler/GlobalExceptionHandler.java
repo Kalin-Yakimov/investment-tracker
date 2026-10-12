@@ -1,9 +1,9 @@
 package com.kalin.investment_tracker.handler;
 
-import com.kalin.investment_tracker.exeption.ExpiredTokenException;
-import com.kalin.investment_tracker.exeption.ExternalServiceException;
-import com.kalin.investment_tracker.exeption.ItemNotFoundException;
-import com.kalin.investment_tracker.exeption.PrivateSteamInventoryException;
+import com.kalin.investment_tracker.exception.ExpiredTokenException;
+import com.kalin.investment_tracker.exception.ExternalServiceException;
+import com.kalin.investment_tracker.exception.ItemNotFoundException;
+import com.kalin.investment_tracker.exception.PrivateSteamInventoryException;
 import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import com.kalin.investment_tracker.auth.AuthRateLimitException;
 import org.springframework.http.HttpHeaders;
@@ -40,15 +40,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({ServletRequestBindingException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ExceptionResponse> handleInvalidParameters(Exception exception) {
         // Do not echo rejected query, path or header values.
-        return ResponseEntity.badRequest()
-                .body(ExceptionResponse.builder().error("Invalid or missing request parameter.").build());
+        return errorResponse(BAD_REQUEST, "Invalid or missing request parameter.");
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ExceptionResponse> handleMethodValidation(HandlerMethodValidationException exception) {
         if (exception.isForReturnValue()) {
-            return ResponseEntity.internalServerError()
-                    .body(ExceptionResponse.builder().error("An unexpected server error occurred").build());
+            return errorResponse(INTERNAL_SERVER_ERROR, "An unexpected server error occurred");
         }
         Set<String> errors = new HashSet<>();
         exception.getParameterValidationResults().forEach(result -> result.getResolvableErrors().forEach(error ->
@@ -58,14 +56,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ExceptionResponse> handleUnsupportedContentType(HttpMediaTypeNotSupportedException exception) {
-        return ResponseEntity.status(UNSUPPORTED_MEDIA_TYPE)
-                .body(ExceptionResponse.builder().error("Unsupported request content type.").build());
+        return errorResponse(UNSUPPORTED_MEDIA_TYPE, "Unsupported request content type.");
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ExceptionResponse> handleMissingResource(NoResourceFoundException exception) {
-        return ResponseEntity.status(NOT_FOUND)
-                .body(ExceptionResponse.builder().error("The requested resource was not found.").build());
+        return errorResponse(NOT_FOUND, "The requested resource was not found.");
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
@@ -80,8 +76,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ExceptionResponse> handleUnreadableBody(HttpMessageNotReadableException exception) {
         // Parsing exceptions may contain fragments of passwords or codes.
-        return ResponseEntity.badRequest()
-                .body(ExceptionResponse.builder().error("Invalid request body.").build());
+        return errorResponse(BAD_REQUEST, "Invalid request body.");
     }
 
     @ExceptionHandler(AuthRateLimitException.class)
@@ -93,69 +88,32 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ExceptionResponse> handleConflict(DataIntegrityViolationException exception) {
-        return ResponseEntity.status(CONFLICT)
-                .body(ExceptionResponse.builder().error("The change conflicts with an existing record.").build());
+        return errorResponse(CONFLICT, "The change conflicts with an existing record.");
     }
 
     @ExceptionHandler(LockedException.class)
     public ResponseEntity<ExceptionResponse> handleException(LockedException exp) {
-        return ResponseEntity
-                .status(UNAUTHORIZED)
-                .body(
-                        ExceptionResponse.builder()
-                                .businessErrorCode(ACCOUNT_LOCKED.getCode())
-                                .businessErrorDescription(ACCOUNT_LOCKED.getDescription())
-                                .error(exp.getMessage())
-                                .build()
-                );
+        return authenticationError(ACCOUNT_LOCKED, exp.getMessage());
     }
 
     @ExceptionHandler(DisabledException.class)
     public ResponseEntity<ExceptionResponse> handleException(DisabledException exp) {
-        return ResponseEntity
-                .status(UNAUTHORIZED)
-                .body(
-                        ExceptionResponse.builder()
-                                .businessErrorCode(ACCOUNT_DISABLED.getCode())
-                                .businessErrorDescription(ACCOUNT_DISABLED.getDescription())
-                                .error(exp.getMessage())
-                                .build()
-                );
+        return authenticationError(ACCOUNT_DISABLED, exp.getMessage());
     }
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ExceptionResponse> handleException(BadCredentialsException exp) {
-        return ResponseEntity
-                .status(UNAUTHORIZED)
-                .body(
-                        ExceptionResponse.builder()
-                                .businessErrorCode(BAD_CREDENTIALS.getCode())
-                                .businessErrorDescription(BAD_CREDENTIALS.getDescription())
-                                .error(BAD_CREDENTIALS.getDescription())
-                                .build()
-                );
+        return authenticationError(BAD_CREDENTIALS, BAD_CREDENTIALS.getDescription());
     }
 
     @ExceptionHandler(ExpiredTokenException.class)
     public ResponseEntity<ExceptionResponse> handleException(ExpiredTokenException exp) {
-        return ResponseEntity
-                .status(UNAUTHORIZED)
-                .body(
-                        ExceptionResponse.builder()
-                                .businessErrorCode(EXPIRED_TOKEN.getCode())
-                                .businessErrorDescription(EXPIRED_TOKEN.getDescription())
-                                .error(EXPIRED_TOKEN.getDescription())
-                                .build()
-                );
+        return authenticationError(EXPIRED_TOKEN, EXPIRED_TOKEN.getDescription());
     }
 
     @ExceptionHandler(ItemNotFoundException.class)
     public ResponseEntity<ExceptionResponse> handleException(ItemNotFoundException exp) {
-        return ResponseEntity
-                .status(NOT_FOUND)
-                .body(ExceptionResponse.builder()
-                        .error("The requested item was not found")
-                        .build());
+        return errorResponse(NOT_FOUND, "The requested item was not found");
     }
 
     @ExceptionHandler(PrivateSteamInventoryException.class)
@@ -170,9 +128,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ExternalServiceException.class)
     public ResponseEntity<ExceptionResponse> handleException(ExternalServiceException exp) {
-        return ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ExceptionResponse.builder().error(exp.getMessage()).build());
+        return errorResponse(SERVICE_UNAVAILABLE, exp.getMessage());
     }
 
     @ExceptionHandler(InvalidRefreshTokenException.class)
@@ -190,27 +146,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MessagingException.class)
     public ResponseEntity<ExceptionResponse> handleException(MessagingException exp) {
         log.error("Email delivery failed", exp);
-        return ResponseEntity
-                .status(INTERNAL_SERVER_ERROR)
-                .body(
-                        ExceptionResponse.builder()
-                                .error("The email could not be sent. Please try again later.")
-                                .build()
-                );
+        return errorResponse(INTERNAL_SERVER_ERROR, "The email could not be sent. Please try again later.");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ExceptionResponse> handleException(IllegalArgumentException exp) {
-        return ResponseEntity
-                .status(BAD_REQUEST)
-                .body(ExceptionResponse.builder().error(exp.getMessage()).build());
+        return errorResponse(BAD_REQUEST, exp.getMessage());
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ExceptionResponse> handleException(AccessDeniedException exp) {
-        return ResponseEntity
-                .status(FORBIDDEN)
-                .body(ExceptionResponse.builder().error("Access denied").build());
+        return errorResponse(FORBIDDEN, "Access denied");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -241,5 +187,21 @@ public class GlobalExceptionHandler {
                                 .error("An unexpected server error occurred")
                                 .build()
                 );
+    }
+
+    private ResponseEntity<ExceptionResponse> errorResponse(HttpStatus status, String message) {
+        return ResponseEntity.status(status)
+                .body(ExceptionResponse.builder().error(message).build());
+    }
+
+    // Authentication handlers retain HTTP 401 even when the business-code enum
+    // specifies another status; this is the existing public API contract.
+    private ResponseEntity<ExceptionResponse> authenticationError(BusinessErrorCodes code, String message) {
+        return ResponseEntity.status(UNAUTHORIZED)
+                .body(ExceptionResponse.builder()
+                        .businessErrorCode(code.getCode())
+                        .businessErrorDescription(code.getDescription())
+                        .error(message)
+                        .build());
     }
 }

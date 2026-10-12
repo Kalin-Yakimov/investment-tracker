@@ -5,6 +5,8 @@ import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import com.kalin.investment_tracker.handler.GlobalExceptionHandler;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.http.MediaType;
@@ -87,6 +89,38 @@ class AuthenticationControllerTest {
         assertEquals(401, response.getStatusCode().value());
         assertNotNull(cookie);
         assertTrue(cookie.contains("Max-Age=0"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true,true,Strict", "false,false,Lax", "true,false,Strict", "false,true,Lax"})
+    void issuingAndClearingCookieShareAllConfiguredAttributes(boolean remembered, boolean secure,
+                                                            String sameSite) {
+        AuthSessionProperties properties = new AuthSessionProperties();
+        properties.setRefreshCookieName("project_session");
+        properties.setCookieSecure(secure);
+        properties.setCookieSameSite(sameSite);
+        var configuredController = new AuthenticationController(authenticationService, properties, limits);
+        var body = AuthenticationResponse.builder().token("access-token").expiresInSeconds(1800).build();
+        when(authenticationService.refresh(null)).thenReturn(new AuthenticationResult(
+                body, "refresh-token", remembered, LocalDateTime.now().plusDays(60)));
+
+        String issued = configuredController.refresh(mock(HttpServletRequest.class))
+                .getHeaders().getFirst("Set-Cookie");
+        String cleared = configuredController.logout(mock(Principal.class))
+                .getHeaders().getFirst("Set-Cookie");
+
+        assertNotNull(issued);
+        assertNotNull(cleared);
+        assertTrue(issued.startsWith("project_session=refresh-token;"));
+        assertTrue(cleared.startsWith("project_session=;"));
+        for (String cookie : new String[]{issued, cleared}) {
+            assertTrue(cookie.contains("Path=/api/v1/auth"));
+            assertTrue(cookie.contains("HttpOnly"));
+            assertEquals(secure, cookie.contains("Secure"));
+            assertTrue(cookie.contains("SameSite=" + sameSite));
+        }
+        assertEquals(remembered, issued.contains("Max-Age="));
+        assertTrue(cleared.contains("Max-Age=0"));
     }
 
     @Test

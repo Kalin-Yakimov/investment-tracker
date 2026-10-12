@@ -15,6 +15,8 @@ The repository contains both parts of the application:
 - `docs/INVENTORY_CALCULATOR.md` — bounded Steam inventory loading, quantity/price semantics and verification.
 - `docs/FRONTEND_REQUEST_LIFECYCLE.md` — request cancellation, stale-response guards, polling and frontend verification.
 - `docs/STRUCTURAL_REFACTOR.md` — frontend/backend responsibility boundaries, shared charts and verification.
+- [docs/CODEBASE_STRUCTURE.md](docs/CODEBASE_STRUCTURE.md) — source tree, feature ownership, naming and shared code.
+- [docs/BACKEND_REUSE.md](docs/BACKEND_REUSE.md) — shared backend pagination, response/cookie builders and provider-header parsing.
 - `docs/REFACTOR_PLAN.md` — approved refactoring order and current stage status.
 
 ## Main functionality

@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import RegistrationPage from "./auth/RegistrationPage";
+import RegistrationPage from "./features/auth/pages/RegistrationPage";
 
-jest.mock("./service/UserService", () => ({
+jest.mock("./features/auth/AuthService", () => ({
   __esModule: true,
   default: {
     register: jest.fn(),

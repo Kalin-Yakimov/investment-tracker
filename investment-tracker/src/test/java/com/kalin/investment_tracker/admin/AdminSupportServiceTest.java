@@ -1,17 +1,17 @@
 package com.kalin.investment_tracker.admin;
 
 import com.kalin.investment_tracker.auth.AuthenticationService;
-import com.kalin.investment_tracker.exeption.ExternalServiceException;
-import com.kalin.investment_tracker.repository.CsItemRepository;
-import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
+import com.kalin.investment_tracker.exception.ExternalServiceException;
+import com.kalin.investment_tracker.catalogue.CsItemRepository;
+import com.kalin.investment_tracker.item.ItemRepository;
+import com.kalin.investment_tracker.pricing.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.role.Role;
 import com.kalin.investment_tracker.role.RoleNames;
 import com.kalin.investment_tracker.role.RoleRepository;
 import com.kalin.investment_tracker.security.AuthSessionRepository;
 import com.kalin.investment_tracker.security.AuthSessionService;
-import com.kalin.investment_tracker.service.CsItemService;
-import com.kalin.investment_tracker.service.SteamPriceService;
+import com.kalin.investment_tracker.catalogue.CsItemService;
+import com.kalin.investment_tracker.pricing.PriceFeedService;
 import com.kalin.investment_tracker.user.User;
 import com.kalin.investment_tracker.user.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -53,7 +53,7 @@ class AdminSupportServiceTest {
     @Mock private ActivityEventService activityEventService;
     @Mock private AuthenticationService authenticationService;
     @Mock private CsItemService csItemService;
-    @Mock private SteamPriceService steamPriceService;
+    @Mock private PriceFeedService priceFeedService;
     @Mock private SystemJobStatusService jobStatusService;
     @Mock private TaskExecutor applicationTaskExecutor;
 
@@ -107,6 +107,20 @@ class AdminSupportServiceTest {
                 "Changed support access and revoked existing sessions",
                 "127.0.0.1"
         );
+    }
+
+    @Test
+    void openingUserDetailsUsesTheSameSupportAccessAuditAsOtherReadOnlyViews() {
+        User administrator = user(1, RoleNames.ADMIN);
+        User target = user(2, RoleNames.USER);
+        when(userRepository.findById(2)).thenReturn(Optional.of(target));
+
+        var result = service.getUserDetails(administrator, 2, "Investigating a report", "127.0.0.1");
+
+        assertEquals(2, result.user().id());
+        verify(activityEventService).recordSupportAccess(administrator, target,
+                "SUPPORT_VIEW_OPENED", "Investigating a report",
+                "Opened the read-only support view", "127.0.0.1");
     }
 
     @Test
@@ -177,7 +191,7 @@ class AdminSupportServiceTest {
         doThrow(new TaskRejectedException("queue full")).when(applicationTaskExecutor).execute(any());
         assertThrows(ExternalServiceException.class, () -> service.startPriceUpdate(user(1, RoleNames.ADMIN), "reason", "127.0.0.1"));
         verify(jobStatusService).failed(SystemJobStatusService.PRICE_UPDATE, "The background task queue is full; try again later");
-        verify(steamPriceService, never()).forceUpdateAllTrackedItems();
+        verify(priceFeedService, never()).forceUpdateAllTrackedItems();
     }
 
     @Test

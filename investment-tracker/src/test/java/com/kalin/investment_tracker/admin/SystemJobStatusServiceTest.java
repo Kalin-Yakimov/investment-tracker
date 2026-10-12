@@ -1,9 +1,9 @@
 package com.kalin.investment_tracker.admin;
 
-import com.kalin.investment_tracker.config.ScheduledPriceUpdateConfig;
-import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
-import com.kalin.investment_tracker.repository.PriceHistoryRepository;
-import com.kalin.investment_tracker.service.SteamPriceService;
+import com.kalin.investment_tracker.pricing.PriceUpdateScheduler;
+import com.kalin.investment_tracker.pricing.MarketPriceSnapshotRepository;
+import com.kalin.investment_tracker.pricing.PriceHistoryRepository;
+import com.kalin.investment_tracker.pricing.PriceFeedService;
 import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.concurrent.*;
@@ -38,15 +38,15 @@ class SystemJobStatusServiceTest {
         assertNull(status.get(job).completedAt()); assertEquals("FAILED", status.get(job).status());
     }
     @Test void schedulerDoesNotOverlapManualPriceJob() {
-        var status = new SystemJobStatusService(); var prices = mock(SteamPriceService.class);
+        var status = new SystemJobStatusService(); var prices = mock(PriceFeedService.class);
         status.tryStart(SystemJobStatusService.PRICE_UPDATE, "manual");
-        var scheduler = new ScheduledPriceUpdateConfig(prices, mock(PriceHistoryRepository.class), mock(MarketPriceSnapshotRepository.class), status);
+        var scheduler = new PriceUpdateScheduler(prices, mock(PriceHistoryRepository.class), mock(MarketPriceSnapshotRepository.class), status);
         scheduler.scheduledPriceUpdate(); verifyNoInteractions(prices);
     }
     @Test void schedulerFailureIsReportedWithoutFalseCompletion() {
-        var status = new SystemJobStatusService(); var prices = mock(SteamPriceService.class);
+        var status = new SystemJobStatusService(); var prices = mock(PriceFeedService.class);
         when(prices.updateAllTrackedItems()).thenThrow(new IllegalStateException("confidential response"));
-        var scheduler = new ScheduledPriceUpdateConfig(prices, mock(PriceHistoryRepository.class), mock(MarketPriceSnapshotRepository.class), status);
+        var scheduler = new PriceUpdateScheduler(prices, mock(PriceHistoryRepository.class), mock(MarketPriceSnapshotRepository.class), status);
         scheduler.scheduledPriceUpdate();
         var result = status.get(SystemJobStatusService.PRICE_UPDATE);
         assertEquals("FAILED", result.status()); assertNull(result.completedAt());

@@ -1,10 +1,9 @@
 package com.kalin.investment_tracker.admin;
 
-import com.kalin.investment_tracker.model.ItemStatus;
+import com.kalin.investment_tracker.item.ItemStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import org.springframework.data.domain.Page;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -15,28 +14,6 @@ import java.util.List;
 public final class AdminDtos {
 
     private AdminDtos() {
-    }
-
-    public record PageResponse<T>(
-            List<T> content,
-            int number,
-            int size,
-            long totalElements,
-            int totalPages,
-            boolean first,
-            boolean last
-    ) {
-        public static <T> PageResponse<T> from(Page<T> page) {
-            return new PageResponse<>(
-                    page.getContent(),
-                    page.getNumber(),
-                    page.getSize(),
-                    page.getTotalElements(),
-                    page.getTotalPages(),
-                    page.isFirst(),
-                    page.isLast()
-            );
-        }
     }
 
     public record Overview(

@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
-import "../styles/Navbar.css";
+import "./Navbar.css";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import UserService from "../service/UserService";
-import useRequestScope from "../hooks/useRequestScope";
-import ChangePasswordModal from "../auth/ChangePasswordModal";
-import ChangeUsernameModal from "../auth/ChangeUsernameModal";
-import ContactUsModal from "../auth/ContactUsModal";
+import AuthService from "../features/auth/AuthService";
+import useRequestScope from "../shared/hooks/useRequestScope";
+import ChangePasswordModal from "../features/auth/components/ChangePasswordModal";
+import ChangeUsernameModal from "../features/auth/components/ChangeUsernameModal";
+import ContactUsModal from "../features/contact/ContactUsModal";
 
 export default function Navbar() {
   const scope = useRequestScope({ guardSession: false });
@@ -21,9 +21,9 @@ export default function Navbar() {
   const previousOwner = useRef(null);
 
   useEffect(() => {
-    const updateLoginState = () => setIsLoggedIn(UserService.isAuthenticated());
+    const updateLoginState = () => setIsLoggedIn(AuthService.isAuthenticated());
     updateLoginState();
-    return UserService.subscribe(updateLoginState);
+    return AuthService.subscribe(updateLoginState);
   }, [location, refreshUser]);
 
   useEffect(() => {
@@ -44,17 +44,17 @@ export default function Navbar() {
     setShowChangeUserModal(false);
     setShowContactModal(false);
     try {
-      await UserService.logout();
+      await AuthService.logout();
     } catch (error) {
       console.error("Sign out failed; local credentials have been cleared:", error);
     } finally {
-      if (request.isCurrent() && !UserService.isAuthenticated()) navigate("/login");
+      if (request.isCurrent() && !AuthService.isAuthenticated()) navigate("/login");
       request.finish();
     }
   };
 
   const getUserInfo = () => {
-    return UserService.getCurrentUser() || {
+    return AuthService.getCurrentUser() || {
       name: "User Account",
       email: "user@account.com",
       authorities: [],
@@ -140,7 +140,7 @@ export default function Navbar() {
                       </div>
 
                       <div className="d-flex flex-column gap-1">
-                        {UserService.hasAnyAuthority("ADMIN", "SUPPORT") && (
+                        {AuthService.hasAnyAuthority("ADMIN", "SUPPORT") && (
                           <button
                             className="popover-item-btn d-flex align-items-center gap-2 btn text-start w-100 py-2 px-3 text-white rounded-2"
                             onClick={() => {

@@ -70,7 +70,7 @@ public class AuthenticationService {
         else rateLimits.checkLogin(email);
         var auth = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        AuthRateLimitService.normalizeEmail(request.getEmail()),
+                        email,
                         request.getPassword()
                 )
         );

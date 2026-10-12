@@ -8,37 +8,39 @@ the daily price-history policy. Commit, push and merge require separate approval
 
 ## Frontend boundaries
 
-- `pages/AdminPanel.jsx` composes the Support Panel sections. Its existing
-  requests, polling and actions are owned by `hooks/useSupportPanel.js`;
-  presentation is under `components/support/`.
-- `pages/PriceTracker.jsx` composes search, the tracked-items table and the
-  detail/delete dialogs. `hooks/usePriceTracker.js` owns their existing state,
-  request lifecycle and actions. Views are under `components/prices/`.
-- `pages/Home.jsx` retains portfolio and pinned-item loading. The portfolio
-  history and pinned-item views are under `components/portfolio/`.
-- `useRequestScope`, `useCatalogueSearch` and `usePriceHistories` remain shared
-  request-lifecycle helpers. Reads still support cancellation; writes are not
-  repeated just because the user leaves their page. Session/version guards are
-  retained.
+- `features/support/SupportPanelPage.jsx` composes the Support Panel sections.
+  Its existing requests, polling and actions are owned by
+  `features/support/hooks/useSupportPanel.js`; presentation is under
+  `features/support/components/`.
+- `features/price-tracker/PriceTrackerPage.jsx` composes search, the tracked-items
+  table and the detail/delete dialogs. The feature's `hooks/usePriceTracker.js`
+  owns their existing state, request lifecycle and actions. Views are under
+  `features/price-tracker/components/`.
+- `features/portfolio/PortfolioOverviewPage.jsx` retains portfolio and pinned-item
+  loading. History and pinned-item views are under `features/portfolio/components/`.
+- `shared/hooks/useRequestScope` and `usePriceHistories` remain shared
+  request-lifecycle helpers. `features/catalogue/useCatalogueSearch` is reused
+  by catalogue consumers. Reads still support cancellation; writes are not
+  repeated just because the user leaves their page. Session/version guards remain.
 
 ### One application HTTP client
 
-`service/ApiClient.js` owns an isolated Axios instance. It attaches credentials
+`shared/api/ApiClient.js` owns an isolated Axios instance. It attaches credentials
 only to the configured backend origin, manages the existing session/version
-checks and delegates token refresh to `UserService`. The authentication service
+checks and delegates token refresh to `AuthService`. The authentication service
 installs these interceptors when imported by the application bootstrap. Domain
 services do not manage tokens themselves, and global Axios defaults/interceptors
 are no longer changed.
 
 The domain API modules are:
 
-- `PortfolioService`: portfolio records, totals and transaction history;
-- `PriceService`: tracked items, bookmarks and price history;
-- `CatalogueService`: catalogue search;
-- `InventoryService`: public inventory calculation;
-- `ContactService`: contact requests;
-- `AdminService`: restricted Support Panel requests;
-- `UserService`: authentication and the current browser session only.
+- `PortfolioApi`: portfolio records, totals and transaction history;
+- `PriceTrackerApi`: tracked items, bookmarks and price history;
+- `CatalogueApi`: catalogue search;
+- `InventoryApi`: public inventory calculation;
+- `ContactApi`: contact requests;
+- `SupportPanelApi`: restricted Support Panel requests;
+- `AuthService`: authentication and the current browser session only.
 
 API routes, request fields, pagination/filter parameters and support-reason
 headers are retained. Item forms still receive Axios error objects; existing
@@ -47,9 +49,9 @@ Cancellation is not converted into a successful result or a generic error.
 
 ### Shared price charts
 
-`components/prices/PriceCharts.jsx` supplies compact and detailed charts.
-`utils/priceChartModel.js` builds their shared dataset and options;
-`utils/priceHistory.js` retains UTC publication-day filtering, chronological
+`shared/components/PriceCharts.jsx` supplies compact and detailed charts.
+`shared/utils/priceChartModel.js` builds their shared dataset and options;
+`shared/utils/priceHistory.js` retains UTC publication-day filtering, chronological
 chart points, newest-first log sorting and the shared percentage-change function.
 `useChartPointTooltip` is used by the PriceTracker and pinned-item charts.
 
@@ -67,7 +69,7 @@ keep their separate formatter; they are not treated as UTC feed publications.
   previously received/stored-rate fallback. No invented fixed rate is used.
 - `PriceRefreshCooldown`: existing retry-delay policy, including provider
   `Retry-After` headers for HTTP 429/503.
-- `SteamPriceService`: refresh coordination, locking, publication-date guards,
+- `PriceFeedService`: refresh coordination, locking, publication-date guards,
   cold-start revalidation, immutable in-memory snapshots and retry deadlines.
 - `MarketPricePersistenceService`: existing transactional price/history writes.
   The coordinator still publishes the new cache only after persistence succeeds.
@@ -93,10 +95,11 @@ The four used Caffeine caches remain: `csItemsSearch`, `portfolioSummary`,
 and transaction-aware invalidation behavior are unchanged. The separate price
 snapshot/check interval is also unchanged.
 
-Unused frontend aliases and helpers were removed from the mixed `UserService`
-after verifying that they had no callers. Backend API endpoints were not removed.
+Unused frontend aliases and helpers were removed from the former mixed
+`UserService` (now `AuthService`) after verifying that they had no callers.
+Backend API endpoints were not removed.
 
-## Verification
+## Initial Stage 7 verification checkpoint
 
 - Backend: 295 tests in 34 suites, 294 passed, 1 skipped, 0 failures/errors.
 - Frontend: 84 tests in 18 suites, all passed.
@@ -107,8 +110,9 @@ after verifying that they had no callers. Backend API endpoints were not removed
   tooltip placement/cleanup, item details/history pagination, pure DTO conversion
   and cache-only display reads.
 
-The skipped backend test remains `SteamPriceCacheMeasurement`, an explicitly
-manual external-network measurement. It is not counted as passed. Backend tests
+At this checkpoint the skipped backend test was `SteamPriceCacheMeasurement`
+(now `PriceFeedCacheMeasurement`), an explicitly manual external-network
+measurement. It is not counted as passed. Backend tests
 use test databases/mocked external services; this stage does not connect to or
 modify the real MySQL database.
 
@@ -122,3 +126,41 @@ inventory navigation and Support Panel workflows, and do not establish load
 capacity or production readiness. A running backend must be restarted to load
 the refactored classes; no application restart or live data refresh was performed
 as part of this stage.
+
+## Separately approved organization and DRY follow-up
+
+After the initial Stage 7 commit/push, source organization and naming changes
+were approved along with a bounded duplication review. Frontend code is grouped
+under `features/` and `shared/`; backend packages group catalogue, portfolio,
+tracking, pricing and inventory responsibilities. The misspelled `exeption`
+package is now `exception`. API routes, JSON fields and JPA entity names/mappings
+are unchanged. See [CODEBASE_STRUCTURE.md](CODEBASE_STRUCTURE.md) for the tree,
+rename guide and feature boundaries.
+
+The follow-up extracts shared table pagination, 7D/1M/3M controls and API
+response/error handling. Portfolio add/edit share field mapping; detail,
+update and delete share a portfolio-only ownership lookup. Authentication
+guards and different portfolio/tracked-item rules are not generalized away.
+
+The empty `Footer.jsx`, unreferenced source `logo.svg` and unused `PriceHistoryDto`
+were removed. The live legacy `PriceHistory` model and repository are retained.
+No application configuration, dependency versions, cache settings, data policy
+or UI styles were changed by the follow-up.
+
+Follow-up verification:
+
+- Backend: 299 tests in 35 suites, 298 passed, 1 skipped, 0 failures/errors.
+- Frontend: 89 tests in 21 suites, all passed.
+- Backend `test bootJar` and frontend production build: successful.
+- Four new backend add/edit mapping cases and five frontend pagination, period
+  selection and response/error cases were added; existing tests were retained.
+- No real database connection, external provider request or application restart
+  was performed. Existing tooling warnings and Stage 8 remain deferred.
+
+Commit/push for the organization and backend DRY follow-ups were approved on
+2026-10-12. Manual workflow review and merge remain separate steps.
+
+The additional backend-only review of 2026-10-12 and its latest results
+(342 tests, 341 passed, 1 skipped; backend build successful) are documented in
+[BACKEND_REUSE.md](BACKEND_REUSE.md). The initial checkpoint totals above are
+retained as historical results.

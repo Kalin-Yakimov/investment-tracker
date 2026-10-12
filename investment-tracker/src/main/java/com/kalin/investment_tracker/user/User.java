@@ -1,6 +1,6 @@
 package com.kalin.investment_tracker.user;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.kalin.investment_tracker.model.Item;
+import com.kalin.investment_tracker.item.Item;
 import com.kalin.investment_tracker.role.Role;
 import jakarta.persistence.*;
 import lombok.*;

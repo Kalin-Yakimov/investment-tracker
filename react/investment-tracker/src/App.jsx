@@ -2,21 +2,21 @@ import { useState, useEffect } from "react";
 import { Routes, Route, useParams } from "react-router-dom";
 import "../node_modules/bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./layout/Navbar";
-import Home from "./pages/Home";
-import PriceTracker from "./pages/PriceTracker";
-import InventoryCalculatorPage from "./pages/InventoryCalculatorPage";
-import AddItem from "./item/AddItem";
-import EditItem from "./item/EditItem";
-import ViewItem from "./item/ViewItem";
-import NotFoundPage from "./pages/NotFoundPage";
-import LoginPage from "./auth/LoginPage";
-import RegistrationPage from "./auth/RegistrationPage";
-import ActivateAccountPage from "./auth/ActivateAccountPage";
-import ForgotPasswordPage from "./auth/ForgotPasswordPage";
-import ProtectedRoute from "./service/ProtectedRoutes";
-import UserService from "./service/UserService";
-import AdminRoute from "./service/AdminRoute";
-import AdminPanel from "./pages/AdminPanel";
+import PortfolioOverviewPage from "./features/portfolio/PortfolioOverviewPage";
+import PriceTrackerPage from "./features/price-tracker/PriceTrackerPage";
+import InventoryCalculatorPage from "./features/inventory/InventoryCalculatorPage";
+import RegisterPortfolioItem from "./features/portfolio/components/RegisterPortfolioItem";
+import EditPortfolioItemPage from "./features/portfolio/EditPortfolioItemPage";
+import PortfolioItemDetailsPage from "./features/portfolio/PortfolioItemDetailsPage";
+import NotFoundPage from "./shared/NotFoundPage";
+import LoginPage from "./features/auth/pages/LoginPage";
+import RegistrationPage from "./features/auth/pages/RegistrationPage";
+import ActivateAccountPage from "./features/auth/pages/ActivateAccountPage";
+import ForgotPasswordPage from "./features/auth/pages/ForgotPasswordPage";
+import ProtectedRoute from "./features/auth/ProtectedRoute";
+import AuthService from "./features/auth/AuthService";
+import SupportPanelRoute from "./features/auth/SupportPanelRoute";
+import SupportPanelPage from "./features/support/SupportPanelPage";
 import { CookiesProvider } from "react-cookie";
 
 function ItemRoute({ component: Component }) {
@@ -31,10 +31,10 @@ function App() {
 
   useEffect(() => {
     let mounted = true;
-    const unsubscribe = UserService.subscribe(() => {
+    const unsubscribe = AuthService.subscribe(() => {
       setAuthVersion((version) => version + 1);
     });
-    UserService.initializeSession().finally(() => { if (mounted) setAuthReady(true); });
+    AuthService.initializeSession().finally(() => { if (mounted) setAuthReady(true); });
     return () => { mounted = false; unsubscribe(); };
   }, []);
 
@@ -51,7 +51,7 @@ function App() {
       </div>
     );
   }
-  const owner = UserService.getCurrentUser()?.id;
+  const owner = AuthService.getCurrentUser()?.id;
 
   return (
     <CookiesProvider>
@@ -76,8 +76,8 @@ function App() {
             element={
               <ProtectedRoute key={owner}>
                 <>
-                  <AddItem onItemAdded={handleItemAdded} />
-                  <Home key={refresh} />
+                  <RegisterPortfolioItem onItemAdded={handleItemAdded} />
+                  <PortfolioOverviewPage key={refresh} />
                 </>
               </ProtectedRoute>
             }
@@ -87,7 +87,7 @@ function App() {
             path="/editItem/:id"
             element={
               <ProtectedRoute key={owner}>
-                <ItemRoute component={EditItem} />
+                <ItemRoute component={EditPortfolioItemPage} />
               </ProtectedRoute>
             }
           />
@@ -96,7 +96,7 @@ function App() {
             path="/viewItem/:id"
             element={
               <ProtectedRoute key={owner}>
-                <ItemRoute component={ViewItem} />
+                <ItemRoute component={PortfolioItemDetailsPage} />
               </ProtectedRoute>
             }
           />
@@ -105,7 +105,7 @@ function App() {
             path="/tracker"
             element={
               <ProtectedRoute key={owner}>
-                <PriceTracker />
+                <PriceTrackerPage />
               </ProtectedRoute>
             }
           />
@@ -122,9 +122,9 @@ function App() {
             exact
             path="/admin"
             element={
-              <AdminRoute key={owner}>
-                <AdminPanel />
-              </AdminRoute>
+              <SupportPanelRoute key={owner}>
+                <SupportPanelPage />
+              </SupportPanelRoute>
             }
           />
           <Route path="*" element={<NotFoundPage />} />
