@@ -309,6 +309,103 @@ class ApplicationWorkflowIntegrationTest {
     }
 
     @Test
+    void expectedPasswordErrorsReturn400WithoutEndingTheExistingSession() throws Exception {
+        User user = account("USER");
+        Login active = login(user);
+        mvc.perform(authorized(body(patch("/api/v1/auth/change-password"), Map.of(
+                "currentPassword", "incorrect-password", "newPassword", "next-password",
+                "confirmationPassword", "next-password")), active))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.businessErrorCode").value(300));
+        mvc.perform(authorized(body(patch("/api/v1/auth/change-password"), Map.of(
+                "currentPassword", PASSWORD, "newPassword", "next-password",
+                "confirmationPassword", "different-password")), active))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.businessErrorCode").value(301));
+        assertTrue(passwords.matches(PASSWORD, users.findById(user.getId()).orElseThrow().getPassword()));
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), active)).andExpect(status().isOk());
+        mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(active.refresh())).andExpect(status().isOk());
+    }
+
+    @Test
+    void legacySixCharacterPasswordCanSignInAndBeReplacedWithExactlyTenCharacters() throws Exception {
+        User user = account("USER");
+        user.setPassword(passwords.encode("legacy"));
+        users.saveAndFlush(user);
+        Login active = login(user, "legacy");
+        String next = "new-pass10";
+        assertEquals(10, next.length());
+        mvc.perform(authorized(body(patch("/api/v1/auth/change-password"), Map.of(
+                "currentPassword", "legacy", "newPassword", next, "confirmationPassword", next)), active))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Max-Age=0")));
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), active)).andExpect(status().isUnauthorized());
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), login(user, next))).andExpect(status().isOk());
+    }
+
+    @Test
+    void registrationRejectsWeakOrOverlongPasswordsBeforePersistingAnAccount() throws Exception {
+        String name = "policy-" + UUID.randomUUID().toString().substring(0, 12);
+        String address = name + "@example.invalid";
+        for (String invalid : List.of("a".repeat(9), "a".repeat(73), "я".repeat(37), "😀".repeat(9))) {
+            mvc.perform(body(post("/api/v1/auth/register"), Map.of("username", name, "email", address, "password", invalid)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors").isNotEmpty());
+            assertTrue(users.findByEmail(address).isEmpty());
+        }
+        mvc.perform(body(post("/api/v1/auth/register"), Map.of("username", name, "email", address, "password", "new-pass10")))
+                .andExpect(status().isAccepted());
+        assertTrue(passwords.matches("new-pass10", users.findByEmail(address).orElseThrow().getPassword()));
+    }
+
+    @Test
+    void resettingPasswordKeepsTheCodeUsableAfterValidationFailureAndRevokesBothDevicesOnSuccess() throws Exception {
+        User user = account("USER");
+        Login first = login(user);
+        Login second = login(user);
+        mvc.perform(body(post("/api/v1/auth/forgot-password"), Map.of("email", user.getEmail())))
+                .andExpect(status().isOk());
+        var code = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(email).sendEmail(eq(user.getEmail()), anyString(), eq(EmailTemplateName.RESET_PASSWORD),
+                anyString(), code.capture(), anyString());
+        mvc.perform(body(post("/api/v1/auth/reset-password"), Map.of(
+                "email", user.getEmail(), "code", code.getValue(), "newPassword", "too-short")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), first)).andExpect(status().isOk());
+        String next = "new-pass10";
+        mvc.perform(body(post("/api/v1/auth/reset-password"), Map.of(
+                "email", user.getEmail(), "code", code.getValue(), "newPassword", next)))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Max-Age=0")));
+        for (Login device : List.of(first, second)) {
+            mvc.perform(authorized(get("/api/v1/auth/validate-token"), device)).andExpect(status().isUnauthorized());
+            mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(device.refresh())).andExpect(status().isUnauthorized());
+        }
+        mvc.perform(body(post("/api/v1/auth/reset-password"), Map.of(
+                "email", user.getEmail(), "code", code.getValue(), "newPassword", "other-password")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), login(user, next))).andExpect(status().isOk());
+    }
+
+    @Test
+    void unchangedUnicodeUsernameProducesAUsableTokenAndConflictsReturn409() throws Exception {
+        User owner = account("USER");
+        String displayName = "Калин_" + UUID.randomUUID().toString().substring(0, 8);
+        owner.setUsername(displayName);
+        users.saveAndFlush(owner);
+        Login active = login(owner);
+        MvcResult changed = mvc.perform(authorized(body(patch("/api/v1/auth/change-username"),
+                        Map.of("newUsername", displayName)), active))
+                .andExpect(status().isOk()).andReturn();
+        String token = response(changed).get("token").asString();
+        var payload = json.readTree(java.util.Base64.getUrlDecoder().decode(token.split("\\.")[1]));
+        assertEquals(displayName, payload.get("fullName").asString());
+        assertEquals(owner.getEmail(), payload.get("email").asString());
+        mvc.perform(get("/api/v1/auth/validate-token").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
+        User other = account("USER");
+        mvc.perform(authorized(body(patch("/api/v1/auth/change-username"), Map.of("newUsername", other.fullName())), active))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.businessErrorCode").value(305));
+        assertEquals(displayName, users.findById(owner.getId()).orElseThrow().fullName());
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), active)).andExpect(status().isOk());
+    }
+
+    @Test
     void supportMaintenanceJobsExposeCompletionThroughTheOverview() throws Exception {
         Login support = login(account("SUPPORT"));
         when(priceFeed.forceUpdateAllTrackedItems()).thenReturn(3);

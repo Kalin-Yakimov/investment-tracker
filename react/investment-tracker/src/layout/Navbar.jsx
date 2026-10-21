@@ -45,8 +45,9 @@ export default function Navbar() {
     setShowContactModal(false);
     try {
       await AuthService.logout();
-    } catch (error) {
-      console.error("Sign out failed; local credentials have been cleared:", error);
+    } catch {
+      // Axios failures can carry Authorization headers; never log the request object.
+      console.error("Sign out failed; server-side revocation could not be confirmed.");
     } finally {
       if (request.isCurrent() && !AuthService.isAuthenticated()) navigate("/login");
       request.finish();

@@ -6,6 +6,7 @@ import com.kalin.investment_tracker.exception.ItemNotFoundException;
 import com.kalin.investment_tracker.exception.PrivateSteamInventoryException;
 import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import com.kalin.investment_tracker.auth.AuthRateLimitException;
+import com.kalin.investment_tracker.auth.AccountActionException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -89,6 +90,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ExceptionResponse> handleConflict(DataIntegrityViolationException exception) {
         return errorResponse(CONFLICT, "The change conflicts with an existing record.");
+    }
+
+    @ExceptionHandler(AccountActionException.class)
+    public ResponseEntity<ExceptionResponse> handleAccountAction(AccountActionException exception) {
+        BusinessErrorCodes code = exception.getErrorCode();
+        return ResponseEntity.status(code.getHttpStatus())
+                .body(ExceptionResponse.builder()
+                        .businessErrorCode(code.getCode())
+                        .businessErrorDescription(code.getDescription())
+                        .error(code.getDescription()).build());
     }
 
     @ExceptionHandler(LockedException.class)

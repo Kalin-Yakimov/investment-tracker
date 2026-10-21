@@ -42,3 +42,12 @@ test("a pending previous submission cannot report success in a reopened modal", 
   expect(onSuccess).not.toHaveBeenCalled();
   expect(onClose).not.toHaveBeenCalled();
 });
+
+test("a server-side username conflict displays the public API error", async () => {
+  AuthService.changeUsername.mockRejectedValue({ error: "Username is already taken by another account", businessErrorCode: 305 });
+  render(<ChangeUsernameModal show currentUsername="Original" onClose={vi.fn()} />);
+  save();
+  await act(async () => {});
+  expect(screen.getByText("Username is already taken by another account")).toBeInTheDocument();
+  expect(screen.queryByText("Username updated successfully!")).not.toBeInTheDocument();
+});

@@ -41,10 +41,14 @@ Details and verification checkpoint: `RUNTIME_UPGRADE.md`.
 
 ## Stage 3 — reliable authentication lifecycle (P0-1 / P0-2 / P1-5 / P1-8 / P1-9)
 
-Only continue after approval. Reliable logout and serialized security changes
-already exist as earlier P0 groundwork on this branch; they are not to be
-discarded. Complete the remaining password policy, appropriate API errors and
-frontend JWT decoding work, checking the audit findings against current code.
+Approved and implemented locally on 2026-10-21, after the separately published
+Stages 1–2 checkpoint. The new minimum is 10 characters by the owner's explicit
+choice. Existing shorter credentials still work for sign-in. Shared password
+validation, expected 400/409 account errors, ownership-based username checks
+and Base64URL/UTF-8 JWT metadata decoding are covered by regression tests.
+Earlier P0 logout and serialized-security safeguards are retained and retested.
+See [AUTH_LIFECYCLE_STAGE3.md](AUTH_LIFECYCLE_STAGE3.md) for details and boundaries.
+The owner approved commit and publication of Stage 3 on 2026-10-21.
 
 Files: auth/security services/repositories, frontend AuthService/profile forms.
 Acceptance: reset/revoke cannot restore old sessions, real MySQL overlapping
@@ -90,6 +94,7 @@ Browser E2E, MySQL regression, security checks, responsive/keyboard review and
 current documentation against a specific release commit. All applicable gates
 must pass before public release. Unit tests alone are not production readiness.
 
-Stages 3–8 are not completed or authorized by approval of Stages 1–2. Commit and
-publication of the current changes were separately approved on 2026-10-21;
-merging branches and public deployment remain unauthorized.
+The owner approved starting Stage 4 on 2026-10-21 after publishing Stage 3.
+Stages 5–8 remain unimplemented and require approval. Commit and publication of
+Stages 1–3 were approved separately from implementation of Stage 4.
+Merging branches and public deployment remain unauthorized.

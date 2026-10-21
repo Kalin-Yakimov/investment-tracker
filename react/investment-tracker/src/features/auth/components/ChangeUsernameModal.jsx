@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import AuthService from "../AuthService";
 import useModalRequestScope from "../../../shared/hooks/useModalRequestScope";
 import { isRequestCanceled } from "../../../shared/utils/RequestScope";
+import { authErrorMessage } from "../authFeedback";
 
 function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
   const scope = useModalRequestScope(show);
@@ -45,12 +46,7 @@ function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
 
     } catch (err) {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
-      console.error("Change username error:", err);
-      setError(
-        typeof err === "string"
-          ? err
-          : err.message || "Failed to update username. Please try another username."
-      );
+      setError(authErrorMessage(err, "Failed to update username. Please try another username."));
     } finally {
       request.finish();
     }
@@ -80,11 +76,12 @@ function ChangeUsernameModal({ show, onClose, currentUsername, onSuccess }) {
 
         <form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
           <div>
-            <label className="form-label text-white small fw-semibold">
+            <label htmlFor="change-new-username" className="form-label text-white small fw-semibold">
               New Username
             </label>
             <input
               type="text"
+              id="change-new-username"
               className="form-control"
               placeholder="e.g. Kalin99"
               value={newUsername}

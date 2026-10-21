@@ -177,3 +177,18 @@ test("canceling while a shared refresh is pending prevents that read from being 
   expect(pending).toHaveLength(2);
   expect(AuthService.getToken()).toBe(fresh);
 });
+
+test.each(["password", "username"])("an expected %s validation/conflict error keeps the existing session", async (action) => {
+  const current = token(42);
+  AuthService.saveToken(current);
+  const result = (action === "password" ? AuthService.changePassword({}) : AuthService.changeUsername("Taken"))
+    .catch((error) => error);
+  await flush();
+  const status = action === "password" ? 400 : 409;
+  const data = { error: action === "password" ? "Current password is incorrect" : "Username is already taken by another account" };
+  pending[0].reject(new axios.AxiosError("Expected input error", "ERR_BAD_REQUEST", pending[0].config, {},
+    { status, data, config: pending[0].config }));
+  expect(await result).toEqual(data);
+  expect(AuthService.getToken()).toBe(current);
+  expect(pending).toHaveLength(1);
+});

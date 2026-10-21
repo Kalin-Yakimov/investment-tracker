@@ -1,5 +1,10 @@
 # Authentication security
 
+The current password policy and client-side JWT metadata handling are documented
+in [AUTH_LIFECYCLE_STAGE3.md](AUTH_LIFECYCLE_STAGE3.md). The owner selected a
+10-character minimum for new passwords; existing shorter credentials remain
+usable for sign-in. Access/remembered-refresh lifetimes are unchanged.
+
 ## Production-readiness follow-up: P0-1 and P0-2
 
 - Sign out still revokes **all** of the account's active sessions. It now works

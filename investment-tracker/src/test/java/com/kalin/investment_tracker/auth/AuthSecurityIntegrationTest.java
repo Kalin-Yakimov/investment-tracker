@@ -151,6 +151,24 @@ class AuthSecurityIntegrationTest {
     }
 
     @Test
+    void invalidDirectResetDoesNotConsumeTheValidCodeOrChangePasswordAndSessions() {
+        User user = user(true);
+        Token token = token(user, "123456", TokenType.PASSWORD_RESET, LocalDateTime.now().plusMinutes(15), false);
+        var session = sessions.createSession(user, true, "Test", "127.0.0.1").session();
+        ResetPasswordRequest request = reset(user, "123456");
+        request.setNewPassword("too-short");
+        assertThrows(IllegalArgumentException.class, () -> auth.resetPassword(request));
+        assertNull(tokens.findById(token.getId()).orElseThrow().getValidatedAt());
+        assertNull(sessionRepository.findById(session.getId()).orElseThrow().getRevokedAt());
+        assertEquals("old-password-hash", users.findById(user.getId()).orElseThrow().getPassword());
+        request.setNewPassword("new-pass10");
+        auth.resetPassword(request);
+        assertEquals("encoded:new-pass10", users.findById(user.getId()).orElseThrow().getPassword());
+        assertNotNull(tokens.findById(token.getId()).orElseThrow().getValidatedAt());
+        assertNotNull(sessionRepository.findById(session.getId()).orElseThrow().getRevokedAt());
+    }
+
+    @Test
     void failureRollsBackPasswordCodeAndSessionRevocationTogether() {
         User user = user(true);
         Token token = token(user, "123456", TokenType.PASSWORD_RESET, LocalDateTime.now().plusMinutes(15), false);
@@ -246,7 +264,7 @@ class AuthSecurityIntegrationTest {
         doThrow(new IllegalStateException("test audit failure")).when(activity)
                 .recordUserAction(any(), eq("ACCOUNT_REGISTERED"), anyString(), isNull());
         assertThrows(IllegalStateException.class, () -> auth.register(RegistrationRequest.builder()
-                .username(username).email(email).password("password").build()));
+                .username(username).email(email).password("registration-test-password").build()));
         assertTrue(users.findByEmailIgnoreCase(email).isEmpty());
         verifyNoInteractions(mail);
     }

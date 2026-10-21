@@ -9,6 +9,7 @@ The repository contains both parts of the application:
 - `LOCAL_SETUP.md` — complete setup, backup and recovery instructions.
 - `docs/DATABASE_MIGRATIONS.md` — real MySQL migrations, isolated tests and safe existing-database adoption.
 - `docs/AUTH_SECURITY.md` — verification-code safeguards, limits and deployment boundaries.
+- [docs/AUTH_LIFECYCLE_STAGE3.md](docs/AUTH_LIFECYCLE_STAGE3.md) — current password rules, account errors, Unicode JWT metadata and Stage 3 verification.
 - `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
 - `docs/EXTERNAL_SERVICES.md` — external HTTP limits, atomic price refreshes and background-job policies.
 - `docs/DAILY_PRICE_HISTORY.md` — daily price observations, stale-publication protection and existing-database adoption.

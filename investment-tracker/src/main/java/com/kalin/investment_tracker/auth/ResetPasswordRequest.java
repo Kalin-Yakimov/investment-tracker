@@ -25,8 +25,6 @@ public class ResetPasswordRequest {
     @Pattern(regexp = "[0-9]{6}", message = "Enter a 6-digit code")
     private String code;
 
-    @NotEmpty(message = "Password is mandatory")
-    @NotBlank(message = "Password is mandatory")
-    @Size(min = 6, message = "Password should be at least 6 characters long")
+    @ValidPassword
     private String newPassword;
 }

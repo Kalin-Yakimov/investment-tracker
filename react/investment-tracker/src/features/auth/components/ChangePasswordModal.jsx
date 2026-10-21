@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import AuthService from "../AuthService";
 import useModalRequestScope from "../../../shared/hooks/useModalRequestScope";
 import { isRequestCanceled } from "../../../shared/utils/RequestScope";
+import { authErrorMessage } from "../authFeedback";
+import { passwordError, PASSWORD_HINT } from "../passwordPolicy";
 import "../styles/ChangePasswordModal.css";
 
 const EyeOpenIcon = () => (
@@ -52,8 +54,9 @@ function ChangePasswordModal({ show, onClose }) {
     setError("");
     setSuccess("");
 
-    if (newPassword.length < 6) {
-      setError("New password must be at least 6 characters long.");
+    const invalidPassword = passwordError(newPassword) || passwordError(currentPassword, { newPassword: false });
+    if (invalidPassword) {
+      setError(invalidPassword);
       return;
     }
 
@@ -78,12 +81,7 @@ function ChangePasswordModal({ show, onClose }) {
 
     } catch (err) {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
-      console.error("Change password error:", err);
-      setError(
-        typeof err === "string"
-          ? err
-          : err.message || "Failed to update password. Please check your current password."
-      );
+      setError(authErrorMessage(err, "Failed to update password. Please check your current password."));
     } finally {
       request.finish();
     }
@@ -113,12 +111,13 @@ function ChangePasswordModal({ show, onClose }) {
 
         <form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
           <div>
-            <label className="form-label text-white small fw-semibold">
+            <label htmlFor="change-current-password" className="form-label text-white small fw-semibold">
               Current Password
             </label>
             <div className="input-group password-input-group">
               <input
                 type={showCurrent ? "text" : "password"}
+                id="change-current-password"
                 className="form-control"
                 placeholder="••••••••"
                 value={currentPassword}
@@ -139,18 +138,20 @@ function ChangePasswordModal({ show, onClose }) {
           </div>
 
           <div>
-            <label className="form-label text-white small fw-semibold">
+            <label htmlFor="change-new-password" className="form-label text-white small fw-semibold">
               New Password
             </label>
             <div className="input-group password-input-group">
               <input
                 type={showNew ? "text" : "password"}
+                id="change-new-password"
                 className="form-control"
                 placeholder="••••••••"
                 value={newPassword}
                 disabled={loading || Boolean(success)}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
+                aria-describedby="change-password-hint"
                 required
               />
               <button
@@ -164,13 +165,16 @@ function ChangePasswordModal({ show, onClose }) {
             </div>
           </div>
 
+          <p id="change-password-hint" className="text-white-50 small mb-0">{PASSWORD_HINT}</p>
+
           <div>
-            <label className="form-label text-white small fw-semibold">
+            <label htmlFor="change-confirm-password" className="form-label text-white small fw-semibold">
               Confirm New Password
             </label>
             <div className="input-group password-input-group">
               <input
                 type={showConfirm ? "text" : "password"}
+                id="change-confirm-password"
                 className="form-control"
                 placeholder="••••••••"
                 value={confirmationPassword}

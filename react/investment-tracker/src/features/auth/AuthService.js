@@ -2,6 +2,7 @@ import axios from "axios";
 import { apiClient, API_BASE_URL, apiData, apiError, configureSessionInterceptors } from "../../shared/api/ApiClient";
 import { clearInventoryCalculatorSession } from "../inventory/InventoryCalculatorSession";
 import { AUTH_REFRESH_TIMEOUT_MS } from "../../config/uiConfig";
+import { decodeJwtPayload } from "./jwtPayload";
 
 let refreshPromise = null;
 let refreshVersion = null;
@@ -36,19 +37,24 @@ class AuthService {
   }
 
   static isAuthenticated() {
-    return Boolean(AuthService.accessToken);
+    return AuthService.getCurrentUser() !== null;
   }
 
   static getCurrentUser() {
     try {
       const token = AuthService.getToken();
       if (!token) return null;
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) return null;
+      if (typeof payload.sub !== "string" && typeof payload.sub !== "number") return null;
+      const id = Number(payload.sub);
+      if (!Number.isSafeInteger(id) || id <= 0) return null;
+      const email = typeof payload.email === "string" ? payload.email : "";
       return {
-        id: payload.sub ? Number(payload.sub) : null,
-        email: payload.email || "",
-        name: payload.fullName || payload.email || "User Account",
-        authorities: Array.isArray(payload.authorities) ? payload.authorities : [],
+        id,
+        email,
+        name: (typeof payload.fullName === "string" && payload.fullName) || email || "User Account",
+        authorities: Array.isArray(payload.authorities) ? payload.authorities.filter((value) => typeof value === "string") : [],
       };
     } catch {
       return null;

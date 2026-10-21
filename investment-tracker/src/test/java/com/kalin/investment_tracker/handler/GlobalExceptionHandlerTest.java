@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.exception.ExpiredTokenException;
 import com.kalin.investment_tracker.exception.ExternalServiceException;
 import com.kalin.investment_tracker.exception.ItemNotFoundException;
+import com.kalin.investment_tracker.auth.AccountActionException;
 import jakarta.mail.MessagingException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -34,6 +35,17 @@ import static org.mockito.Mockito.when;
 class GlobalExceptionHandlerTest {
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
     private final ObjectMapper json = new ObjectMapper();
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = BusinessErrorCodes.class, names = {
+            "INCORRECT_CURRENT_PASSWORD", "NEW_PASSWORD_DOES_NOT_MATCH", "USERNAME_ALREADY_TAKEN"})
+    void expectedAccountErrorsHaveTheirDeclared4xxStatusAndFixedPublicMessage(BusinessErrorCodes code) {
+        var response = handler.handleAccountAction(new AccountActionException(code));
+        assertEquals(code.getHttpStatus(), response.getStatusCode());
+        assertEquals(json.valueToTree(Map.of("businessErrorCode", code.getCode(),
+                        "businessErrorDescription", code.getDescription(), "error", code.getDescription())),
+                json.valueToTree(response.getBody()));
+    }
 
     @ParameterizedTest
     @MethodSource("plainErrors")

@@ -5,6 +5,7 @@ import useRequestScope from "../../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../../shared/utils/RequestScope";
 import "../styles/ForgotPasswordPage.css";
 import { authErrorMessage } from "../authFeedback";
+import { passwordError, PASSWORD_HINT } from "../passwordPolicy";
 
 const EyeOpenIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,8 +67,9 @@ function ForgotPasswordPage() {
     setError("");
     setMessage("");
 
-    if (newPassword.length < 6) {
-      setError("Password must be at least 6 characters long.");
+    const invalidPassword = passwordError(newPassword);
+    if (invalidPassword) {
+      setError(invalidPassword);
       return;
     }
 
@@ -189,6 +191,7 @@ function ForgotPasswordPage() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   autoComplete="new-password"
+                  aria-describedby="reset-password-hint"
                   required
                 />
                 <button
@@ -202,6 +205,8 @@ function ForgotPasswordPage() {
                 </button>
               </div>
             </div>
+
+            <p id="reset-password-hint" className="text-white-50 small">{PASSWORD_HINT}</p>
 
             <div className="mb-4">
               <label

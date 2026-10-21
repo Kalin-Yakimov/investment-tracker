@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
+
+import static com.kalin.investment_tracker.handler.BusinessErrorCodes.*;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +36,7 @@ public class AuthenticationService {
 
     @Transactional
     public void register(RegistrationRequest request) throws MessagingException {
+        PasswordPolicy.requireValid(request.getPassword(), true);
         String email = AuthRateLimitService.normalizeEmail(request.getEmail());
         rateLimits.checkCodeRequest(email);
         if (userRepository.existsByUsername(request.getUsername())) {
@@ -64,6 +68,7 @@ public class AuthenticationService {
             String userAgent,
             String ipAddress
     ) {
+        PasswordPolicy.requireValid(request.getPassword(), false);
         String email = AuthRateLimitService.normalizeEmail(request.getEmail());
         // Hold the account lock from password verification through session creation/commit.
         var account = userRepository.findLockedByEmail(email);
@@ -142,6 +147,8 @@ public class AuthenticationService {
 
     @Transactional(noRollbackFor = InvalidVerificationCodeException.class)
     public void resetPassword(ResetPasswordRequest request) {
+        // Reject invalid new credentials before consuming a valid one-time reset code.
+        PasswordPolicy.requireValid(request.getNewPassword(), true);
         User user = verificationCodes.consume(request.getEmail(), request.getCode(), TokenType.PASSWORD_RESET);
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
@@ -185,16 +192,19 @@ public class AuthenticationService {
 
     @Transactional
     public void changePassword(ChangePasswordRequest request, java.security.Principal connectedUser) {
+        PasswordPolicy.requireValid(request.getNewPassword(), true);
+        PasswordPolicy.requireValid(request.getCurrentPassword(), false);
+        PasswordPolicy.requireValid(request.getConfirmationPassword(), false);
         var user = lockAuthenticatedUser(connectedUser);
 
         // Verify current password
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new IllegalStateException("Wrong current password");
+            throw new AccountActionException(INCORRECT_CURRENT_PASSWORD);
         }
 
         // Verify confirmation password match
         if (!request.getNewPassword().equals(request.getConfirmationPassword())) {
-            throw new IllegalStateException("New passwords do not match");
+            throw new AccountActionException(NEW_PASSWORD_DOES_NOT_MATCH);
         }
 
         // Save encoded new password
@@ -214,8 +224,11 @@ public class AuthenticationService {
         var user = lockAuthenticatedUser(connectedUser);
 
         String newUsername = request.getNewUsername().trim();
-        if (userRepository.existsByUsername(newUsername) && !newUsername.equalsIgnoreCase(user.getUsername())) {
-            throw new IllegalStateException("Username is already taken by another account");
+        // getUsername() is the email identity used by Spring Security, not the display name.
+        // Comparing immutable owners also respects the actual database's username collation.
+        var owner = userRepository.findByUsername(newUsername);
+        if (owner.isPresent() && !Objects.equals(owner.get().getId(), user.getId())) {
+            throw new AccountActionException(USERNAME_ALREADY_TAKEN);
         }
 
         String previousUsername = user.fullName();

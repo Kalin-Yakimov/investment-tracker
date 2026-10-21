@@ -24,8 +24,6 @@ public class RegistrationRequest {
     @Size(max = 254)
     private String email;
 
-    @NotEmpty(message = "Password is mandatory")
-    @NotBlank(message = "Password is mandatory")
-    @Size(min = 6, message = "Password should be at least 6 characters long")
+    @ValidPassword
     private String password;
 }

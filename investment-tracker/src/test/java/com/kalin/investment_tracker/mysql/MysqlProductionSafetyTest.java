@@ -258,6 +258,24 @@ class MysqlProductionSafetyTest {
     }
 
     @Test
+    void usernameOwnerChecksRespectRealCaseAndAccentInsensitiveMysqlCollation() {
+        User owner = account();
+        User other = account();
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String ownName = "MiXeD-" + suffix;
+        String occupiedName = "Älias-" + suffix;
+        tx().executeWithoutResult(status -> users.findLockedById(owner.getId()).orElseThrow().setUsername(ownName));
+        tx().executeWithoutResult(status -> users.findLockedById(other.getId()).orElseThrow().setUsername(occupiedName));
+        var principal = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(owner, null);
+        assertNotNull(auth.changeUsername(new ChangeUsernameRequest(ownName.toLowerCase(java.util.Locale.ROOT)), principal, "test-session").getToken());
+        var conflict = assertThrows(AccountActionException.class, () -> auth.changeUsername(
+                new ChangeUsernameRequest("alias-" + suffix), principal, "test-session"));
+        assertEquals(com.kalin.investment_tracker.handler.BusinessErrorCodes.USERNAME_ALREADY_TAKEN, conflict.getErrorCode());
+        assertEquals(owner.getEmail(), users.findById(owner.getId()).orElseThrow().getUsername());
+        assertEquals(ownName.toLowerCase(java.util.Locale.ROOT), users.findById(owner.getId()).orElseThrow().fullName());
+    }
+
+    @Test
     void explicitAdoptionPreservesDataAndSequenceWhileAutomaticAdoptionIsRefused() throws Exception {
         String name = "investment_test_adopt_" + UUID.randomUUID().toString().replace("-", "");
         String legacyUrl = URL.substring(0, URL.lastIndexOf('/') + 1) + name;

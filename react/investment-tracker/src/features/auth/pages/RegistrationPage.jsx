@@ -5,6 +5,7 @@ import { isRequestCanceled } from "../../../shared/utils/RequestScope";
 import { useNavigate, Link } from "react-router-dom";
 import "../styles/RegistrationPage.css";
 import { authErrorMessage, rememberActivationEmail } from "../authFeedback";
+import { passwordError, PASSWORD_HINT } from "../passwordPolicy";
 
 const EyeOpenIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -51,8 +52,9 @@ function RegistrationPage() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters long.");
+    const invalidPassword = passwordError(formData.password);
+    if (invalidPassword) {
+      setError(invalidPassword);
       return;
     }
 
@@ -149,6 +151,7 @@ function RegistrationPage() {
                 value={formData.password}
                 onChange={handleInputChange}
                 autoComplete="new-password"
+                aria-describedby="registration-password-hint"
                 required
               />
               <button
@@ -162,6 +165,8 @@ function RegistrationPage() {
               </button>
             </div>
           </div>
+
+          <p id="registration-password-hint" className="text-white-50 small">{PASSWORD_HINT}</p>
 
           <div className="mb-4">
             <label htmlFor="confirmPassword" className="form-label text-white small fw-semibold">

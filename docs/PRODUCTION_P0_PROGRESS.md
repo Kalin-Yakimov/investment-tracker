@@ -68,10 +68,12 @@ Details, advisory triage, commands and primary references:
 Access lifetime remains **30 minutes**; remembered refresh remains **60 days**.
 Release frontend/backend auth changes together because cookie-authenticated
 refresh/logout require the new header. See [AUTH_SECURITY.md](AUTH_SECURITY.md).
-Remaining Stage 3 password-policy/API-error/JWT-decoding work is not claimed
-complete merely because the earlier logout/concurrency groundwork exists.
+The later Stage 3 password-policy/API-error/JWT-decoding work is now implemented
+and verified locally, separately from the published Stages 1–2 commit. See
+[AUTH_LIFECYCLE_STAGE3.md](AUTH_LIFECYCLE_STAGE3.md). The owner approved their
+commit and publication on 2026-10-21, followed by implementation of Stage 4.
 
-## Local verification checkpoint (2026-10-21)
+## Stages 1–2 verification checkpoint (2026-10-21, before Stage 3)
 
 - Backend: 398 regular tests; 397 passed, one pre-existing manual measurement
   test disabled, zero failures/errors. `bootJar` succeeds.
@@ -93,7 +95,7 @@ complete merely because the earlier logout/concurrency groundwork exists.
 
 ## Remaining gates
 
-Do not publish yet. Continue Stages 3–8 only with approval: remaining auth policy,
+Do not deploy publicly yet. Stage 4 is approved; Stages 5–8 need separate approval:
 data consistency, frontend correctness, limits/performance, fail-closed production
 settings, HTTPS/proxy/cookies, least-privilege DB access, monitoring, encrypted
 automated off-host backup/recovery, release/rollback and final browser acceptance.
