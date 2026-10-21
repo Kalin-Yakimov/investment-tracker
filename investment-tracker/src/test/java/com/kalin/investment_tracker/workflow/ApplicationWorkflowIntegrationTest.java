@@ -176,6 +176,8 @@ class ApplicationWorkflowIntegrationTest {
         long id = response(mvc.perform(authorized(body(post("/api/items"),
                 Map.of("csItemId", item.getId(), "quantity", 1, "showInDashboard", false)), owner))
                 .andExpect(status().isOk()).andReturn()).get("id").asLong();
+        mvc.perform(authorized(body(post("/api/items"), Map.of("csItemId", item.getId(), "quantity", 1)), owner))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error").value("You are already tracking this item"));
         mvc.perform(authorized(get("/item/{id}", id), owner)).andExpect(status().isNotFound());
         mvc.perform(authorized(get("/api/price-history/{id}", id), stranger)).andExpect(status().isNotFound());
         mvc.perform(authorized(patch("/api/items/{id}/bookmark", id), stranger)).andExpect(status().isNotFound());

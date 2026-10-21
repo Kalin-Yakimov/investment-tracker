@@ -2,11 +2,13 @@ package com.kalin.investment_tracker.pricing;
 
 import com.kalin.investment_tracker.exception.ExternalServiceException;
 import com.kalin.investment_tracker.item.ItemRepository;
+import com.kalin.investment_tracker.item.Item;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -53,13 +55,36 @@ public class MarketPricePersistenceService {
         return Optional.ofNullable(snapshots.findLatestObservedAtBySource(SOURCE));
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int persistFeed(PriceFeedSnapshot feed) {
         lockAndValidatePublication(feed);
         return apply(feed, items.findDistinctTrackedMarketHashNames(), null, false);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockForTrackingCreation() {
+        writeLocks.lockSource(SOURCE)
+                .orElseThrow(() -> new IllegalStateException("The price-feed write guard has not been initialized"));
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void initializeTrackedPrice(Item item, PriceFeedSnapshot feed) {
+        lockForTrackingCreation();
+        Instant latest = snapshots.findLatestObservedAtBySource(SOURCE);
+        if (feed != null && feed.priceEur(item.getMarketHashName()) != null
+                && (latest == null || !feed.observedAt().isBefore(latest))) {
+            validatePublication(feed, latest);
+            // No HTTP and no cache publication here. A new shared observation joins this insert transaction.
+            apply(feed, List.of(item.getMarketHashName()), null, false);
+            item.setPrice(feed.priceEur(item.getMarketHashName()));
+        } else {
+            // A cold/offline process or another instance's newer publication must not insert an old price.
+            snapshots.findFirstByMarketHashNameAndSourceOrderByObservedAtDescIdDesc(item.getMarketHashName(), SOURCE)
+                    .ifPresent(snapshot -> item.setPrice(snapshot.getPriceEur()));
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int applySelected(PriceFeedSnapshot feed, List<Long> ids) {
         lockAndValidatePublication(feed);
         int recorded = 0;
@@ -70,19 +95,27 @@ public class MarketPricePersistenceService {
         return recorded;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int applyDashboard(PriceFeedSnapshot feed) {
         lockAndValidatePublication(feed);
         return apply(feed, items.findDistinctDashboardMarketHashNames(), null, true);
     }
 
     private void lockAndValidatePublication(PriceFeedSnapshot feed) {
-        writeLocks.lockSource(SOURCE)
-                .orElseThrow(() -> new IllegalStateException("The price-feed write guard has not been initialized"));
-        Instant latest = snapshots.findLatestObservedAtBySource(SOURCE);
+        lockForTrackingCreation();
+        validatePublication(feed, snapshots.findLatestObservedAtBySource(SOURCE));
+    }
+
+    private void validatePublication(PriceFeedSnapshot feed, Instant latest) {
         if (latest != null && feed.observedAt().isBefore(latest)) {
             throw new ExternalServiceException("An older publication cannot replace already recorded prices");
         }
+        snapshots.findFirstBySourceAndSourceVersionOrderByIdAsc(SOURCE, feed.sourceVersion()).ifPresent(recorded -> {
+            if (recorded.getUsdToEurRate().compareTo(feed.usdToEurRate()) != 0
+                    || !recorded.getObservedAt().equals(feed.observedAt())) {
+                throw new ExternalServiceException("The publication conversion rate and date have already been recorded");
+            }
+        });
     }
 
     private int apply(PriceFeedSnapshot feed, List<String> marketNames, List<Long> ids, boolean dashboardOnly) {

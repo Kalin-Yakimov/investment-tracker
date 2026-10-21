@@ -10,6 +10,7 @@ The repository contains both parts of the application:
 - `docs/DATABASE_MIGRATIONS.md` — real MySQL migrations, isolated tests and safe existing-database adoption.
 - `docs/AUTH_SECURITY.md` — verification-code safeguards, limits and deployment boundaries.
 - [docs/AUTH_LIFECYCLE_STAGE3.md](docs/AUTH_LIFECYCLE_STAGE3.md) — current password rules, account errors, Unicode JWT metadata and Stage 3 verification.
+- [docs/DATA_CONSISTENCY_STAGE4.md](docs/DATA_CONSISTENCY_STAGE4.md) — atomic tracked-item creation, tracked-only uniqueness, price commits and concurrent mutations.
 - `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
 - `docs/EXTERNAL_SERVICES.md` — external HTTP limits, atomic price refreshes and background-job policies.
 - `docs/DAILY_PRICE_HISTORY.md` — daily price observations, stale-publication protection and existing-database adoption.

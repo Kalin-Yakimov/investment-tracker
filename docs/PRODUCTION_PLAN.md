@@ -58,6 +58,13 @@ users accidentally; cover these paths explicitly.
 
 ## Stage 4 — consistency and price transactions (P1-1 / P1-2 / P1-3)
 
+Approved and implemented locally on 2026-10-21, after publishing Stage 3 as
+`9ce96b1`. Atomic creation, tracked-only V2 uniqueness, current locking item
+reloads and commit-before-cache-publication are covered by rollback/concurrency
+tests. No V2 migration was applied to the real developer database. Details:
+[DATA_CONSISTENCY_STAGE4.md](DATA_CONSISTENCY_STAGE4.md). The owner approved
+commit and publication to GitLab/GitHub on 2026-10-21.
+
 Make multi-step additions atomic; enforce only the correct uniqueness rules;
 prevent lost updates and publish cache changes after successful commit.
 Files: item/tracking/pricing services, repositories and new migrations.
@@ -96,5 +103,5 @@ must pass before public release. Unit tests alone are not production readiness.
 
 The owner approved starting Stage 4 on 2026-10-21 after publishing Stage 3.
 Stages 5–8 remain unimplemented and require approval. Commit and publication of
-Stages 1–3 were approved separately from implementation of Stage 4.
+Stages 1–4 were approved separately from implementation of later stages.
 Merging branches and public deployment remain unauthorized.

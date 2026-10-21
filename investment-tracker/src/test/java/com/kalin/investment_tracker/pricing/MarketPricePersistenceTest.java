@@ -64,6 +64,18 @@ class MarketPricePersistenceTest {
         assertEquals(new BigDecimal("20.00"), result.getPriceNotification()); assertTrue(result.getSteamFoundCheck());
     }
 
+    @Test void samePublicationCannotUseADifferentRateForAPreviouslyUntrackedMarketName() {
+        String firstName = UUID.randomUUID().toString(), addedName = UUID.randomUUID().toString();
+        item(firstName, true); item(addedName, true);
+        PriceFeedSnapshot original = feed(firstName, "one-global-rate");
+        prices.persistFeed(original);
+        PriceFeedSnapshot inconsistent = new PriceFeedSnapshot(Map.of(addedName, BigDecimal.TEN),
+                new BigDecimal("0.90"), original.sourceVersion(), original.observedAt(), null, -1);
+        assertThrows(com.kalin.investment_tracker.exception.ExternalServiceException.class, () -> prices.persistFeed(inconsistent));
+        assertTrue(history(addedName).isEmpty());
+        assertEquals(1, history(firstName).size());
+    }
+
     @Test void laterSameDayPublicationReplacesRatherThanDuplicatesTheDailyRow() {
         String name = UUID.randomUUID().toString(); Item item = item(name, true);
         PriceFeedSnapshot first = feed(name, "daily-first");

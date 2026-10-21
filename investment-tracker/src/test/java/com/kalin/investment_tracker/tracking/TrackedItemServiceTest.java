@@ -46,6 +46,7 @@ class TrackedItemServiceTest {
     @Mock private CsItemRepository csItemRepository;
     @Mock private TaskExecutor applicationTaskExecutor;
     @Mock private ActivityEventService activityEventService;
+    @Mock private TrackedItemCreationService creationService;
 
     @InjectMocks
     private TrackedItemService service;
@@ -137,10 +138,10 @@ class TrackedItemServiceTest {
                 "untrusted name", "untrusted hash", "skin-42", 0, null, null
         );
         when(csItemRepository.findById("skin-42")).thenReturn(Optional.of(catalogueItem));
-        when(itemRepository.save(any(Item.class))).thenAnswer(invocation -> {
+        when(creationService.create(any(Item.class), org.mockito.ArgumentMatchers.isNull())).thenAnswer(invocation -> {
             Item saved = invocation.getArgument(0);
             saved.setId(42L);
-            return saved;
+            return TrackedItemMapper.toDto(saved, null);
         });
 
         var result = service.addTrackedItem(request, user);
@@ -148,7 +149,18 @@ class TrackedItemServiceTest {
         assertEquals(catalogueItem.getName(), result.getItemName());
         assertEquals(catalogueItem.getMarketHashName(), result.getMarketHashName());
         assertEquals(1, result.getQuantity());
-        verify(priceFeedService).recordCurrentSnapshotForItem(any(Item.class));
+        verify(priceFeedService).refreshPriceCacheIfNeeded();
+        verify(priceFeedService, never()).getItemPriceData(any());
+    }
+
+    @Test
+    void catalogueRecordWithoutMarketIdentifierIsRejectedBeforeRefreshOrInsert() {
+        when(csItemRepository.findById("missing-hash")).thenReturn(Optional.of(
+                CsItem.builder().id("missing-hash").name("Unusable legacy entry").build()));
+        assertThrows(IllegalArgumentException.class, () -> service.addTrackedItem(
+                new TrackedItemCreateRequest(null, null, "missing-hash", 1, false, null), user));
+        org.mockito.Mockito.verifyNoInteractions(priceFeedService, creationService);
+        verify(itemRepository, never()).save(any());
     }
 
     @Test
@@ -162,7 +174,7 @@ class TrackedItemServiceTest {
         when(itemRepository.existsByUserIdAndMarketHashNameAndSteamFoundCheckTrue(
                 7, trackedItem.getMarketHashName())).thenReturn(true);
 
-        assertThrows(IllegalArgumentException.class, () -> service.addTrackedItem(
+        assertThrows(DuplicateTrackedItemException.class, () -> service.addTrackedItem(
                 new TrackedItemCreateRequest(null, null, "skin-42", 1, false, null), user
         ));
 
@@ -175,10 +187,10 @@ class TrackedItemServiceTest {
                 .marketHashName("Trusted market hash").image("image-url").build();
         when(csItemRepository.findBestMatch(org.mockito.ArgumentMatchers.eq("requested hash"), any()))
                 .thenReturn(List.of(catalogueItem));
-        when(itemRepository.save(any(Item.class))).thenAnswer(invocation -> {
+        when(creationService.create(any(Item.class), org.mockito.ArgumentMatchers.isNull())).thenAnswer(invocation -> {
             Item saved = invocation.getArgument(0);
             saved.setId(42L);
-            return saved;
+            return TrackedItemMapper.toDto(saved, null);
         });
 
         var result = service.addTrackedItem(new TrackedItemCreateRequest(
@@ -189,7 +201,7 @@ class TrackedItemServiceTest {
         assertEquals("Trusted market hash", result.getMarketHashName());
         assertEquals("image-url", result.getImage());
         verify(csItemRepository, never()).save(any());
-        verify(priceFeedService).recordCurrentSnapshotForItem(any(Item.class));
+        verify(priceFeedService).refreshPriceCacheIfNeeded();
     }
 
     @Test
@@ -220,7 +232,7 @@ class TrackedItemServiceTest {
 
     @Test
     void deletingAnotherUsersItemIsRejected() {
-        when(itemRepository.findTrackedItemByIdAndUserId(42L, 7)).thenReturn(Optional.empty());
+        when(itemRepository.findLockedTrackedItem(42L, 7)).thenReturn(Optional.empty());
 
         assertThrows(ItemNotFoundException.class, () -> service.deleteTrackedItem(42L, user));
 

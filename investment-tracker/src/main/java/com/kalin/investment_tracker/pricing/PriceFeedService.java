@@ -1,11 +1,11 @@
 package com.kalin.investment_tracker.pricing;
 
 import com.kalin.investment_tracker.exception.ExternalServiceException;
-import com.kalin.investment_tracker.item.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.*;
@@ -41,6 +41,9 @@ public class PriceFeedService {
     public int forceRefreshPriceCache() { return refreshPriceCache(true, true); }
 
     private int refreshPriceCache(boolean force, boolean strict) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("Price downloads must run outside a database transaction");
+        }
         if (!refreshDue(force, strict)) return 0;
         boolean locked = false;
         try {
@@ -135,14 +138,8 @@ public class PriceFeedService {
         }
     }
 
-    public void recordCurrentSnapshotForItem(Item item) {
-        if (item == null || item.getId() == null || item.getMarketHashName() == null) return;
-        refreshPriceCacheIfNeeded();
-        refreshLock.lock();
-        try {
-            if (currentFeed != null) persistence.applySelected(currentFeed, List.of(item.getId()));
-        } finally { refreshLock.unlock(); }
-    }
+    /** Immutable, already committed publication. Never performs HTTP or database work. */
+    public PriceFeedSnapshot getCachedPublication() { return currentFeed; }
 
     public ItemPriceData getItemPriceData(String marketHashName) {
         refreshPriceCacheIfNeeded();

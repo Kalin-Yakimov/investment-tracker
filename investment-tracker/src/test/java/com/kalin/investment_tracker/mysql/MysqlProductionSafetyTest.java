@@ -97,7 +97,7 @@ class MysqlProductionSafetyTest {
 
     @Test
     void emptyDatabaseWasMigratedAndValidatedByHibernateAndReexecutionDoesNotResetIds() {
-        assertEquals("1", flyway.info().current().getVersion().getVersion());
+        assertEquals("2", flyway.info().current().getVersion().getVersion());
         User first = account();
         assertEquals(0, flyway.migrate().migrationsExecuted);
         User second = account();
@@ -291,14 +291,21 @@ class MysqlProductionSafetyTest {
                 sql.executeUpdate("INSERT INTO _user(id,account_locked,enabled,created_date,email) VALUES(51,0,1,NOW(6),'test@example.invalid')");
                 sql.executeUpdate("UPDATE _user_seq SET next_val=101");
             }
+            Flyway v1 = DatabaseMigrationTool.configuredV1Reference(legacyUrl, USER, PASSWORD_DB);
             Flyway legacy = DatabaseMigrationTool.configuredFlyway(legacyUrl, USER, PASSWORD_DB);
             assertThrows(org.flywaydb.core.api.FlywayException.class, legacy::migrate);
-            try (var reference = DriverManager.getConnection(URL, USER, PASSWORD_DB)) {
+            String referenceName = "investment_test_ref_" + UUID.randomUUID().toString().replace("-", "");
+            String referenceUrl = URL.substring(0, URL.lastIndexOf('/') + 1) + referenceName;
+            try (var admin = DriverManager.getConnection(URL, USER, PASSWORD_DB); var sql = admin.createStatement()) {
+                sql.executeUpdate("CREATE DATABASE `" + referenceName + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+            }
+            DatabaseMigrationTool.configuredV1Reference(referenceUrl, USER, PASSWORD_DB).migrate();
+            try (var reference = DriverManager.getConnection(referenceUrl, USER, PASSWORD_DB)) {
                 SchemaVerifier.verify(connection, reference);
             }
             connection.setReadOnly(false);
-            legacy.baseline();
-            assertEquals(0, legacy.migrate().migrationsExecuted);
+            v1.baseline();
+            assertEquals(1, legacy.migrate().migrationsExecuted);
             try (var sql = connection.createStatement(); var row = sql.executeQuery("SELECT id FROM _user")) {
                 assertTrue(row.next()); assertEquals(51, row.getInt(1));
             }

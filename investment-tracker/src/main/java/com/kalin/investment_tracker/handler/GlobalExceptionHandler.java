@@ -7,6 +7,7 @@ import com.kalin.investment_tracker.exception.PrivateSteamInventoryException;
 import com.kalin.investment_tracker.security.InvalidRefreshTokenException;
 import com.kalin.investment_tracker.auth.AuthRateLimitException;
 import com.kalin.investment_tracker.auth.AccountActionException;
+import com.kalin.investment_tracker.tracking.DuplicateTrackedItemException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -37,6 +38,11 @@ import static org.springframework.http.HttpStatus.*;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(DuplicateTrackedItemException.class)
+    public ResponseEntity<ExceptionResponse> handleDuplicateTrackedItem(DuplicateTrackedItemException exception) {
+        return errorResponse(CONFLICT, exception.getMessage());
+    }
 
     @ExceptionHandler({ServletRequestBindingException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ExceptionResponse> handleInvalidParameters(Exception exception) {

@@ -95,8 +95,13 @@ commit and publication on 2026-10-21, followed by implementation of Stage 4.
 
 ## Remaining gates
 
-Do not deploy publicly yet. Stage 4 is approved; Stages 5–8 need separate approval:
-data consistency, frontend correctness, limits/performance, fail-closed production
+Stage 3 is published as `9ce96b1`. Stage 4 data-consistency work is implemented
+and verified locally, with commit/publication approved on 2026-10-21; see
+[DATA_CONSISTENCY_STAGE4.md](DATA_CONSISTENCY_STAGE4.md) for the current results.
+No V2 migration has been applied to the real developer database.
+
+Do not deploy publicly yet. Stages 5–8 need separate approval:
+frontend correctness, limits/performance, fail-closed production
 settings, HTTPS/proxy/cookies, least-privilege DB access, monitoring, encrypted
 automated off-host backup/recovery, release/rollback and final browser acceptance.
 No real SMTP delivery, live provider requests or public deployment was performed

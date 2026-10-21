@@ -1,6 +1,8 @@
 package com.kalin.investment_tracker.item;
 
 import com.kalin.investment_tracker.tracking.TrackedItemService;
+import com.kalin.investment_tracker.tracking.TrackedItemCreationService;
+import com.kalin.investment_tracker.pricing.MarketPricePersistenceService;
 
 import com.kalin.investment_tracker.pricing.PriceFeedService;
 
@@ -38,7 +40,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=create-drop")
-@Import({PortfolioService.class, TrackedItemService.class})
+@Import({PortfolioService.class, TrackedItemService.class, TrackedItemCreationService.class, MarketPricePersistenceService.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class ItemBoundaryIntegrationTest {
     @Autowired PortfolioService portfolio;

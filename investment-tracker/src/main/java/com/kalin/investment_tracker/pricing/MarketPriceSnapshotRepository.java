@@ -19,6 +19,9 @@ public interface MarketPriceSnapshotRepository extends JpaRepository<MarketPrice
 
     Optional<MarketPriceSnapshot> findFirstBySourceOrderByObservedAtDescIdDesc(String source);
 
+    Optional<MarketPriceSnapshot> findFirstByMarketHashNameAndSourceOrderByObservedAtDescIdDesc(
+            String marketHashName, String source);
+
     List<MarketPriceSnapshot> findBySourceAndObservationDateAndMarketHashNameIn(
             String source, LocalDate observationDate, Collection<String> names);
 

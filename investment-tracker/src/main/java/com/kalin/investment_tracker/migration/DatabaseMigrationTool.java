@@ -10,14 +10,29 @@ public final class DatabaseMigrationTool {
     private DatabaseMigrationTool() { }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 2 || !java.util.Set.of("verify", "migrate", "adopt").contains(args[0])) {
-            throw new IllegalArgumentException("Usage: verify|migrate|adopt <confirmed-database-name>");
+        if (args.length != 2 || !java.util.Set.of("verify", "migrate", "adopt", "prepare-v1-reference").contains(args[0])) {
+            throw new IllegalArgumentException("Usage: verify|migrate|adopt|prepare-v1-reference <confirmed-database-name>");
         }
         String url = required("MIGRATION_DB_URL");
         String username = required("MIGRATION_DB_USERNAME");
         String password = required("MIGRATION_DB_PASSWORD");
         if (!databaseName(url).equals(args[1])) throw new IllegalArgumentException("Database confirmation mismatch");
         Flyway flyway = configuredFlyway(url, username, password);
+        if (args[0].equals("prepare-v1-reference")) {
+            if (!args[1].startsWith("investment_reference_")) {
+                throw new IllegalArgumentException("A disposable investment_reference_* database is required");
+            }
+            try (var connection = DriverManager.getConnection(url, username, password);
+                 var query = connection.prepareStatement("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=?")) {
+                query.setString(1, args[1]);
+                try (var rows = query.executeQuery()) {
+                    rows.next();
+                    if (rows.getLong(1) != 0) throw new IllegalStateException("The V1 reference database must be empty");
+                }
+            }
+            configuredV1Reference(url, username, password).migrate();
+            return;
+        }
         if (args[0].equals("migrate")) {
             flyway.migrate();
             flyway.validate();
@@ -30,7 +45,7 @@ public final class DatabaseMigrationTool {
             throw new IllegalArgumentException("Reference must be a separate, disposable database");
         }
         // The reference must itself have successfully applied the shipped SQL, not just a baseline marker.
-        Flyway reference = configuredFlyway(referenceUrl, referenceUser, referencePassword);
+        Flyway reference = configuredV1Reference(referenceUrl, referenceUser, referencePassword);
         reference.validate();
         var current = reference.info().current();
         if (current == null || !"1".equals(current.getVersion().getVersion())
@@ -59,6 +74,11 @@ public final class DatabaseMigrationTool {
                 .locations("classpath:db/migration/mysql").baselineVersion("1")
                 .baselineOnMigrate(false).cleanDisabled(true).validateOnMigrate(true)
                 .validateMigrationNaming(true).load();
+    }
+
+    public static Flyway configuredV1Reference(String url, String username, String password) {
+        return Flyway.configure().configuration(configuredFlyway(url, username, password).getConfiguration())
+                .target("1").load();
     }
 
     private static String databaseName(String url) {

@@ -70,6 +70,8 @@ class GlobalExceptionHandlerTest {
                                 new MockHttpInputMessage(new byte[0]))), 400, "Invalid request body."),
                 plain(h -> h.handleConflict(new DataIntegrityViolationException("private SQL")),
                         409, "The change conflicts with an existing record."),
+                plain(h -> h.handleDuplicateTrackedItem(new com.kalin.investment_tracker.tracking.DuplicateTrackedItemException()),
+                        409, "You are already tracking this item"),
                 plain(h -> h.handleException(new ItemNotFoundException(42L)),
                         404, "The requested item was not found"),
                 plain(h -> h.handleException(new ExternalServiceException("Provider temporarily unavailable")),

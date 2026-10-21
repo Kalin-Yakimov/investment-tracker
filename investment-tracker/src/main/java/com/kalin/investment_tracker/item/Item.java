@@ -9,12 +9,16 @@ import com.kalin.investment_tracker.user.User;
 import jakarta.persistence.*;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "item", indexes = {
+@DynamicUpdate
+@Table(name = "item", uniqueConstraints = @UniqueConstraint(
+        name = "uk_item_tracked_owner_market", columnNames = {"user_id", "tracked_market_hash_name"}
+), indexes = {
     @Index(name = "idx_item_user_id", columnList = "user_id"),
     @Index(name = "idx_item_cs_item_id", columnList = "cs_item_id"),
     @Index(name = "idx_item_market_hash", columnList = "marketHashName"),
@@ -55,6 +59,12 @@ public class Item {
 
     // Steam Community Market specific fields
     private String marketHashName;
+
+    // NULL for portfolio transactions, so repeated purchases/sales remain valid.
+    @Column(name = "tracked_market_hash_name", insertable = false, updatable = false,
+            columnDefinition = "varchar(255) generated always as (case when steam_found_check = true then market_hash_name else null end)")
+    @JsonIgnore
+    private String trackedMarketHashName;
 
     @Column(precision = 18, scale = 2)
     private BigDecimal boughtPrice;

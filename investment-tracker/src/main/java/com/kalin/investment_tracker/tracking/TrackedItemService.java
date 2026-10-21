@@ -22,6 +22,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -44,6 +45,7 @@ public class TrackedItemService {
     private final CsItemRepository csItemRepository;
     private final TaskExecutor applicationTaskExecutor;
     private final ActivityEventService activityEventService;
+    private final TrackedItemCreationService creationService;
     private final Set<Integer> pendingPriceUpdates = ConcurrentHashMap.newKeySet();
 
     public List<TrackedItemDto> getTrackedItems(User user, boolean dashboardOnly) {
@@ -62,13 +64,17 @@ public class TrackedItemService {
                 .toList();
     }
 
+    @Transactional(propagation = Propagation.NEVER)
     public TrackedItemDto addTrackedItem(TrackedItemCreateRequest request, User user) {
         ResolvedCatalogueItem resolved = resolveCatalogueItem(request);
         String marketHashName = resolved.marketHashName();
+        if (!hasText(marketHashName)) {
+            throw new IllegalArgumentException("The catalogue item has no market identifier");
+        }
 
         if (itemRepository.existsByUserIdAndMarketHashNameAndSteamFoundCheckTrue(
                 user.getId(), marketHashName)) {
-            throw new IllegalArgumentException("You are already tracking this item");
+            throw new DuplicateTrackedItemException();
         }
 
         Item item = new Item();
@@ -81,21 +87,8 @@ public class TrackedItemService {
         item.setSteamFoundCheck(true);
         item.setUser(user);
 
-        priceFeedService.tryFetchPrice(marketHashName).ifPresent(item::setPrice);
-        Item savedItem = itemRepository.save(item);
-
-        activityEventService.recordUserAction(
-                user,
-                "TRACKED_ITEM_ADDED",
-                "Started tracking '" + savedItem.getItemName() + "'",
-                null
-        );
-        priceFeedService.recordCurrentSnapshotForItem(savedItem);
-
-        log.info("Item '{}' saved for user {} (price={})",
-                savedItem.getMarketHashName(), user.getId(),
-                savedItem.getPrice() != null ? savedItem.getPrice() : "pending scheduler");
-        return TrackedItemMapper.toDto(savedItem, priceFeedService.getItemPriceData(savedItem.getMarketHashName()));
+        priceFeedService.refreshPriceCacheIfNeeded();
+        return creationService.create(item, priceFeedService.getCachedPublication());
     }
 
     public PriceUpdateResponse requestPriceUpdate(List<Long> requestedIds, User user) {
@@ -161,7 +154,7 @@ public class TrackedItemService {
 
     @Transactional
     public TrackedItemDto updateTrackedItem(Long id, TrackedItemUpdateRequest request, User user) {
-        Item item = findOwnedItem(id, user);
+        Item item = findOwnedItemForMutation(id, user);
         if (request.showInDashboard() != null) {
             item.setShowInDashboard(request.showInDashboard());
         }
@@ -176,12 +169,12 @@ public class TrackedItemService {
                 "Updated tracking settings for '" + updatedItem.getItemName() + "'",
                 null
         );
-        return TrackedItemMapper.toDto(updatedItem, priceFeedService.getItemPriceData(updatedItem.getMarketHashName()));
+        return TrackedItemMapper.toDto(updatedItem, priceFeedService.getCachedItemPriceData(updatedItem.getMarketHashName()));
     }
 
     @Transactional
     public BookmarkResponse toggleBookmark(Long id, User user) {
-        Item item = findOwnedItem(id, user);
+        Item item = findOwnedItemForMutation(id, user);
         item.setShowInDashboard(!Boolean.TRUE.equals(item.getShowInDashboard()));
         Item updatedItem = itemRepository.save(item);
 
@@ -194,13 +187,13 @@ public class TrackedItemService {
 
         return new BookmarkResponse(
                 Boolean.TRUE.equals(updatedItem.getShowInDashboard()),
-                TrackedItemMapper.toDto(updatedItem, priceFeedService.getItemPriceData(updatedItem.getMarketHashName()))
+                TrackedItemMapper.toDto(updatedItem, priceFeedService.getCachedItemPriceData(updatedItem.getMarketHashName()))
         );
     }
 
     @Transactional
     public ApiMessageResponse deleteTrackedItem(Long id, User user) {
-        Item item = findOwnedItem(id, user);
+        Item item = findOwnedItemForMutation(id, user);
         priceHistoryRepository.deleteByItemId(item.getId());
         itemRepository.delete(item);
 
@@ -252,6 +245,11 @@ public class TrackedItemService {
 
     private Item findOwnedItem(Long itemId, User user) {
         return itemRepository.findTrackedItemByIdAndUserId(itemId, user.getId())
+                .orElseThrow(() -> new ItemNotFoundException(itemId));
+    }
+
+    private Item findOwnedItemForMutation(Long itemId, User user) {
+        return itemRepository.findLockedTrackedItem(itemId, user.getId())
                 .orElseThrow(() -> new ItemNotFoundException(itemId));
     }
 
