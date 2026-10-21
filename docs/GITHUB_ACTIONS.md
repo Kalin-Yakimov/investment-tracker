@@ -11,7 +11,10 @@ Independent frontend and backend jobs run on GitHub-hosted Ubuntu 24.04 runners
 for pushes, pull requests and manual dispatch. Frontend checks use Node.js
 24.20.0, locked `npm ci`, ESLint, Vitest with JUnit output, a Vite build and the
 existing production HTTP smoke check. Backend checks use Temurin Java 21 and
-the project's Gradle 8.8 wrapper for `test bootJar`.
+the project's Gradle 8.14.6 wrapper for `test mysqlTest bootJar`. The backend job
+includes an isolated MySQL 8.4.11 LTS service with synthetic test-only credentials.
+It tests real migrations, safe adoption and InnoDB auth concurrency, not just H2.
+See `DATABASE_MIGRATIONS.md` for local execution and data-safety boundaries.
 
 The same application commands passed in GitLab pipeline
 [2938937025](https://gitlab.com/yakimovs/Investment-tracker/-/pipelines/2938937025)

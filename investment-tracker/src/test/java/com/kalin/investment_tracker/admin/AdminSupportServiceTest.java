@@ -85,7 +85,7 @@ class AdminSupportServiceTest {
         User administrator = user(1, RoleNames.ADMIN);
         User target = user(2, RoleNames.USER);
         Role supportRole = Role.builder().name(RoleNames.SUPPORT).build();
-        when(userRepository.findById(2)).thenReturn(Optional.of(target));
+        when(userRepository.findLockedById(2)).thenReturn(Optional.of(target));
         when(roleRepository.findByName(RoleNames.SUPPORT)).thenReturn(Optional.of(supportRole));
 
         service.setSupportRole(
@@ -138,6 +138,28 @@ class AdminSupportServiceTest {
                 )
         );
         verify(userRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void sessionRevocationLocksAndChecksTargetBeforeRevokingAndAuditing() {
+        User support = user(1, RoleNames.SUPPORT);
+        User target = user(2, RoleNames.USER);
+        when(userRepository.findLockedById(2)).thenReturn(Optional.of(target));
+        service.revokeSessions(support, 2, "Investigating stolen session", "127.0.0.1");
+        var ordered = org.mockito.Mockito.inOrder(userRepository, authSessionService, activityEventService);
+        ordered.verify(userRepository).findLockedById(2);
+        ordered.verify(authSessionService).revokeAllForUser(2);
+        ordered.verify(activityEventService).recordAdminAction(support, target, "SESSIONS_REVOKED",
+                "Investigating stolen session", "Revoked all active authentication sessions", "127.0.0.1");
+    }
+
+    @Test
+    void supportCannotRevokeAdministratorSessions() {
+        User support = user(1, RoleNames.SUPPORT);
+        when(userRepository.findLockedById(2)).thenReturn(Optional.of(user(2, RoleNames.ADMIN)));
+        assertThrows(AccessDeniedException.class,
+                () -> service.revokeSessions(support, 2, "Investigating session", "127.0.0.1"));
+        verify(authSessionService, never()).revokeAllForUser(any());
     }
 
     @Test

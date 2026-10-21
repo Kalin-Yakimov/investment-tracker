@@ -106,7 +106,7 @@ class AuthenticationControllerTest {
 
         String issued = configuredController.refresh(mock(HttpServletRequest.class))
                 .getHeaders().getFirst("Set-Cookie");
-        String cleared = configuredController.logout(mock(Principal.class))
+        String cleared = configuredController.logout(mock(Principal.class), mock(HttpServletRequest.class))
                 .getHeaders().getFirst("Set-Cookie");
 
         assertNotNull(issued);
@@ -127,10 +127,10 @@ class AuthenticationControllerTest {
     void logoutRevokesAllUserSessionsAndClearsCookie() {
         Principal principal = mock(Principal.class);
 
-        var response = controller.logout(principal);
+        var response = controller.logout(principal, mock(HttpServletRequest.class));
         String cookie = response.getHeaders().getFirst("Set-Cookie");
 
-        verify(authenticationService).logout(principal);
+        verify(authenticationService).logout(principal, null);
         assertEquals(204, response.getStatusCode().value());
         assertNotNull(cookie);
         assertTrue(cookie.contains("Max-Age=0"));

@@ -7,7 +7,7 @@ The repository contains both parts of the application:
 - `investment-tracker/` — Spring Boot REST API and database access;
 - `react/investment-tracker/` — React web interface;
 - `LOCAL_SETUP.md` — complete setup, backup and recovery instructions.
-- `docs/DATABASE_MIGRATIONS.md` — safeguards for introducing controlled schema migrations.
+- `docs/DATABASE_MIGRATIONS.md` — real MySQL migrations, isolated tests and safe existing-database adoption.
 - `docs/AUTH_SECURITY.md` — verification-code safeguards, limits and deployment boundaries.
 - `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
 - `docs/EXTERNAL_SERVICES.md` — external HTTP limits, atomic price refreshes and background-job policies.
@@ -22,7 +22,10 @@ The repository contains both parts of the application:
 - [docs/MANUAL_VERIFICATION.md](docs/MANUAL_VERIFICATION.md) — short browser acceptance checklist (Bulgarian).
 - [docs/CATALOGUE_SEARCH.md](docs/CATALOGUE_SEARCH.md) — shared word matching, relevance ranking, caching and verification.
 - [docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) — GitHub verification workflow and safe history-transfer boundaries.
-- `docs/REFACTOR_PLAN.md` — approved refactoring order and current stage status.
+- `docs/REFACTOR_PLAN.md` — historical refactoring plan (not the production roadmap).
+- [docs/PRODUCTION_PLAN.md](docs/PRODUCTION_PLAN.md) — the current sequential production-readiness roadmap.
+- [docs/PRODUCTION_P0_PROGRESS.md](docs/PRODUCTION_P0_PROGRESS.md) — security, migration and runtime verification checkpoints.
+- [docs/RUNTIME_UPGRADE.md](docs/RUNTIME_UPGRADE.md) — supported runtime baseline and dependency review.
 
 ## Main functionality
 
@@ -41,9 +44,9 @@ The repository contains both parts of the application:
 | Component | Version used by the project |
 |---|---:|
 | Java | JDK 21 |
-| Spring Boot | 3.5.16 |
-| Gradle | 8.8 wrapper included in the repository |
-| MySQL | 8.0 or newer |
+| Spring Boot | 4.1.1 |
+| Gradle | 8.14.6 checksum-verified wrapper included in the repository |
+| MySQL | 8.4.11 LTS target; existing local 8.0.37 also verified |
 | Node.js | 24 LTS, at least 24.15 |
 | React | 18.3.1 |
 | Vite | 8.3.4 |
@@ -120,7 +123,13 @@ An internet connection is required for catalogue synchronization, price updates,
 
 The database is local and is not part of the Git repository. Cloning the code onto another computer creates a new empty installation unless a MySQL backup is restored. See the backup and recovery section in [LOCAL_SETUP.md](LOCAL_SETUP.md).
 
-Migration tooling is currently prepared but **disabled**; it does not change the existing local schema behavior. Before any real schema change, follow [the backup, restore-test and baseline checklist](docs/DATABASE_MIGRATIONS.md). A Windows backup helper is available at `scripts/Backup-LocalDatabase.ps1`; never commit the private exports it produces.
+Flyway manages schema changes by default and Hibernate only validates the schema.
+New empty databases receive the versioned SQL automatically. Existing non-empty
+databases require [the backup, restore-test and explicit adoption procedure](docs/DATABASE_MIGRATIONS.md)
+before startup; automatic baseline and destructive clean are disabled. The
+developer database completed this procedure on 2026-10-21. This does not adopt
+other installations automatically. A Windows backup helper is available at
+`scripts/Backup-LocalDatabase.ps1`; never commit the private exports it produces.
 
 ## Deployment status
 

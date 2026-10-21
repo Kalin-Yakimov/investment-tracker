@@ -10,7 +10,7 @@ import com.kalin.investment_tracker.item.ItemRepository;
 import com.kalin.investment_tracker.catalogue.CsItemRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.PlatformTransactionManager;

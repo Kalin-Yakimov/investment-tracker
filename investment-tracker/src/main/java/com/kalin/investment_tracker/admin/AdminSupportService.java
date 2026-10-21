@@ -243,7 +243,8 @@ public class AdminSupportService {
             String ipAddress
     ) {
         requireAdmin(actor);
-        User target = requireUser(userId);
+        User target = userRepository.findLockedById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         if (hasRole(target, RoleNames.ADMIN)) {
             throw new IllegalArgumentException("Administrator accounts do not need the SUPPORT role");
         }
@@ -284,7 +285,8 @@ public class AdminSupportService {
             String ipAddress
     ) {
         requireAdmin(actor);
-        User target = requireUser(userId);
+        User target = userRepository.findLockedById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         if (target.getId().equals(actor.getId())) {
             throw new IllegalArgumentException("You cannot lock your own administrator account");
         }
@@ -315,7 +317,10 @@ public class AdminSupportService {
             String reason,
             String ipAddress
     ) {
-        User target = requireAccessibleTarget(actor, userId);
+        User target = userRepository.findLockedById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User account was not found"));
+        requireAccessibleTarget(actor, target);
+        authSessionService.revokeAllForUser(target.getId());
         activityEventService.recordAdminAction(
                 actor,
                 target,
@@ -324,7 +329,6 @@ public class AdminSupportService {
                 "Revoked all active authentication sessions",
                 ipAddress
         );
-        authSessionService.revokeAllForUser(target.getId());
         return new AdminDtos.ActionResult("All active sessions were revoked");
     }
 
@@ -393,10 +397,14 @@ public class AdminSupportService {
 
     private User requireAccessibleTarget(User actor, Integer userId) {
         User target = requireUser(userId);
+        requireAccessibleTarget(actor, target);
+        return target;
+    }
+
+    private void requireAccessibleTarget(User actor, User target) {
         if (!hasRole(actor, RoleNames.ADMIN) && hasRole(target, RoleNames.ADMIN)) {
             throw new AccessDeniedException("Support accounts cannot inspect administrator accounts");
         }
-        return target;
     }
 
     private void recordSupportViewAccess(User actor, User target, String reason, String ipAddress) {

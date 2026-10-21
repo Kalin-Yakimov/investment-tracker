@@ -1,7 +1,7 @@
 package com.kalin.investment_tracker.workflow;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.catalogue.CsItem;
 import com.kalin.investment_tracker.catalogue.CsItemRepository;
 import com.kalin.investment_tracker.catalogue.CsItemService;
@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpHeaders;
@@ -259,24 +259,24 @@ class ApplicationWorkflowIntegrationTest {
         User user = account("USER");
         Login first = login(user);
         Login second = login(user);
-        mvc.perform(authorized(post("/api/v1/auth/logout"), first)).andExpect(status().isNoContent());
+        mvc.perform(authorized(cookieAuth("/api/v1/auth/logout"), first)).andExpect(status().isNoContent());
         for (Login device : List.of(first, second)) {
             mvc.perform(authorized(get("/api/v1/auth/validate-token"), device)).andExpect(status().isUnauthorized());
-            mvc.perform(post("/api/v1/auth/refresh").cookie(device.refresh())).andExpect(status().isUnauthorized());
+            mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(device.refresh())).andExpect(status().isUnauthorized());
         }
     }
 
     @Test
     void refreshRotationAndReplayInvalidateTheSessionThroughHttp() throws Exception {
         Login initial = login(account("USER"));
-        MvcResult rotated = mvc.perform(post("/api/v1/auth/refresh").cookie(initial.refresh()))
+        MvcResult rotated = mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(initial.refresh()))
                 .andExpect(status().isOk()).andReturn();
         Login replacement = readLogin(rotated);
         assertNotEquals(initial.refresh().getValue(), replacement.refresh().getValue());
         mvc.perform(authorized(get("/api/v1/auth/validate-token"), replacement)).andExpect(status().isOk());
-        mvc.perform(post("/api/v1/auth/refresh").cookie(initial.refresh())).andExpect(status().isUnauthorized());
+        mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(initial.refresh())).andExpect(status().isUnauthorized());
         mvc.perform(authorized(get("/api/v1/auth/validate-token"), replacement)).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/v1/auth/refresh").cookie(replacement.refresh())).andExpect(status().isUnauthorized());
+        mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(replacement.refresh())).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -288,7 +288,7 @@ class ApplicationWorkflowIntegrationTest {
                 Map.of("locked", true, "reason", "Integration test lock")), admin)).andExpect(status().isOk());
         mvc.perform(authorized(get("/get-user-items"), targetLogin)).andExpect(status().isUnauthorized());
         mvc.perform(body(post("/api/v1/auth/authenticate"), credentials(target, PASSWORD))).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/v1/auth/refresh").cookie(targetLogin.refresh())).andExpect(status().isUnauthorized());
+        mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(targetLogin.refresh())).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -302,7 +302,7 @@ class ApplicationWorkflowIntegrationTest {
                 "confirmationPassword", changedPassword)), first)).andExpect(status().isOk());
         for (Login device : List.of(first, second)) {
             mvc.perform(authorized(get("/api/v1/auth/validate-token"), device)).andExpect(status().isUnauthorized());
-            mvc.perform(post("/api/v1/auth/refresh").cookie(device.refresh())).andExpect(status().isUnauthorized());
+            mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(device.refresh())).andExpect(status().isUnauthorized());
         }
         mvc.perform(body(post("/api/v1/auth/authenticate"), credentials(user, PASSWORD))).andExpect(status().isUnauthorized());
         mvc.perform(authorized(get("/get-user-items"), login(user, changedPassword))).andExpect(status().isOk());
@@ -337,6 +337,66 @@ class ApplicationWorkflowIntegrationTest {
         mvc.perform(options("/api/admin/overview").header(HttpHeaders.ORIGIN, "https://untrusted.example")
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void expiredOrMissingAccessTokenStillAllowsCookieBasedSignOutOnAllDevices() throws Exception {
+        User user = account("USER");
+        Login first = login(user);
+        Login second = login(user);
+        String expired = io.jsonwebtoken.Jwts.builder()
+                .subject(user.getId().toString()).claim("sid", "irrelevant")
+                .issuer("workflow-test").audience().add("workflow-test-web").and()
+                .claim("tokenType", "access")
+                .expiration(java.util.Date.from(Instant.now().minusSeconds(60)))
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                        java.util.Base64.getDecoder().decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")))
+                .compact();
+        mvc.perform(cookieAuth("/api/v1/auth/logout").cookie(first.refresh())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + expired))
+                .andExpect(status().isNoContent())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Max-Age=0")));
+        for (Login device : List.of(first, second)) {
+            mvc.perform(authorized(get("/api/v1/auth/validate-token"), device)).andExpect(status().isUnauthorized());
+            mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(device.refresh())).andExpect(status().isUnauthorized());
+        }
+        mvc.perform(cookieAuth("/api/v1/auth/logout").cookie(first.refresh())).andExpect(status().isNoContent());
+        mvc.perform(cookieAuth("/api/v1/auth/logout")).andExpect(status().isNoContent());
+        Login fresh = login(user);
+        // A stale cookie cannot log out a subsequent login.
+        mvc.perform(cookieAuth("/api/v1/auth/logout").cookie(first.refresh())).andExpect(status().isNoContent());
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), fresh)).andExpect(status().isOk());
+        mvc.perform(cookieAuth("/api/v1/auth/logout").cookie(fresh.refresh())).andExpect(status().isNoContent());
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), fresh)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void cookieAuthenticationRejectsSimpleRequestsAndUntrustedOriginsWithoutRevokingSession() throws Exception {
+        Login device = login(account("USER"));
+        for (String endpoint : List.of("/api/v1/auth/logout", "/api/v1/auth/refresh")) {
+            mvc.perform(post(endpoint).cookie(device.refresh())).andExpect(status().isForbidden());
+            mvc.perform(cookieAuth(endpoint).cookie(device.refresh()).header(HttpHeaders.ORIGIN, "https://evil.example"))
+                    .andExpect(status().isForbidden());
+            mvc.perform(cookieAuth(endpoint).cookie(device.refresh()).header(HttpHeaders.ORIGIN, "null"))
+                    .andExpect(status().isForbidden());
+        }
+        for (String endpoint : List.of("/api/v1/auth/lo%67out", "/api/v1/auth/refre%73h")) {
+            mvc.perform(post(java.net.URI.create(endpoint)).cookie(device.refresh()))
+                    .andExpect(status().isForbidden());
+        }
+        mvc.perform(authorized(get("/api/v1/auth/validate-token"), device)).andExpect(status().isOk());
+        mvc.perform(cookieAuth("/api/v1/auth/refresh").cookie(device.refresh())
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000")).andExpect(status().isOk());
+        mvc.perform(options("/api/v1/auth/logout").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "x-requested-with,authorization"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        org.hamcrest.Matchers.containsString("x-requested-with")));
+    }
+
+    private MockHttpServletRequestBuilder cookieAuth(String path) {
+        return post(path).header("X-Requested-With", "XMLHttpRequest");
     }
 
     private User account(String authority) {

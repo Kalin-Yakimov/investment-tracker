@@ -1,6 +1,6 @@
 package com.kalin.investment_tracker.catalogue;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.exception.ExternalServiceException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.*;

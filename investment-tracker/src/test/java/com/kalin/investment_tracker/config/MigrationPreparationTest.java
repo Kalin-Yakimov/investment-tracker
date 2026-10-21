@@ -19,18 +19,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class MigrationPreparationTest {
 
     @Test
-    void existingApplicationKeepsItsSchemaSettingsAndMigrationsAreDisabled() throws IOException {
+    void applicationUsesFlywayAndValidationWithoutAutomaticAdoption() throws IOException {
         Properties defaults = properties("application.properties");
         Properties production = properties("application-prod.properties");
 
-        assertEquals("false", defaults.getProperty("spring.flyway.enabled"));
+        assertEquals("true", defaults.getProperty("spring.flyway.enabled"));
         assertEquals("false", defaults.getProperty("spring.flyway.baseline-on-migrate"));
         assertEquals("true", defaults.getProperty("spring.flyway.clean-disabled"));
         assertEquals("true", defaults.getProperty("spring.flyway.validate-on-migrate"));
         assertEquals("true", defaults.getProperty("spring.flyway.validate-migration-naming"));
-        assertEquals("${JPA_DDL_AUTO:update}", defaults.getProperty("spring.jpa.hibernate.ddl-auto"));
+        assertEquals("validate", defaults.getProperty("spring.jpa.hibernate.ddl-auto"));
         assertEquals("validate", production.getProperty("spring.jpa.hibernate.ddl-auto"));
-        assertFalse(production.containsKey("spring.flyway.enabled"));
+        assertEquals("true", production.getProperty("spring.flyway.enabled"));
+        assertEquals("true", properties("application-migrated.properties").getProperty("spring.flyway.enabled"));
     }
 
     @Test

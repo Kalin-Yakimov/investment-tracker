@@ -2,6 +2,11 @@
 
 Updated: 2026-10-12. Branch: `security-reliability-refactor`.
 
+Historical checkpoint: later production-readiness work uses
+[PRODUCTION_PLAN.md](PRODUCTION_PLAN.md). In particular, Flyway is now enabled
+by default after the verified 2026-10-21 adoption; the statements below describe
+the older refactoring checkpoints, not today's database configuration.
+
 The implementation follows separately approved stages. Completion of a stage
 does not authorize starting the next one, publishing changes or merging branches.
 

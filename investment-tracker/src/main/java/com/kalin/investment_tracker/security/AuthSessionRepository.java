@@ -10,13 +10,20 @@ import java.util.List;
 
 public interface AuthSessionRepository extends JpaRepository<AuthSession, String> {
 
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update AuthSession session set session.lastUsedAt = :now
+             where session.id = :id and session.revokedAt is null and session.expiresAt > :now
+            """)
+    int touchActiveSession(@Param("id") String id, @Param("now") LocalDateTime now);
+
     boolean existsByIdAndUserIdAndRevokedAtIsNullAndExpiresAtAfter(
             String id,
             Integer userId,
             LocalDateTime now
     );
 
-    @Modifying
+    @Modifying(flushAutomatically = true)
     @Query("""
             update AuthSession session
                set session.revokedAt = :revokedAt

@@ -1,6 +1,6 @@
 package com.kalin.investment_tracker.inventory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.config.CacheConfig;
 import com.kalin.investment_tracker.exception.ExternalServiceException;
 import com.kalin.investment_tracker.catalogue.CsItemRepository;

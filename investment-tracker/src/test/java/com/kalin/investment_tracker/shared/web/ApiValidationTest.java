@@ -23,9 +23,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
@@ -63,8 +63,8 @@ class ApiValidationTest {
         mvc = MockMvcBuilders.standaloneSetup(new PortfolioController(portfolio), new TrackedItemController(tracked),
                         new AdminSupportController(admin, tickets), new CsItemController(catalogue), new SteamInventoryController(inventory))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-                .setMessageConverters(new MappingJackson2HttpMessageConverter(Jackson2ObjectMapperBuilder.json()
-                        .featuresToDisable(DeserializationFeature.ACCEPT_FLOAT_AS_INT).build()))
+                .setMessageConverters(new JacksonJsonHttpMessageConverter(JsonMapper.builderWithJackson2Defaults()
+                        .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT).build()))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
 

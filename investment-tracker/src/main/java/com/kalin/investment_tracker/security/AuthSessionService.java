@@ -1,6 +1,8 @@
 package com.kalin.investment_tracker.security;
 
 import com.kalin.investment_tracker.user.User;
+import com.kalin.investment_tracker.user.UserRepository;
+import org.springframework.security.authentication.DisabledException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,6 +15,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +26,7 @@ public class AuthSessionService {
     private final AuthSessionRepository authSessionRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AuthSessionProperties properties;
+    private final UserRepository userRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Transactional
@@ -32,6 +36,11 @@ public class AuthSessionService {
             String userAgent,
             String ipAddress
     ) {
+        user = userRepository.findLockedById(user.getId())
+                .orElseThrow(() -> new DisabledException("Account is unavailable"));
+        if (!user.isEnabled() || user.isAccountLocked()) {
+            throw new DisabledException("Account is unavailable");
+        }
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiresAt = rememberMe
                 ? now.plusDays(properties.getRememberedRefreshDays())
@@ -58,10 +67,16 @@ public class AuthSessionService {
             throw new InvalidRefreshTokenException("Refresh token is missing");
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        RefreshToken currentToken = refreshTokenRepository.findByTokenHash(hash(rawRefreshToken))
+        String tokenHash = hash(rawRefreshToken);
+        Integer ownerId = refreshTokenRepository.findOwnerIdByTokenHash(tokenHash)
+                .orElseThrow(() -> new InvalidRefreshTokenException("Refresh token is invalid"));
+        User user = userRepository.findLockedById(ownerId)
+                .orElseThrow(() -> new InvalidRefreshTokenException("Account is unavailable"));
+        // Lock order for all auth operations: account -> refresh token -> session writes.
+        RefreshToken currentToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new InvalidRefreshTokenException("Refresh token is invalid"));
         AuthSession session = currentToken.getSession();
+        LocalDateTime now = LocalDateTime.now();
 
         if (currentToken.getUsedAt() != null || currentToken.getRevokedAt() != null) {
             revokeSession(session, now);
@@ -73,21 +88,21 @@ public class AuthSessionService {
             throw new InvalidRefreshTokenException("Refresh session has expired");
         }
 
-        if (!session.getUser().isEnabled() || !session.getUser().isAccountNonLocked()) {
+        if (!user.isEnabled() || !user.isAccountNonLocked()) {
             revokeSession(session, now);
             throw new InvalidRefreshTokenException("User account is not active");
         }
 
+        if (authSessionRepository.touchActiveSession(session.getId(), now) != 1) {
+            throw new InvalidRefreshTokenException("Refresh session is inactive");
+        }
         currentToken.setUsedAt(now);
         IssuedRefreshToken replacement = createRefreshToken(session, now, session.getExpiresAt());
         currentToken.setReplacedByTokenId(replacement.tokenId());
         refreshTokenRepository.save(currentToken);
 
-        session.setLastUsedAt(now);
-        authSessionRepository.save(session);
-
         return new RotatedRefreshToken(
-                session.getUser(),
+                user,
                 session.getId(),
                 replacement.rawToken(),
                 session.isRemembered(),
@@ -97,7 +112,30 @@ public class AuthSessionService {
 
     @Transactional
     public void revokeAllForUser(Integer userId) {
+        userRepository.findLockedById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         authSessionRepository.revokeAllForUser(userId, LocalDateTime.now());
+    }
+
+    /** A retained, expired/revoked cookie must not terminate a later, unrelated login. */
+    @Transactional
+    public Optional<User> revokeAllForRefreshToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) return Optional.empty();
+        String tokenHash = hash(rawToken);
+        Optional<Integer> ownerId = refreshTokenRepository.findOwnerIdByTokenHash(tokenHash);
+        if (ownerId.isEmpty()) return Optional.empty();
+        Optional<User> user = userRepository.findLockedById(ownerId.get());
+        if (user.isEmpty()) return Optional.empty();
+        Optional<RefreshToken> token = refreshTokenRepository.findByTokenHash(tokenHash);
+        LocalDateTime now = LocalDateTime.now();
+        if (token.isEmpty() || token.get().getRevokedAt() != null
+                || !token.get().getExpiresAt().isAfter(now)
+                || !token.get().getSession().isActiveAt(now)
+                || authSessionRepository.touchActiveSession(token.get().getSession().getId(), now) != 1) {
+            return Optional.empty();
+        }
+        authSessionRepository.revokeAllForUser(user.get().getId(), now);
+        return user;
     }
 
     @Transactional(readOnly = true)

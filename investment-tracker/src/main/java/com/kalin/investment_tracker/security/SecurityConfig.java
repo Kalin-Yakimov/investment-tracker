@@ -29,6 +29,7 @@ public class SecurityConfig {
                 .cors(withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(req -> req
+                        .requestMatchers(CookieAuthenticationFilter.LOGOUT).permitAll()
                         // Public Authentication Routes (Register, Login, Activation, Password Reset)
                         .requestMatchers(
                                 "/api/v1/auth/register",
@@ -50,7 +51,8 @@ public class SecurityConfig {
                                 response.sendError(403, "Access denied"))
                 )
                 .authenticationProvider(authenticationProvider)
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new CookieAuthenticationFilter(), JwtFilter.class);
 
         return http.build();
     }

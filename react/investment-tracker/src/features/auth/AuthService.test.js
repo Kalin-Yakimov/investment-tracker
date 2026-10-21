@@ -39,6 +39,7 @@ test("concurrent unauthorized reads share one refresh and retry with the refresh
   await flush();
   expect(pending).toHaveLength(3);
   expect(pending[2].config.url).toMatch(/auth\/refresh$/);
+  expect(pending[2].config.headers["X-Requested-With"]).toBe("XMLHttpRequest");
   const refreshed = token(42, "new");
   succeed(2, { token: refreshed });
   await flush();
@@ -96,6 +97,7 @@ test("sign-out waits for an outstanding refresh but never adopts its late token"
   expect(await refresh).toBe(false);
   expect(pending).toHaveLength(2);
   expect(pending[1].config.url).toMatch(/auth\/logout$/);
+  expect(pending[1].config.headers["X-Requested-With"]).toBe("XMLHttpRequest");
   succeed(1, {});
   await logout;
   expect(AuthService.getToken()).toBeNull();
@@ -113,6 +115,20 @@ test("only the latest login attempt can publish its token", async () => {
   succeed(0, { token: token(1) });
   expect(axios.isCancel(await first)).toBe(true);
   expect(AuthService.getToken()).toBe(latest);
+  expect(AuthService.sessionChanges).toBe(0);
+});
+
+test("sign-out without an in-memory access token still sends the cookie-authenticated request", async () => {
+  const logout = AuthService.logout();
+  await flush();
+  expect(pending).toHaveLength(1);
+  expect(pending[0].config.url).toMatch(/auth\/logout$/);
+  expect(pending[0].config.withCredentials).toBe(true);
+  expect(pending[0].config.headers["X-Requested-With"]).toBe("XMLHttpRequest");
+  expect(pending[0].config.headers.Authorization).toBeUndefined();
+  succeed(0, {});
+  await logout;
+  expect(AuthService.getToken()).toBeNull();
   expect(AuthService.sessionChanges).toBe(0);
 });
 

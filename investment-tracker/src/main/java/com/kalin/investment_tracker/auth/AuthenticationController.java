@@ -65,8 +65,8 @@ public class AuthenticationController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(Principal connectedUser) {
-        service.logout(connectedUser);
+    public ResponseEntity<Void> logout(Principal connectedUser, HttpServletRequest request) {
+        service.logout(connectedUser, readRefreshToken(request));
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
                 .build();

@@ -93,7 +93,8 @@ class AuthService {
           .post(
             `${AuthService.BASE_URL}/api/v1/auth/refresh`,
             {},
-            { withCredentials: true, skipAuthRefresh: true, timeout: AUTH_REFRESH_TIMEOUT_MS },
+            { withCredentials: true, skipAuthRefresh: true, timeout: AUTH_REFRESH_TIMEOUT_MS,
+              headers: { "X-Requested-With": "XMLHttpRequest" } },
           )
           .then((response) => {
             if (version !== AuthService.sessionVersion || AuthService.sessionChanges > 0) return false;
@@ -149,7 +150,8 @@ class AuthService {
       await apiClient.post(
         `${AuthService.BASE_URL}/api/v1/auth/logout`,
         {},
-        { withCredentials: true, skipAuthRefresh: true },
+        { withCredentials: true, skipAuthRefresh: true, timeout: AUTH_REFRESH_TIMEOUT_MS,
+          headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
     } finally {
       if (version === AuthService.sessionVersion) AuthService.removeToken();

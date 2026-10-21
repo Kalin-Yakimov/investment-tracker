@@ -42,7 +42,9 @@ public class User implements UserDetails, Principal {
     @ManyToMany(fetch = FetchType.EAGER)
     private List<Role> roles;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    // Security-state refreshes must not load/lock an account's entire portfolio.
+    @OneToMany(mappedBy = "user", cascade = {CascadeType.PERSIST, CascadeType.MERGE,
+            CascadeType.REMOVE, CascadeType.DETACH}, orphanRemoval = true)
     @JsonManagedReference
     private  List<Item> items;
 

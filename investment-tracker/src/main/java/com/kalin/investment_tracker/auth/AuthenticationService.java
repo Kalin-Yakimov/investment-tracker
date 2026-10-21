@@ -10,7 +10,7 @@ import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,7 +65,8 @@ public class AuthenticationService {
             String ipAddress
     ) {
         String email = AuthRateLimitService.normalizeEmail(request.getEmail());
-        var account = userRepository.findByEmailIgnoreCase(email);
+        // Hold the account lock from password verification through session creation/commit.
+        var account = userRepository.findLockedByEmail(email);
         if (account.isPresent()) rateLimits.checkLoginForUser(account.get().getId());
         else rateLimits.checkLogin(email);
         var auth = authenticationManager.authenticate(
@@ -74,7 +75,11 @@ public class AuthenticationService {
                         request.getPassword()
                 )
         );
-        var user = (User) auth.getPrincipal();
+        // Never create a session for an account that was not locked before authentication.
+        var user = account.orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+        if (!user.getId().equals(((User) auth.getPrincipal()).getId())) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         var issuedRefreshToken = authSessionService.createSession(
                 user,
                 request.isRememberMe(),
@@ -103,10 +108,17 @@ public class AuthenticationService {
     }
 
     @Transactional
-    public void logout(java.security.Principal connectedUser) {
-        User user = getAuthenticatedUser(connectedUser);
-        activityEventService.recordSecurityEvent(user, "SIGNED_OUT", "Revoked all active sessions", null);
-        authSessionService.revokeAllForUser(user.getId());
+    public void logout(java.security.Principal connectedUser, String refreshToken) {
+        User user;
+        if (connectedUser != null) {
+            user = lockAuthenticatedUser(connectedUser);
+            authSessionService.revokeAllForUser(user.getId());
+        } else {
+            user = authSessionService.revokeAllForRefreshToken(refreshToken).orElse(null);
+        }
+        if (user != null) {
+            activityEventService.recordSecurityEvent(user, "SIGNED_OUT", "Revoked all active sessions", null);
+        }
     }
 
     @Transactional(noRollbackFor = InvalidVerificationCodeException.class)

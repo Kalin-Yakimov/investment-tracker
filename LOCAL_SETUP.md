@@ -14,7 +14,7 @@ Install the following tools before cloning the project:
 | Java JDK | 21 | Run and build the Spring Boot backend |
 | Node.js | 24 LTS, at least 24.15 | Run and build the React frontend |
 | npm | Included with Node.js 24 | Install frontend dependencies |
-| MySQL Server | 8.0 or newer | Store application data |
+| MySQL Server | 8.4.11 LTS recommended | Store application data |
 | MySQL Workbench | Optional | Graphical database administration |
 
 IntelliJ IDEA and Visual Studio Code are optional. The project can be started entirely from two PowerShell windows.
@@ -33,7 +33,10 @@ Java must report version 21. Use Node.js 24 LTS (24.15 or newer). Node.js 20 is
 not supported by the current frontend toolchain. A compatible Node.js 22.22.2+
 installation is also accepted, but Node.js 24 LTS is recommended for a new setup.
 Gradle does not need a separate installation because `gradlew.bat` downloads
-Gradle 8.8 when it is first used.
+Gradle 8.14.6 when it is first used and verifies its distribution checksum.
+Spring Boot is 4.1.1. Existing MySQL 8.0.37 was also verified, but it is not the
+recommended target for a fresh production installation. The upgrade does not
+replace a system MySQL service automatically.
 
 Download the Windows x64 `.msi` installer from [the official Node.js site](https://nodejs.org/en/download),
 choose the 24 LTS line and keep the normal installer defaults. After installing,
@@ -60,7 +63,7 @@ For local development, create the database and a dedicated application user. Rep
 ```sql
 CREATE DATABASE investment
   CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
+  COLLATE utf8mb4_0900_ai_ci;
 
 CREATE USER 'investment_app'@'localhost'
   IDENTIFIED BY 'REPLACE_WITH_A_STRONG_LOCAL_PASSWORD';
@@ -73,7 +76,13 @@ FLUSH PRIVILEGES;
 
 Using the MySQL `root` account also works locally, but a dedicated user is safer and makes the required permissions clearer.
 
-Do not manually create the application tables on a new development installation. With the default local setting `JPA_DDL_AUTO=update`, Hibernate creates and updates them when the backend starts. The database itself must already exist.
+Do not manually create application tables. Flyway creates them from versioned
+SQL and Hibernate uses `validate`, never automatic `update`. The database itself
+must already exist. An existing non-empty database must first pass the explicit
+adoption procedure in [DATABASE_MIGRATIONS.md](docs/DATABASE_MIGRATIONS.md).
+The user granted full schema permissions above is a **local-development**
+convenience, not the production runtime privilege policy. Production separates
+migration credentials from the restricted runtime account.
 
 ## 4. Prepare the required private values
 
@@ -184,7 +193,11 @@ cd investment-tracker
 .\gradlew.bat bootRun
 ```
 
-On the first run, Gradle downloads the required build files. The backend then connects to MySQL, creates missing local tables and synchronizes the CS item catalogue. Internet access is required and the first catalogue synchronization can take longer than later startups.
+On the first run, Gradle downloads the required build files. The backend connects
+to MySQL, applies pending Flyway migrations, validates the schema and synchronizes
+the CS item catalogue. A non-empty database without migration history fails
+safely instead of being changed automatically. Internet access is required and
+the first catalogue synchronization can take longer than later startups.
 
 The backend is ready when the console reports that Tomcat started on port 8080.
 
@@ -294,8 +307,9 @@ folder. Run it from the repository root with your actual database username:
 
 Add `-WhatIf` to preview the destination without connecting to MySQL. See
 [DATABASE_MIGRATIONS.md](docs/DATABASE_MIGRATIONS.md) for restore verification and
-the safeguards required before activating schema migrations. Flyway is not
-activated by this setup guide.
+the verified-backup and explicit-adoption procedure. Every application profile
+now uses Flyway migrations and Hibernate `validate`. Do not start against an
+unadopted non-empty database until those checks have succeeded.
 
 Run this in **Command Prompt**, not PowerShell, and enter the database password when requested:
 
@@ -317,7 +331,9 @@ From **Command Prompt**:
 mysql -u investment_app -p investment < investment_backup.sql
 ```
 
-Restore the database before starting the backend. With the local `update` setting, Hibernate can then add schema changes required by the checked-out application version.
+Restore the database before starting the backend. For a Flyway-managed database,
+validate its migration history; never switch back to Hibernate `update`.
+Follow the adoption/recovery procedure in `docs/DATABASE_MIGRATIONS.md`.
 
 ## 14. What must be saved before reinstalling Windows
 
@@ -344,7 +360,9 @@ Confirm `DB_USERNAME` and `DB_PASSWORD`, verify that MySQL Server is running, an
 
 ### The database is unknown
 
-Create the empty `investment` database. Hibernate creates tables but does not create the MySQL database itself.
+Create the empty `investment` database. Flyway creates tables but not the MySQL
+database itself. If an existing database has no migration history, follow the
+adoption procedure rather than enabling automatic baseline or Hibernate update.
 
 ### Port 8080 or 3000 is already in use
 
@@ -370,7 +388,7 @@ The default instructions describe local development and demonstration. Before a 
 - set exact trusted values in `CORS_ALLOWED_ORIGINS`;
 - use a dedicated least-privilege database account;
 - store secrets in the hosting platform's secret manager;
-- use database migrations and change `JPA_DDL_AUTO` to `validate`;
+- keep Flyway migrations and Hibernate `validate`; use separate migration credentials;
 - disable or protect development-only endpoints;
 - arrange encrypted database backups and log retention;
 - never use example values as real production secrets.

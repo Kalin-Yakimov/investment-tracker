@@ -1,14 +1,12 @@
-# MySQL migration location (not activated yet)
+# MySQL migrations
 
-Flyway is installed but disabled in the default application configuration.
-There are deliberately no executable application migrations in this directory yet.
-Do not add an empty `V1` or enable Flyway against the existing database as a shortcut.
+`V1__initial_schema.sql` creates the current application schema for new empty
+databases, including indexes, foreign keys and pooled ID-generator tables.
 
-Before adding `V1__initial_schema.sql`, capture and review the existing schema,
-verify a private backup by restoring it into a separate database, and agree how
-existing installations will be adopted. See the repository's
-`docs/DATABASE_MIGRATIONS.md` for the activation checklist.
+All profiles enable Flyway and Hibernate `validate`; `migrated` is retained as
+a compatibility alias. Unadopted non-empty databases deliberately refuse startup.
+Never edit an already-applied migration; add the next version instead.
 
-Application migrations belong here and use `V<number>__<description>.sql` names.
-The preparation tests use a different, test-only location that is never packaged
-in the application.
+Existing databases must be backed up, restored and checked against a disposable
+V1 reference before an explicit baseline is recorded. Automatic baseline and
+destructive clean remain disabled. Follow `docs/DATABASE_MIGRATIONS.md`.

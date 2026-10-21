@@ -4,24 +4,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.Lock;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, Integer> {
+public interface UserRepository extends JpaRepository<User, Integer>, UserSecurityRepository {
 
     Optional<User> findByEmail(String email);
     Optional<User> findByEmailIgnoreCase(String email);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select user from User user where lower(user.email) = lower(:email)")
-    Optional<User> findLockedByEmail(@Param("email") String email);
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select user from User user where user.id = :id")
-    Optional<User> findLockedById(@Param("id") Integer id);
     Optional<User> findByUsername(String username);
     boolean existsByEmail(String email);
     boolean existsByUsername(String username);

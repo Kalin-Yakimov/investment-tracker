@@ -55,24 +55,32 @@ public class JwtFilter extends OncePerRequestFilter {
                     || !user.isCredentialsNonExpired()
                     || !jwtService.isAccessTokenForUser(claims, user)
                     || !authSessionService.isSessionActive(sessionId, userId)) {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or revoked access token");
+                if (!isLogout(request)) {
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or revoked access token");
+                    return;
+                }
+            } else {
+                if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            user,
+                            null,
+                            user.getAuthorities()
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+                request.setAttribute("authSessionId", sessionId);
+            }
+        } catch (JwtException | IllegalArgumentException e) {
+            if (!isLogout(request)) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired access token");
                 return;
             }
-
-            if (SecurityContextHolder.getContext().getAuthentication() == null) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        user,
-                        null,
-                        user.getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
-            request.setAttribute("authSessionId", sessionId);
-        } catch (JwtException | IllegalArgumentException e) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired access token");
-            return;
         }
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isLogout(HttpServletRequest request) {
+        return CookieAuthenticationFilter.LOGOUT.matches(request);
     }
 }

@@ -1,6 +1,6 @@
 package com.kalin.investment_tracker.handler;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.kalin.investment_tracker.exception.ExpiredTokenException;
 import com.kalin.investment_tracker.exception.ExternalServiceException;
 import com.kalin.investment_tracker.exception.ItemNotFoundException;
@@ -52,7 +52,7 @@ class GlobalExceptionHandlerTest {
                         400, "Invalid or missing request parameter."),
                 plain(h -> h.handleUnsupportedContentType(new HttpMediaTypeNotSupportedException("private value")),
                         415, "Unsupported request content type."),
-                plain(h -> h.handleMissingResource(new NoResourceFoundException(HttpMethod.GET, "private-path")),
+                plain(h -> h.handleMissingResource(new NoResourceFoundException(HttpMethod.GET, "private-path", "private-path")),
                         404, "The requested resource was not found."),
                 plain(h -> h.handleUnreadableBody(new HttpMessageNotReadableException("private input",
                                 new MockHttpInputMessage(new byte[0]))), 400, "Invalid request body."),
