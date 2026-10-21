@@ -13,8 +13,13 @@ public record PriceFeedSnapshot(
         String sourceVersion,
         Instant observedAt,
         String etag,
-        long modifiedMillis
+        long modifiedMillis,
+        Instant fxRateAsOf
 ) {
+    public PriceFeedSnapshot(Map<String, BigDecimal> pricesUsd, BigDecimal usdToEurRate, String sourceVersion,
+                             Instant observedAt, String etag, long modifiedMillis) {
+        this(pricesUsd, usdToEurRate, sourceVersion, observedAt, etag, modifiedMillis, null);
+    }
     public PriceFeedSnapshot {
         pricesUsd = Map.copyOf(pricesUsd);
         Objects.requireNonNull(usdToEurRate);

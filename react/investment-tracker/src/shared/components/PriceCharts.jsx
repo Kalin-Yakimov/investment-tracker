@@ -25,8 +25,11 @@ ChartJS.register(
   Filler
 );
 
-export function PriceSparkline({ points, strokeColor, emptyClassName = "tracker-chart-empty" }) {
+export function PriceSparkline({ points, strokeColor, emptyClassName = "tracker-chart-empty", state, onRetry }) {
   const showPointTooltip = useChartPointTooltip(points, formatCurrency);
+
+  if (state?.status === "error") return <div className="sparkline-chart-frame"><button type="button" className="btn btn-sm text-secondary" title={state.error} onClick={event => { event.stopPropagation(); onRetry?.(); }}>Retry chart</button></div>;
+  if (state?.status === "loading" && !points?.length) return <div className="sparkline-chart-frame text-secondary small" role="status">Loading chart...</div>;
 
   if (!points || points.length === 0) {
     return (
@@ -42,7 +45,7 @@ export function PriceSparkline({ points, strokeColor, emptyClassName = "tracker-
 
   return (
     <div className="sparkline-chart-frame">
-      <Line data={data} options={options} />
+      <Line data={data} options={options} role="img" aria-label={`Recorded price chart, ${points.length} observations. Open item details for dates and prices.`} />
     </div>
   );
 }
@@ -59,7 +62,7 @@ export function DetailedPriceChart({ points }) {
   return (
     <div className="detailed-chart-wrapper mb-4">
       <div className="detailed-chart-container p-2" style={{ height: "220px" }}>
-        <Line data={data} options={options} />
+        <Line data={data} options={options} role="img" aria-label={`Recorded prices across ${points.length} observations; the same data is available in the history table below.`} />
       </div>
     </div>
   );

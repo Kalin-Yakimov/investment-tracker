@@ -8,6 +8,7 @@ import InventoryApi from "../../features/inventory/InventoryApi";
 import CatalogueApi from "../../features/catalogue/CatalogueApi";
 import ContactApi from "../../features/contact/ContactApi";
 import SupportPanelApi from "../../features/support/SupportPanelApi";
+import { API_REQUEST_TIMEOUT_MS, INVENTORY_REQUEST_TIMEOUT_MS } from "../../config/uiConfig";
 
 let requests;
 beforeEach(() => {
@@ -54,6 +55,18 @@ test("global Axios is not configured with application cookies or interceptors", 
   expect(axios.defaults.withCredentials).not.toBe(true);
   expect(axios.interceptors.request.handlers.filter(Boolean)).toHaveLength(0);
   expect(axios.interceptors.response.handlers.filter(Boolean)).toHaveLength(0);
+});
+
+test("ordinary and inventory operations have separate finite request budgets", async () => {
+  await PortfolioApi.getPortfolioSummary(); await InventoryApi.calculateSteamInventory("123");
+  expect(requests[0].timeout).toBe(API_REQUEST_TIMEOUT_MS);
+  expect(requests[1].timeout).toBe(INVENTORY_REQUEST_TIMEOUT_MS);
+  expect(INVENTORY_REQUEST_TIMEOUT_MS).toBeGreaterThan(API_REQUEST_TIMEOUT_MS);
+});
+test("a network write timeout is not automatically replayed", async () => {
+  apiClient.defaults.adapter = async config => { requests.push(config); throw new axios.AxiosError("timeout", "ECONNABORTED", config); };
+  await expect(PortfolioApi.createItem({ itemName: "Case" })).rejects.toMatchObject({ code: "ECONNABORTED" });
+  expect(requests).toHaveLength(1);
 });
 
 test("the application client rejects a similar foreign origin before sending credentials", async () => {

@@ -22,8 +22,12 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import com.kalin.investment_tracker.pricing.MarketPricePersistenceService.RecordedMarketPrice;
+import com.kalin.investment_tracker.pricing.PriceFreshnessDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -47,6 +51,7 @@ class TrackedItemServiceTest {
     @Mock private TaskExecutor applicationTaskExecutor;
     @Mock private ActivityEventService activityEventService;
     @Mock private TrackedItemCreationService creationService;
+    @Mock private com.kalin.investment_tracker.pricing.MarketPricePersistenceService marketPrices;
 
     @InjectMocks
     private TrackedItemService service;
@@ -110,7 +115,7 @@ class TrackedItemServiceTest {
         assertEquals(1, result.size());
         verify(priceFeedService).refreshPriceCacheIfNeeded();
         verify(priceFeedService, never()).getItemPriceData(any());
-        verify(itemRepository).findSteamTrackedItemsByUserId(7);
+        verify(itemRepository, org.mockito.Mockito.times(2)).findSteamTrackedItemsByUserId(7);
         verify(itemRepository, never()).findAllSteamTrackedItems();
     }
 
@@ -124,6 +129,71 @@ class TrackedItemServiceTest {
 
         assertEquals(new BigDecimal("52.75"), result.getFirst().getPrice());
         assertEquals(new BigDecimal("52.75"), result.getFirst().getPrice24h());
+    }
+
+    @Test
+    void newerPersistedPublicationWinsOverOlderLocalCacheWithoutInventingARecentCheck() {
+        var newer = Instant.parse("2026-10-20T12:00:00Z");
+        var stored = new RecordedMarketPrice(trackedItem.getPrice(), newer, newer, newer);
+        var fallback = new PriceFreshnessDto("STORED_FALLBACK", "CSGOTRADER_24H", newer, newer,
+                null, newer, true, false, false);
+        when(itemRepository.findSteamTrackedItemsByUserId(7)).thenReturn(List.of(trackedItem));
+        when(marketPrices.findLatestPrices(List.of(trackedItem.getMarketHashName())))
+                .thenReturn(Map.of(trackedItem.getMarketHashName(), stored));
+        when(priceFeedService.getCachedItemPriceData(trackedItem.getMarketHashName()))
+                .thenReturn(cachedPrice("40.00", newer.minusSeconds(86400)));
+        when(priceFeedService.describeStoredPrice(stored))
+                .thenReturn(new PriceFeedService.ItemPriceData(stored.price(), fallback));
+
+        var result = service.getTrackedItems(user, false).getFirst();
+
+        assertEquals(new BigDecimal("45.00"), result.getPrice());
+        assertEquals(fallback, result.getPriceFreshness());
+        org.junit.jupiter.api.Assertions.assertNull(result.getPriceFreshness().lastSuccessfulCheck());
+        verify(marketPrices).findLatestPrices(List.of(trackedItem.getMarketHashName()));
+    }
+
+    @Test
+    void mutationDoesNotAttachOldSnapshotMetadataToTheCurrentLockedPriceOrPerformNetworkRefresh() {
+        var oldDate = Instant.parse("2026-10-19T12:00:00Z");
+        var stored = new RecordedMarketPrice(new BigDecimal("40.00"), oldDate, oldDate, oldDate);
+        when(itemRepository.findLockedTrackedItem(42L, 7)).thenReturn(Optional.of(trackedItem));
+        when(itemRepository.save(trackedItem)).thenReturn(trackedItem);
+        when(marketPrices.findLatestPrices(List.of(trackedItem.getMarketHashName())))
+                .thenReturn(Map.of(trackedItem.getMarketHashName(), stored));
+        when(priceFeedService.getCachedItemPriceData(trackedItem.getMarketHashName()))
+                .thenReturn(cachedPrice("40.00", oldDate));
+
+        var result = service.toggleBookmark(42L, user).item();
+
+        assertEquals(new BigDecimal("45.00"), result.getPrice());
+        assertEquals("STORED_FALLBACK", result.getPriceFreshness().status());
+        org.junit.jupiter.api.Assertions.assertNull(result.getPriceFreshness().observedAt());
+        verify(priceFeedService, never()).refreshPriceCacheIfNeeded();
+        verify(priceFeedService, never()).describeStoredPrice(any());
+    }
+
+    @Test
+    void newerCachedPublicationMayDescribeTheLatestPriceAfterMutation() {
+        var oldDate = Instant.parse("2026-10-19T12:00:00Z");
+        var stored = new RecordedMarketPrice(new BigDecimal("40.00"), oldDate, oldDate, oldDate);
+        var current = cachedPrice("45.00", oldDate.plusSeconds(86400));
+        when(itemRepository.findLockedTrackedItem(42L, 7)).thenReturn(Optional.of(trackedItem));
+        when(itemRepository.save(trackedItem)).thenReturn(trackedItem);
+        when(marketPrices.findLatestPrices(List.of(trackedItem.getMarketHashName())))
+                .thenReturn(Map.of(trackedItem.getMarketHashName(), stored));
+        when(priceFeedService.getCachedItemPriceData(trackedItem.getMarketHashName())).thenReturn(current);
+
+        var result = service.toggleBookmark(42L, user).item();
+
+        assertEquals(new BigDecimal("45.00"), result.getPrice());
+        assertEquals(current.freshness, result.getPriceFreshness());
+        verify(priceFeedService, never()).refreshPriceCacheIfNeeded();
+    }
+
+    private static PriceFeedService.ItemPriceData cachedPrice(String price, Instant date) {
+        return new PriceFeedService.ItemPriceData(new BigDecimal(price),
+                new PriceFreshnessDto("FRESH", "CSGOTRADER_24H", date, date, date, date, false, false, false));
     }
 
     @Test

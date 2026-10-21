@@ -53,6 +53,16 @@ test("pagination does not reload unrelated pinned items or portfolio totals", as
   expect(globalThis.IntersectionObserver.mock.results[0].value.disconnect).toHaveBeenCalled();
 });
 
+test("failed loading is not an empty portfolio and a retry can recover", async () => {
+  PortfolioApi.getUserItems.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(page("Recovered record"));
+  render(<MemoryRouter><PortfolioOverviewPage /></MemoryRouter>);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Portfolio history could not be loaded");
+  expect(screen.queryByText(/No portfolio items registered/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry portfolio history" }));
+  await screen.findByText("Recovered record");
+  expect(PortfolioApi.getUserItems).toHaveBeenCalledTimes(2);
+});
+
 vi.mock("./PortfolioApi", () => ({
   default: { getUserItems: vi.fn(), getPortfolioSummary: vi.fn() },
 }));

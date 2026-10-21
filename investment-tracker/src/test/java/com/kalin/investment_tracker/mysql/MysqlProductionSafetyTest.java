@@ -97,7 +97,7 @@ class MysqlProductionSafetyTest {
 
     @Test
     void emptyDatabaseWasMigratedAndValidatedByHibernateAndReexecutionDoesNotResetIds() {
-        assertEquals("2", flyway.info().current().getVersion().getVersion());
+        assertEquals("3", flyway.info().current().getVersion().getVersion());
         User first = account();
         assertEquals(0, flyway.migrate().migrationsExecuted);
         User second = account();
@@ -305,7 +305,7 @@ class MysqlProductionSafetyTest {
             }
             connection.setReadOnly(false);
             v1.baseline();
-            assertEquals(1, legacy.migrate().migrationsExecuted);
+            assertEquals(2, legacy.migrate().migrationsExecuted);
             try (var sql = connection.createStatement(); var row = sql.executeQuery("SELECT id FROM _user")) {
                 assertTrue(row.next()); assertEquals(51, row.getInt(1));
             }

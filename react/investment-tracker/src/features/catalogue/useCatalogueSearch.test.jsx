@@ -29,20 +29,20 @@ test("retains successful suggestions during debounce and requests, then accepts 
   const { result, rerender } = renderHook(({ query }) => useCatalogueSearch(query, true, 2),
     { initialProps: { query: "AK" } });
   await advanceSearch();
-  expect(result.current).toEqual(original);
+  expect(result.current.results).toEqual(original);
   rerender({ query: "AK-" });
-  expect(result.current).toEqual(original);
+  expect(result.current.results).toEqual(original);
   expect(CatalogueApi.searchCsItems).toHaveBeenCalledTimes(1);
   await advanceSearch();
   const oldSignal = CatalogueApi.searchCsItems.mock.calls[1][1].signal;
-  expect(result.current).toEqual(original);
+  expect(result.current.results).toEqual(original);
   rerender({ query: "AK-47" });
   expect(oldSignal.aborted).toBe(true);
-  expect(result.current).toEqual(original);
+  expect(result.current.results).toEqual(original);
   await advanceSearch();
   await act(async () => latest.resolve([{ id: "latest", name: "AK-47 Redline" }]));
   await act(async () => intermediate.resolve([{ id: "stale", name: "Old suggestion" }]));
-  expect(result.current).toEqual([{ id: "latest", name: "AK-47 Redline" }]);
+  expect(result.current.results).toEqual([{ id: "latest", name: "AK-47 Redline" }]);
 });
 
 test.each([
@@ -59,11 +59,11 @@ test.each([
   await advanceSearch();
   const signal = CatalogueApi.searchCsItems.mock.calls[1][1].signal;
   rerender(next);
-  expect(result.current).toEqual([]);
+  expect(result.current.results).toEqual([]);
   expect(signal.aborted).toBe(true);
   await act(async () => pending.resolve([{ id: "stale" }]));
   await advanceSearch();
-  expect(result.current).toEqual([]);
+  expect(result.current.results).toEqual([]);
   expect(CatalogueApi.searchCsItems).toHaveBeenCalledTimes(2);
 });
 
@@ -73,9 +73,9 @@ test("an empty latest result removes previous suggestions", async () => {
     { initialProps: { query: "Case" } });
   await advanceSearch();
   rerender({ query: "No matching case" });
-  expect(result.current).toEqual([{ id: "old" }]);
+  expect(result.current.results).toEqual([{ id: "old" }]);
   await advanceSearch();
-  expect(result.current).toEqual([]);
+  expect(result.current.results).toEqual([]);
 });
 
 test("a failed latest request clears suggestions instead of leaving them stale indefinitely", async () => {
@@ -85,8 +85,9 @@ test("a failed latest request clears suggestions instead of leaving them stale i
     { initialProps: { query: "Case" } });
   await advanceSearch();
   rerender({ query: "Different case" });
-  expect(result.current).toEqual([{ id: "old" }]);
+  expect(result.current.results).toEqual([{ id: "old" }]);
   await advanceSearch();
-  expect(result.current).toEqual([]);
-  expect(log).toHaveBeenCalledOnce();
+  expect(result.current.results).toEqual([]);
+  expect(result.current.error).toBe("Item search could not be loaded.");
+  expect(log).not.toHaveBeenCalled();
 });

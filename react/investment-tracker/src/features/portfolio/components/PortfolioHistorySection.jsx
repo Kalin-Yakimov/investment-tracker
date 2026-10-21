@@ -1,8 +1,9 @@
 import TablePagination from "../../../shared/components/TablePagination";
 import { Table } from "react-bootstrap";
 import { formatDateDDMMYYYY } from "../utils/portfolioFormat";
+import RequestError from "../../../shared/components/RequestError";
 
-export default function PortfolioHistorySection({ currentPage, totalPages, handlePageChange, filterSortOption, setFilterSortOption, loading, items, sortedFilteredItems, handleRowClick }) {
+export default function PortfolioHistorySection({ currentPage, totalPages, handlePageChange, filterSortOption, setFilterSortOption, loading, error, onRetry, items, sortedFilteredItems, handleRowClick }) {
   return (
       <div className="card portfolio-table-card shadow-lg p-4 mb-5">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
@@ -13,6 +14,7 @@ export default function PortfolioHistorySection({ currentPage, totalPages, handl
             <select
               className="form-select form-select-sm text-white border-0 shadow-sm"
               value={filterSortOption}
+              aria-label="Filter portfolio history"
               onChange={(e) => setFilterSortOption(e.target.value)}
               style={{
                 backgroundColor: "#161b26",
@@ -39,7 +41,7 @@ export default function PortfolioHistorySection({ currentPage, totalPages, handl
           </div>
         </div>
 
-        {loading ? (
+        {error ? <RequestError message={error} onRetry={onRetry} retryLabel="Retry portfolio history" pending={loading} /> : loading ? (
           <div className="d-flex justify-content-center align-items-center py-5">
             <div className="spinner-border text-info" role="status" style={{ width: "2.2rem", height: "2.2rem" }}>
               <span className="visually-hidden">Loading...</span>
@@ -81,7 +83,7 @@ export default function PortfolioHistorySection({ currentPage, totalPages, handl
                             <div className="portfolio-item-thumb-placeholder">📷</div>
                           )}
                         </td>
-                        <td className="fw-semibold">{item.itemName}</td>
+                        <td className="fw-semibold"><button type="button" className="item-name-action" onClick={event => { event.stopPropagation(); handleRowClick(item.id); }}>{item.itemName}</button></td>
                         <td>
                           <span className={`badge-status ${isBought ? "badge-bought" : "badge-sold"}`}>
                             {isBought ? "Bought" : "Sold"}

@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import com.kalin.investment_tracker.pricing.PriceFreshnessDto;
 
 @Data
 @Builder
@@ -26,4 +27,5 @@ public class TrackedItemDto {
     private Boolean steamFoundCheck;
     private String image;
     private BigDecimal price24h;
+    private PriceFreshnessDto priceFreshness;
 }

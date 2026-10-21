@@ -2,6 +2,12 @@
 
 Stage 4, 2026-10-10. Work branch: `security-reliability-refactor`.
 
+This is the historical refactoring checkpoint. Later production stages added
+versioned migrations, stricter transaction boundaries and nullable source/FX
+timestamps. Current freshness behavior and verification are documented in
+[FRONTEND_RELIABILITY_STAGE5.md](FRONTEND_RELIABILITY_STAGE5.md); the old
+no-schema-change statement below describes the 2026-10-10 work only.
+
 ## Scope and unchanged behavior
 
 The application still reads CSGOTrader `last_24h` USD averages and displays EUR

@@ -73,6 +73,16 @@ on MySQL, preserving valid repeated portfolio transactions. Do not edit V1.
 
 ## Stage 5 — frontend correctness and resilience
 
+Approved and implemented locally on 2026-10-21, after publishing Stage 4 as
+`5dd3983`. The existing interface and calculation-retention behavior are kept.
+Source/FX metadata, true elapsed-time charts, recoverable failures, shared form
+validation and keyboard controls are covered by regression tests and an isolated
+browser walkthrough. Additive V3 was tested on disposable MySQL 8.0/8.4 only;
+neither V2 nor V3 was applied to the real developer database by this stage.
+Details: [FRONTEND_RELIABILITY_STAGE5.md](FRONTEND_RELIABILITY_STAGE5.md).
+The owner approved Stage 5 commit and push on 2026-10-21. Merging and deployment
+remain separate, unauthorized actions; remote verification is a separate gate.
+
 P1-4 / P1-6 / P1-7 / P1-10 / P1-13, including date handling. Improve freshness
 metadata, a real time axis, errors/retry, forms and keyboard accessibility.
 Files: DTOs, chart utilities, forms and page hooks. Verify component tests and a
@@ -101,7 +111,7 @@ Browser E2E, MySQL regression, security checks, responsive/keyboard review and
 current documentation against a specific release commit. All applicable gates
 must pass before public release. Unit tests alone are not production readiness.
 
-The owner approved starting Stage 4 on 2026-10-21 after publishing Stage 3.
-Stages 5–8 remain unimplemented and require approval. Commit and publication of
-Stages 1–4 were approved separately from implementation of later stages.
+The owner approved Stage 5 publication and starting Stage 6 on 2026-10-21.
+Stages 7–8 remain unimplemented and require approval. Commit and publication of
+Stage 6 will require a separate decision after implementation and verification.
 Merging branches and public deployment remain unauthorized.

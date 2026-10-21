@@ -1,11 +1,12 @@
 import { PriceSparkline } from "../../../shared/components/PriceCharts";
-import { formatCurrency } from "../../../shared/utils/formatCurrency";
+import PriceValue from "../../../shared/components/PriceValue";
+import PriceTrend from "../../../shared/components/PriceTrend";
 
-export default function TrackedItemsTable({ trackedItems, selectedTimeframe, itemPointsMap, itemTrendsMap, setDetailItem, handleToggleBookmark, setDeleteConfirmId, pending }) {
+export default function TrackedItemsTable({ trackedItems, selectedTimeframe, itemPointsMap, itemTrendsMap, setDetailItem, handleToggleBookmark, setDeleteConfirmId, pending, loading, loadError, historyState }) {
   return (
       <div className="card tracker-card-dark">
         <div className="card-body p-0">
-          {trackedItems.length === 0 ? (
+          {loading && trackedItems.length === 0 ? <div className="p-5 text-secondary" role="status">Loading tracked items...</div> : loadError && trackedItems.length === 0 ? null : trackedItems.length === 0 ? (
             <div className="p-5 text-center text-muted">
               <h5>No items tracked yet.</h5>
               <p>Search and add CS items above to track CSGOTrader 24-hour average prices.</p>
@@ -56,36 +57,25 @@ export default function TrackedItemsTable({ trackedItems, selectedTimeframe, ite
                           )}
                         </td>
                         <td onClick={() => setDetailItem(item)}>
-                          <div className="fw-bold text-white cursor-pointer">
+                          <button type="button" className="fw-bold text-white item-name-action" onClick={event => { event.stopPropagation(); setDetailItem(item); }} aria-haspopup="dialog">
                             {item.itemName}
-                          </div>
+                          </button>
                         </td>
                         <td className="fw-bold text-success fs-6" onClick={() => setDetailItem(item)}>
-                          {formatCurrency(item.price)}
+                          <PriceValue item={item} />
                         </td>
                         <td onClick={() => setDetailItem(item)}>
-                          <PriceSparkline points={points} strokeColor={strokeColor} />
+                          <PriceSparkline points={points} strokeColor={strokeColor} state={historyState.states[item.id] || { status: "loading" }} onRetry={() => historyState.retry(item.id)} />
                         </td>
                         <td onClick={() => setDetailItem(item)}>
-                          <span
-                            className={`badge ${
-                              trend.direction === "positive"
-                                ? "bg-success"
-                                : trend.direction === "negative"
-                                ? "bg-danger"
-                                : "bg-secondary"
-                            }`}
-                          >
-                            {trend.pct == null
-                              ? "—"
-                              : `${trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}${trend.pct.toFixed(2)}%`}
-                          </span>
+                          <PriceTrend trend={trend} points={points} />
                         </td>
                         <td className="text-end" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             title="Delete item from tracker"
+                            aria-label={`Delete ${item.itemName} from tracker`}
                             disabled={pending}
                             onClick={() => setDeleteConfirmId(item.id)}
                           >

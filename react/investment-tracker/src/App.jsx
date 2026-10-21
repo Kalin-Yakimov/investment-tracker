@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, useParams } from "react-router-dom";
+import { Routes, Route, useParams, useLocation } from "react-router-dom";
+import RouteErrorBoundary from "./shared/components/RouteErrorBoundary";
 import "bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./layout/Navbar";
 import PortfolioOverviewPage from "./features/portfolio/PortfolioOverviewPage";
@@ -25,6 +26,7 @@ function ItemRoute({ component: Component }) {
 }
 
 function App() {
+  const location = useLocation();
   const [refresh, SetRefresh] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [, setAuthVersion] = useState(0);
@@ -57,6 +59,7 @@ function App() {
     <CookiesProvider>
       <div className="App">
         <Navbar />
+        <RouteErrorBoundary key={`${owner ?? "public"}:${location.pathname}`}>
         <Routes>
           <Route exact path="/login" element={<LoginPage />} />
           <Route exact path="/registration" element={<RegistrationPage />} />
@@ -129,6 +132,7 @@ function App() {
           />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </RouteErrorBoundary>
       </div>
     </CookiesProvider>
   );

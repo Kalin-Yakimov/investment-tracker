@@ -15,6 +15,14 @@ import java.util.Optional;
 @Repository
 public interface MarketPriceSnapshotRepository extends JpaRepository<MarketPriceSnapshot, Long> {
 
+    @Query("""
+            SELECT s FROM MarketPriceSnapshot s WHERE s.source = :source AND s.marketHashName IN :names
+              AND NOT EXISTS (SELECT later.id FROM MarketPriceSnapshot later
+                WHERE later.source = s.source AND later.marketHashName = s.marketHashName
+                  AND (later.observedAt > s.observedAt OR (later.observedAt = s.observedAt AND later.id > s.id)))
+            """)
+    List<MarketPriceSnapshot> findLatestForMarketNames(@Param("source") String source, @Param("names") Collection<String> names);
+
     Optional<MarketPriceSnapshot> findFirstBySourceAndSourceVersionOrderByIdAsc(String source, String sourceVersion);
 
     Optional<MarketPriceSnapshot> findFirstBySourceOrderByObservedAtDescIdDesc(String source);

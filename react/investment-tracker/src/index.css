@@ -304,3 +304,13 @@ select.form-control option, select.form-select option {
   background-color: var(--accent-blue) !important;
   color: #fff !important;
 }
+/* Shared interactive controls retain their existing colours and visible keyboard focus. */
+.catalogue-option-active { background: rgba(255, 255, 255, 0.10) !important; }
+button.item-name-action { border: 0; background: transparent; color: inherit; text-align: left; padding: 0; font: inherit; }
+.item-name-action:focus-visible, .portfolio-row-clickable:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+.tracker-modal .modal-dialog { max-width: 850px; }
+.tracker-delete-modal .modal-dialog { max-width: 420px; }
+.tracker-modal .modal-content-custom { max-height: 90vh; }
+.tracker-modal-backdrop { z-index: 999998 !important; background: #06090f; }
+.tracker-modal-backdrop.show { opacity: 0.85; backdrop-filter: blur(8px); }
+.price-metadata-tooltip { z-index: 1000003 !important; }

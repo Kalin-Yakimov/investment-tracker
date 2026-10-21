@@ -1,17 +1,23 @@
 import { DetailedPriceChart } from "../../../shared/components/PriceCharts";
 import { formatCurrency } from "../../../shared/utils/formatCurrency";
 import { formatPriceDateTime as formatDateDDMMYYYY } from "../../../shared/utils/priceHistory";
+import { Modal } from "react-bootstrap";
+import RequestError from "../../../shared/components/RequestError";
+import PriceTrend from "../../../shared/components/PriceTrend";
+import PriceValue from "../../../shared/components/PriceValue";
 
-export default function TrackerDetailModal({ detailItem, setDetailItem, detailTrend, detailPoints, detailHistoryList }) {
+export default function TrackerDetailModal({ detailItem, setDetailItem, detailTrend, detailPoints, detailHistoryList, historyState }) {
   return (
       detailItem && (
-        <div className="modal-backdrop-custom" onClick={() => setDetailItem(null)}>
-          <div className="modal-content-custom card tracker-card-dark p-4 position-relative" onClick={(e) => e.stopPropagation()}>
+        <Modal show onHide={() => setDetailItem(null)} centered className="tracker-modal" backdropClassName="tracker-modal-backdrop"
+          style={{ zIndex: 999999 }} aria-labelledby="tracker-detail-title" restoreFocusOptions={{ preventScroll: true }}
+          contentClassName="modal-content-custom card tracker-card-dark p-4 position-relative">
             <button
               type="button"
               className="btn-close btn-close-white position-absolute top-0 end-0 m-3"
               onClick={() => setDetailItem(null)}
               title="Close Detail View"
+              aria-label="Close detail view"
             ></button>
 
             <div className="d-flex align-items-center gap-4 mb-4">
@@ -23,24 +29,24 @@ export default function TrackerDetailModal({ detailItem, setDetailItem, detailTr
                 />
               )}
               <div>
-                <h4 className="text-white mb-1 fw-bold">{detailItem.itemName}</h4>
+                <h4 id="tracker-detail-title" className="text-white mb-1 fw-bold">{detailItem.itemName}</h4>
                 <div className="d-flex align-items-center gap-3 mt-2">
-                  <span className="fs-4 fw-bold text-success">{formatCurrency(detailItem.price)}</span>
-                  <span className={`badge ${detailTrend.direction === "positive" ? "bg-success" : detailTrend.direction === "negative" ? "bg-danger" : "bg-secondary"}`}>
-                    {detailTrend.pct == null
-                      ? "—"
-                      : `${detailTrend.direction === "positive" ? "▲ +" : detailTrend.direction === "negative" ? "▼ " : ""}${detailTrend.pct.toFixed(2)}%`}
-                  </span>
+                  <span className="fs-4 fw-bold text-success"><PriceValue item={detailItem} /></span>
+                  <PriceTrend trend={detailTrend} points={detailPoints} />
                 </div>
               </div>
             </div>
 
-            <DetailedPriceChart points={detailPoints} />
+            {historyState.states[detailItem.id]?.status === "error"
+              ? <RequestError message={historyState.states[detailItem.id].error} onRetry={() => historyState.retry(detailItem.id)} retryLabel="Retry price history" />
+              : historyState.states[detailItem.id]?.status !== "success" && !detailHistoryList.length
+              ? <div className="py-4 text-secondary" role="status">Loading price history...</div>
+              : <DetailedPriceChart points={detailPoints} />}
 
             {/* Historical Price Log Table (2 Clean Columns: Date Recorded & Market Price) */}
             <div className="mt-4">
               <h5 className="text-white fw-bold mb-3">📋 Historical Price Log</h5>
-              {detailHistoryList.length === 0 ? (
+              {historyState.states[detailItem.id]?.status !== "success" && !detailHistoryList.length ? null : detailHistoryList.length === 0 ? (
                 <div className="text-muted small p-3 bg-dark rounded text-center">
                   No price history yet.
                 </div>
@@ -49,14 +55,14 @@ export default function TrackerDetailModal({ detailItem, setDetailItem, detailTr
                   <table className="table table-dark table-sm table-striped table-hover align-middle mb-0">
                     <thead>
                       <tr>
-                        <th scope="col" className="ps-3">Publication Date (UTC)</th>
+                        <th scope="col" className="ps-3">Observation Date (UTC)</th>
                         <th scope="col" className="text-end pe-3">Recorded Market Price (€)</th>
                       </tr>
                     </thead>
                     <tbody>
                       {detailHistoryList.map((h) => (
                         <tr key={h.id || h.dateExtracted}>
-                          <td className="ps-3 small text-secondary">
+                          <td className="ps-3 small text-secondary" title={h.sourcePublishedAt ? "Source publication date" : "First observed date; the source publication date was not recorded"}>
                             {formatDateDDMMYYYY(h.dateExtracted)}
                           </td>
                           <td className="text-end pe-3 font-mono text-success fw-bold">
@@ -75,8 +81,7 @@ export default function TrackerDetailModal({ detailItem, setDetailItem, detailTr
                 ✕ Close Detail View
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )
   );
 }

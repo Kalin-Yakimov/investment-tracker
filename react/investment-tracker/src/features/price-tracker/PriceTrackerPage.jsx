@@ -1,13 +1,17 @@
+import { useRef } from "react";
 import PriceTimeframeSelector from "../../shared/components/PriceTimeframeSelector";
 import usePriceTracker from "./hooks/usePriceTracker";
 import TrackerSearch from "./components/TrackerSearch";
 import TrackerDetailModal from "./components/TrackerDetailModal";
 import TrackedItemsTable from "./components/TrackedItemsTable";
 import TrackerDeleteModal from "./components/TrackerDeleteModal";
+import RequestError from "../../shared/components/RequestError";
+import PriceAttribution from "../../shared/components/PriceAttribution";
 import "./styles/PriceTrackerPage.css";
 
 export default function PriceTrackerPage() {
   const state = usePriceTracker();
+  const searchInput = useRef(null);
   const { scope, error, selectedTimeframe, setSelectedTimeframe } = state;
   return (
     <div className="tracker-page-container container py-4 pb-5">
@@ -24,6 +28,7 @@ export default function PriceTrackerPage() {
       {error && (
         <div
           className="mb-4 p-3 rounded-3 shadow-lg text-white"
+          role="alert"
           style={{
             background: "rgba(22, 27, 38, 0.95)",
             border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -38,7 +43,8 @@ export default function PriceTrackerPage() {
       )}
 
       {/* Search & Add Item Section */}
-      <TrackerSearch {...state} />
+      <TrackerSearch {...state} inputRef={searchInput} />
+      <RequestError message={state.loadError} onRetry={state.fetchTrackedItems} retryLabel="Retry tracked items" pending={state.loading} />
 
 
       {/* Global Timeframe Control Bar */}
@@ -54,10 +60,12 @@ export default function PriceTrackerPage() {
 
 
       {/* Main Tracked Items Table */}
-      <TrackedItemsTable {...state} pending={scope.isPending("tracked-change")} />
+      <TrackedItemsTable {...state} pending={state.loading || scope.isPending("tracked-change")} />
 
       {/* Centered Custom Delete Confirmation Modal */}
-      <TrackerDeleteModal {...state} pending={scope.isPending("tracked-change")} />
+      <TrackerDeleteModal {...state} pending={scope.isPending("tracked-change")}
+        onRemoved={() => searchInput.current?.focus({ preventScroll: true })} />
+      <PriceAttribution />
     </div>
   );
 }

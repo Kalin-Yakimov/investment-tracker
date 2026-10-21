@@ -37,17 +37,31 @@ public class MarketPricePersistenceService {
         }
     }
 
-    public record RecordedPublication(BigDecimal rate, Instant observedAt) { }
+    public record RecordedPublication(BigDecimal rate, Instant observedAt, Instant fxRateAsOf) { }
+    public record RecordedMarketPrice(BigDecimal price, Instant observedAt, Instant sourcePublishedAt, Instant fxRateAsOf) { }
 
     @Transactional(readOnly = true)
     public Optional<RecordedPublication> findRecordedPublication(String version) {
         return snapshots.findFirstBySourceAndSourceVersionOrderByIdAsc(SOURCE, version)
-                .map(snapshot -> new RecordedPublication(snapshot.getUsdToEurRate(), snapshot.getObservedAt()));
+                .map(snapshot -> new RecordedPublication(snapshot.getUsdToEurRate(), snapshot.getObservedAt(), snapshot.getFxRateAsOf()));
     }
 
     @Transactional(readOnly = true)
-    public Optional<BigDecimal> findLastKnownRate() {
-        return snapshots.findFirstBySourceOrderByObservedAtDescIdDesc(SOURCE).map(MarketPriceSnapshot::getUsdToEurRate);
+    public Optional<UsdToEurRateService.Quote> findLastKnownQuote() {
+        return snapshots.findFirstBySourceOrderByObservedAtDescIdDesc(SOURCE)
+                .map(snapshot -> new UsdToEurRateService.Quote(snapshot.getUsdToEurRate(), snapshot.getFxRateAsOf()));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, RecordedMarketPrice> findLatestPrices(Collection<String> requestedNames) {
+        List<String> names = requestedNames.stream().filter(Objects::nonNull).distinct().toList();
+        Map<String, RecordedMarketPrice> result = new HashMap<>();
+        for (int start = 0; start < names.size(); start += QUERY_BATCH_SIZE) {
+            snapshots.findLatestForMarketNames(SOURCE, names.subList(start, Math.min(start + QUERY_BATCH_SIZE, names.size())))
+                    .forEach(snapshot -> result.put(snapshot.getMarketHashName(), new RecordedMarketPrice(snapshot.getPriceEur(),
+                            snapshot.getObservedAt(), snapshot.getSourcePublishedAt(), snapshot.getFxRateAsOf())));
+        }
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -146,14 +160,19 @@ public class MarketPricePersistenceService {
                 else if (dashboardOnly) items.updateDashboardTrackedPrice(name, eur);
                 else items.updateTrackedPrice(name, eur);
                 if (previous == null) {
-                    pending.add(new MarketPriceSnapshot(name, SOURCE, feed.sourceVersion(), feed.observedAt(),
-                            feed.pricesUsd().get(name), feed.usdToEurRate(), eur));
+                    MarketPriceSnapshot observation = new MarketPriceSnapshot(name, SOURCE, feed.sourceVersion(), feed.observedAt(),
+                            feed.pricesUsd().get(name), feed.usdToEurRate(), eur);
+                    observation.setSourcePublishedAt(feed.modifiedMillis() > 0 ? Instant.ofEpochMilli(feed.modifiedMillis()) : null);
+                    observation.setFxRateAsOf(feed.fxRateAsOf());
+                    pending.add(observation);
                 } else if (!samePublication) {
                     previous.setSourceVersion(feed.sourceVersion());
                     previous.setObservedAt(feed.observedAt());
                     previous.setPriceUsd(feed.pricesUsd().get(name));
                     previous.setUsdToEurRate(feed.usdToEurRate());
                     previous.setPriceEur(eur);
+                    previous.setSourcePublishedAt(feed.modifiedMillis() > 0 ? Instant.ofEpochMilli(feed.modifiedMillis()) : null);
+                    previous.setFxRateAsOf(feed.fxRateAsOf());
                     pending.add(previous);
                 }
             }

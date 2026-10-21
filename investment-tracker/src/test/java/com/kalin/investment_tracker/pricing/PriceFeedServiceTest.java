@@ -81,7 +81,7 @@ class PriceFeedServiceTest {
     private PriceFeedService newService() {
         MarketPricePersistenceService persistence = new MarketPricePersistenceService(items, snapshots, writeLocks);
         return new PriceFeedService(new CsgotraderFeedClient(http, new ObjectMapper(), settings),
-                new UsdToEurRateService(http, new ObjectMapper(), persistence),
+                new UsdToEurRateService(http, new ObjectMapper(), persistence, clock),
                 new PriceRefreshCooldown(settings, clock), persistence, settings, clock);
     }
 
@@ -94,6 +94,22 @@ class PriceFeedServiceTest {
         clock.advance(settings.getCheckIntervalMs() + 1);
         assertEquals(new BigDecimal("40.08"), service.getCachedItemPriceData(NAME).currentPrice);
         verifyNoInteractions(http, items, snapshots, writeLocks);
+    }
+
+    @Test void successful304ChecksRetainTheSourceAndFxDatesAndDoNotHideStaleness() {
+        clock.now = PUBLICATION.plusSeconds(600);
+        Instant fxAsOf = PUBLICATION.minusSeconds(3600);
+        when(http.getForEntity(FX, String.class)).thenReturn(ResponseEntity.ok(
+                "{\"rates\":{\"EUR\":0.92},\"time_last_update_unix\":" + fxAsOf.getEpochSecond() + "}"));
+        feedCall().thenReturn(response(PUBLICATION), ResponseEntity.status(HttpStatus.NOT_MODIFIED).build());
+        service.forceRefreshPriceCache();
+        var first = service.getCachedItemPriceData(NAME).freshness;
+        assertEquals("FRESH", first.status()); assertEquals(fxAsOf, first.fxRateAsOf());
+        clock.advance(4 * 86400000L); service.forceRefreshPriceCache();
+        var checked = service.getCachedItemPriceData(NAME).freshness;
+        assertEquals(PUBLICATION, checked.sourcePublishedAt()); assertEquals(fxAsOf, checked.fxRateAsOf());
+        assertEquals(clock.instant(), checked.lastSuccessfulCheck()); assertEquals("STALE", checked.status());
+        verify(http, times(1)).getForEntity(FX, String.class);
     }
 
     @Test void loadsLast24hPriceAndStoresOneRealSnapshot() {

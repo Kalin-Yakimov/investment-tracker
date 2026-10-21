@@ -17,6 +17,7 @@ public class TrackedItemCreationService {
     private final ItemRepository items;
     private final MarketPricePersistenceService prices;
     private final ActivityEventService activity;
+    private final PriceFeedService feedService;
 
     @Transactional
     public TrackedItemDto create(Item item, PriceFeedSnapshot feed) {
@@ -31,7 +32,10 @@ public class TrackedItemCreationService {
         Item saved = items.saveAndFlush(item);
         activity.recordUserAction(item.getUser(), "TRACKED_ITEM_ADDED",
                 "Started tracking '" + saved.getItemName() + "'", null);
-        return TrackedItemMapper.toDto(saved, saved.getPrice() == null ? null
-                : new PriceFeedService.ItemPriceData(saved.getPrice()));
+        var stored = prices.findLatestPrices(java.util.List.of(saved.getMarketHashName())).get(saved.getMarketHashName());
+        var cached = feedService.getCachedItemPriceData(saved.getMarketHashName());
+        boolean matches = cached != null && saved.getPrice() != null && cached.currentPrice.compareTo(saved.getPrice()) == 0
+                && (stored == null || cached.freshness != null && stored.observedAt().equals(cached.freshness.observedAt()));
+        return TrackedItemMapper.toDto(saved, matches ? cached : stored == null ? null : feedService.describeStoredPrice(stored));
     }
 }

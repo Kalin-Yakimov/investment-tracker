@@ -109,7 +109,7 @@ class PricePublicationTransactionTest {
         });
         when(client.readPublication(any())).thenReturn(new CsgotraderFeedClient.Publication(
                 Map.of(name, new BigDecimal(usd)), version, null, observedAt.toEpochMilli()));
-        when(currency.getRate(any())).thenReturn(new BigDecimal("0.92"));
+        when(currency.getQuote(any())).thenReturn(new UsdToEurRateService.Quote(new BigDecimal("0.92"), null));
     }
     private long historyCount() {
         return snapshots.findByMarketHashNameAndSourceAndObservedAtAfterOrderByObservedAtAsc(

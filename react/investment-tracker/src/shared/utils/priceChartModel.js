@@ -1,4 +1,5 @@
-// Shared presentation only. Publication filtering and UTC grouping live in priceHistory.
+import { formatPriceDate } from "./priceHistory";
+// A numeric UTC timestamp axis needs no date-adapter dependency.
 export function buildPriceChartModel(points, { detailed = false, strokeColor, tooltip } = {}) {
   const prices = points.map((p) => p.price);
   const minPrice = Math.min(...prices);
@@ -13,7 +14,8 @@ export function buildPriceChartModel(points, { detailed = false, strokeColor, to
     labels: points.map((p) => p.label),
     datasets: [
       {
-        data: prices,
+        data: points.map((point) => ({ x: point.timestamp ?? new Date(point.dateExtracted ?? point.dateObj).getTime(), y: point.price })),
+        spanGaps: true,
         borderColor: mainColor,
         borderWidth: detailed ? 2.5 : 2,
         tension: 0.35,
@@ -43,15 +45,19 @@ export function buildPriceChartModel(points, { detailed = false, strokeColor, to
       legend: { display: false },
       tooltip: {
         enabled: false,
-        mode: "index",
+        mode: "nearest",
+        axis: "x",
         intersect: false,
         external: tooltip,
       },
     },
     scales: {
       x: {
+        type: "linear",
+        bounds: "data",
+        offset: false,
         grid: { color: "rgba(255, 255, 255, 0.05)" },
-        ticks: { color: "#64748b", font: { size: 11 } },
+        ticks: { color: "#64748b", font: { size: 11 }, maxTicksLimit: 7, callback: formatPriceDate },
       },
       y: {
         grid: { color: "rgba(255, 255, 255, 0.05)" },
@@ -67,9 +73,19 @@ export function buildPriceChartModel(points, { detailed = false, strokeColor, to
   };
 
   if (!detailed) {
-    options.scales.x = { display: false };
+    options.scales.x.display = false;
     options.scales.y.display = false;
-    options.interaction = { mode: "nearest", axis: "x", intersect: false };
+  }
+  options.interaction = { mode: "nearest", axis: "x", intersect: false };
+  if (points.length === 1) {
+    const timestamp = data.datasets[0].data[0].x;
+    options.scales.x.min = timestamp - 43200000;
+    options.scales.x.max = timestamp + 43200000;
+  } else if (points.length > 1) {
+    // Tick rounding must not add empty dates before/after the recorded history.
+    // Keep elapsed-time spacing, but use the full plot width for the actual points.
+    options.scales.x.min = data.datasets[0].data[0].x;
+    options.scales.x.max = data.datasets[0].data.at(-1).x;
   }
   return { data, options };
 }

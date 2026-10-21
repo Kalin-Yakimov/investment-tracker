@@ -4,7 +4,10 @@ import PortfolioApi from "./PortfolioApi";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../shared/utils/RequestScope";
 import DatePicker from "react-datepicker";
-import { format } from "date-fns";
+import { parseCalendarDate } from "../../shared/utils/calendarDate";
+import { portfolioFormError, portfolioFormPayload } from "./utils/portfolioForm";
+import { requestErrorMessage } from "../../shared/api/requestFeedback";
+import RequestError from "../../shared/components/RequestError";
 
 export default function EditPortfolioItemPage() {
   const scope = useRequestScope();
@@ -20,6 +23,8 @@ export default function EditPortfolioItemPage() {
   });
 
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const { itemName, itemStatus, date, quantity, price } = item;
 
@@ -35,25 +40,14 @@ export default function EditPortfolioItemPage() {
   const loadItem = useCallback(async () => {
     const request = scope.begin("item");
     if (!request) return;
+    setLoading(true); setLoadError("");
     try {
       const result = await PortfolioApi.getItem(id, { signal: request.signal });
       if (!request.isCurrent()) return;
-      let item = { ...result };
-
-      if (item.date) {
-        if (item.date.includes(".")) {
-          const [day, month, year] = item.date.split(".");
-          item.date = new Date(Number(year), Number(month) - 1, Number(day));
-        } else {
-          const [year, month, day] = item.date.split("-").map(Number);
-          item.date = new Date(year, month - 1, day);
-        }
-      }
-
-      setItem(item);
+      setItem({ ...result, date: parseCalendarDate(result.date) });
     } catch (error) {
-      if (request.isCurrent() && !isRequestCanceled(error)) console.error("Error loading item:", error);
-    } finally { request.finish(); }
+      if (request.isCurrent() && !isRequestCanceled(error)) setLoadError(requestErrorMessage(error, "The item could not be loaded."));
+    } finally { if (request.isCurrent()) setLoading(false); request.finish(); }
   }, [id, scope]);
 
   useEffect(() => {
@@ -63,22 +57,19 @@ export default function EditPortfolioItemPage() {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (itemStatus === "PICK" || !itemName || !date || !quantity || !price) {
-      setError("Please fill out all fields correctly.");
-      return;
-    }
+    if (loading || loadError) return;
+    const validationError = portfolioFormError(item);
+    if (validationError) { setError(validationError); return; }
 
     const request = scope.begin("submit", { replace: false, abortable: false });
     if (!request) return;
     try {
-      const formattedDate = format(date, "dd.MM.yyyy");
-      await PortfolioApi.updateItem(id, { ...item, date: formattedDate });
+      await PortfolioApi.updateItem(id, portfolioFormPayload(item));
       // Navigate back to the Item Details / Item History page
       if (request.isCurrent()) navigate(`/viewItem/${id}`);
     } catch (error) {
       if (request.isCurrent() && !isRequestCanceled(error)) {
-        console.error("There was an error submitting the form!", error);
-        setError(error.response?.data?.error || "The item could not be updated. Please try again.");
+        setError(requestErrorMessage(error, "The item could not be updated.", { mutation: true }));
       }
     } finally { request.finish(); }
   };
@@ -97,8 +88,11 @@ export default function EditPortfolioItemPage() {
         <div className="col-12 col-md-8 col-lg-6">
           <div className="card shadow-lg p-4">
             <h2 className="text-center mb-4 text-white">Edit Portfolio Item</h2>
-            {error && <div className="alert alert-danger mb-3">{error}</div>}
+            <RequestError message={loadError} onRetry={loadItem} retryLabel="Retry loading item" pending={loading} />
+            {loading && <div role="status">Loading item...</div>}
+            {error && <div className="alert alert-danger mb-3" role="alert">{error}</div>}
             <form onSubmit={onSubmit} className="d-flex flex-column gap-3">
+              <fieldset disabled={loading || Boolean(loadError) || scope.isPending("submit")} className="d-flex flex-column gap-3">
               <div>
                 <label htmlFor="itemName" className="form-label text-white small fw-semibold">
                   Item Name
@@ -109,11 +103,14 @@ export default function EditPortfolioItemPage() {
                   placeholder="Enter item name"
                   name="itemName"
                   value={itemName}
+                  readOnly={Boolean(item.csItemId)}
+                  aria-describedby={item.csItemId ? "catalogue-name-note" : undefined}
                   disabled={scope.isPending("item") || scope.isPending("submit")}
                   onChange={onInputChange}
                   id="itemName"
                   required
                 />
+                {item.csItemId && <small id="catalogue-name-note" className="text-secondary">Name is linked to the selected catalogue item.</small>}
               </div>
 
               <div className="row g-3">
@@ -141,6 +138,7 @@ export default function EditPortfolioItemPage() {
                     Date
                   </label>
                   <DatePicker
+                    id="date"
                     selected={date}
                     disabled={scope.isPending("item") || scope.isPending("submit")}
                     onChange={handleDateChange}
@@ -190,13 +188,15 @@ export default function EditPortfolioItemPage() {
                 </div>
               </div>
 
+              </fieldset>
               <div className="d-flex justify-content-end gap-2 mt-4">
-                <button type="submit" className="btn btn-primary px-4" disabled={scope.isPending("item") || scope.isPending("submit")}>
+                <button type="submit" className="btn btn-primary px-4" disabled={loading || Boolean(loadError) || scope.isPending("submit")}>
                   Update Item
                 </button>
                 <button
                   type="button"
                   className="btn btn-secondary px-4"
+                  disabled={scope.isPending("submit")}
                   onClick={() => navigate(`/viewItem/${id}`)}
                 >
                   Cancel

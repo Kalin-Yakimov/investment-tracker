@@ -49,7 +49,7 @@ class MysqlMigrationStartupTest {
 
     @Test
     void migratedSchemaSupportsCompleteStartupAndSecurityWithoutProviderCalls() throws Exception {
-        assertEquals("2", flyway.info().current().getVersion().getVersion());
+        assertEquals("3", flyway.info().current().getVersion().getVersion());
         flyway.validate();
         mvc.perform(get("/api/v1/auth/validate-token")).andExpect(status().isUnauthorized());
         verifyNoInteractions(outbound, mail);

@@ -1,7 +1,8 @@
 import axios from "axios";
+import { API_REQUEST_TIMEOUT_MS } from "../../config/uiConfig";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
-export const apiClient = axios.create({ baseURL: API_BASE_URL, withCredentials: true });
+export const apiClient = axios.create({ baseURL: API_BASE_URL, withCredentials: true, timeout: API_REQUEST_TIMEOUT_MS });
 
 // Called once by the authentication service. Domain services never own sessions.
 let sessionInterceptorsInstalled = false;

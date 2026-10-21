@@ -75,6 +75,17 @@ public class MarketPriceSnapshot {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "source_published_at")
+    private Instant sourcePublishedAt;
+
+    @Column(name = "fx_rate_as_of")
+    private Instant fxRateAsOf;
+
+    public Instant getSourcePublishedAt() { return sourcePublishedAt; }
+    public void setSourcePublishedAt(Instant sourcePublishedAt) { this.sourcePublishedAt = sourcePublishedAt; }
+    public Instant getFxRateAsOf() { return fxRateAsOf; }
+    public void setFxRateAsOf(Instant fxRateAsOf) { this.fxRateAsOf = fxRateAsOf; }
+
     public MarketPriceSnapshot() {
     }
 

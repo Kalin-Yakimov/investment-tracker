@@ -3,6 +3,8 @@ import { useState } from "react";
 import AuthService from "../auth/AuthService";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../shared/utils/RequestScope";
+import { requestErrorMessage } from "../../shared/api/requestFeedback";
+import PriceAttribution from "../../shared/components/PriceAttribution";
 import {
   loadInventoryCalculatorSession,
   saveInventoryCalculatorSession,
@@ -46,8 +48,7 @@ function InventoryCalculatorPage() {
       saveInventoryCalculatorSession(userId, requestedSteamUrl, data);
     } catch (err) {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
-      console.error("Error calculating inventory:", err);
-      const errMsg = err.error || err.message || "Failed to calculate inventory value";
+      const errMsg = requestErrorMessage(err, "Failed to calculate inventory value");
 
       if (err.code === "PRIVACY_PRIVATE" || errMsg.toLowerCase().includes("private")) {
         setPrivacyError(true);
@@ -96,6 +97,7 @@ function InventoryCalculatorPage() {
           <div className="input-group calc-input-group">
             <input
               type="text"
+              aria-label="Steam profile URL or SteamID64"
               className="form-control calc-input"
               placeholder="Paste Steam Profile URL or SteamID64 (e.g. https://steamcommunity.com/id/gabelogannewell)"
               value={steamUrl}
@@ -134,7 +136,7 @@ function InventoryCalculatorPage() {
 
       {/* Error Message Card */}
       {error && (
-        <div className={`card p-4 mb-4 ${privacyError ? "border-warning bg-dark" : "border-danger bg-dark"}`}>
+        <div className={`card p-4 mb-4 ${privacyError ? "border-warning bg-dark" : "border-danger bg-dark"}`} role="alert">
           <div className="d-flex align-items-center gap-3">
             <span className="fs-2">{privacyError ? "🔒" : "⚠️"}</span>
             <div>
@@ -316,6 +318,7 @@ function InventoryCalculatorPage() {
           </div>
         </>
       )}
+      {result && <PriceAttribution />}
     </div>
   );
 }

@@ -85,7 +85,7 @@ class MysqlItemConsistencyTest {
             sql.executeUpdate("INSERT INTO _user(id,account_locked,enabled,created_date) VALUES (51,0,1,NOW(6)),(52,0,1,NOW(6))");
             sql.executeUpdate("INSERT INTO item(user_id,market_hash_name,quantity,steam_found_check) VALUES"
                     + "(51,'Case',1,0),(51,'Case',1,0),(51,'Case',1,NULL),(51,'Case',1,1)");
-            assertEquals(1, DatabaseMigrationTool.configuredFlyway(url, USER, PASSWORD).migrate().migrationsExecuted);
+            assertEquals(2, DatabaseMigrationTool.configuredFlyway(url, USER, PASSWORD).migrate().migrationsExecuted);
             assertThrows(java.sql.SQLException.class, () -> sql.executeUpdate(
                     "INSERT INTO item(user_id,market_hash_name,quantity,steam_found_check) VALUES(51,'case',1,1)"));
             sql.executeUpdate("INSERT INTO item(user_id,market_hash_name,quantity,steam_found_check) VALUES(52,'Case',1,1),(51,'Case',1,0)");
@@ -106,6 +106,22 @@ class MysqlItemConsistencyTest {
             try (var rows = sql.executeQuery("SELECT COUNT(*) FROM item")) { rows.next(); assertEquals(2, rows.getLong(1)); }
             try (var rows = sql.executeQuery("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='tracked_market_hash_name'")) {
                 rows.next(); assertEquals(0, rows.getLong(1), "The single ALTER must be atomic on MySQL");
+            }
+        }
+    }
+
+    @Test void v3AddsNullableMetadataWithoutInventingDatesOrChangingLegacyValues() throws Exception {
+        String url = v1Database();
+        org.flywaydb.core.Flyway.configure().configuration(DatabaseMigrationTool.configuredFlyway(url, USER, PASSWORD).getConfiguration())
+                .target("2").load().migrate();
+        try (var connection = DriverManager.getConnection(url, USER, PASSWORD); var sql = connection.createStatement()) {
+            sql.executeUpdate("INSERT INTO market_price_snapshot(market_hash_name,source,source_version,observed_at,observation_date,price_usd,usd_to_eur_rate,price_eur,created_at) "
+                    + "VALUES('Case','CSGOTRADER_24H','old','2026-10-20 08:00:00','2026-10-20',10,0.92,9.20,'2026-10-20 08:01:00')");
+            assertEquals(1, DatabaseMigrationTool.configuredFlyway(url, USER, PASSWORD).migrate().migrationsExecuted);
+            try (var rows = sql.executeQuery("SELECT price_eur,observed_at,source_published_at,fx_rate_as_of FROM market_price_snapshot")) {
+                assertTrue(rows.next()); assertEquals(new BigDecimal("9.20"), rows.getBigDecimal(1));
+                assertEquals(LocalDateTime.of(2026, 10, 20, 8, 0), rows.getObject(2, LocalDateTime.class));
+                assertNull(rows.getTimestamp(3)); assertNull(rows.getTimestamp(4)); assertFalse(rows.next());
             }
         }
     }

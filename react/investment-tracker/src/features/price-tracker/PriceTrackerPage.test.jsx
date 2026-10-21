@@ -50,15 +50,52 @@ test("the historical log shows newest publication first without reversing chart 
   await waitFor(() => expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(2));
   await act(async () => {});
   fireEvent.click(screen.getByText("Case One"));
-  const table = screen.getByText("Publication Date (UTC)").closest("table");
+  const table = screen.getByText("Observation Date (UTC)").closest("table");
   const dates = within(table).getAllByRole("row").slice(1)
     .map((row) => within(row).getAllByRole("cell")[0].textContent);
   expect(dates).toEqual(["10/10/2026 13:25", "09/10/2026 10:25"]);
   expect(history.map((point) => point.id)).toEqual([1, 2]);
 });
 
+test("failed history has a retry control and recovers to an actual empty chart", async () => {
+  PriceTrackerApi.getTrackedItems.mockResolvedValue([{ id: 1, itemName: "Case One" }]);
+  PriceTrackerApi.getPriceHistory.mockRejectedValueOnce(new Error("offline")).mockResolvedValue([]);
+  render(<PriceTrackerPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Retry chart" }));
+  await screen.findByText("No data");
+  expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+test("tracked-list failure remains visible and offers an explicit recovery", async () => {
+  PriceTrackerApi.getTrackedItems.mockRejectedValueOnce(new Error("offline")).mockResolvedValue([]);
+  render(<PriceTrackerPage />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Tracked items could not be loaded");
+  expect(screen.queryByText("No items tracked yet.")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry tracked items" }));
+  await screen.findByText("No items tracked yet.");
+});
+test("details expose an accessible dialog, Escape dismisses it and focus is restored", async () => {
+  render(<PriceTrackerPage />);
+  const trigger = await screen.findByRole("button", { name: "Case One" });
+  trigger.focus(); fireEvent.click(trigger);
+  expect(await screen.findByRole("dialog", { name: "Case One" })).toBeInTheDocument();
+  fireEvent.keyDown(document, { key: "Escape", keyCode: 27 });
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await waitFor(() => expect(trigger).toHaveFocus());
+});
+
+test("successful deletion restores focus to search when the original trigger no longer exists", async () => {
+  PriceTrackerApi.deleteTrackedItem.mockResolvedValue({ message: "Item deleted successfully" });
+  render(<PriceTrackerPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Delete Case One from tracker" }));
+  fireEvent.click(within(screen.getByRole("dialog", { name: "Remove Item?" })).getByRole("button", { name: "Remove Item" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Search CS items to track" })).toHaveFocus());
+  expect(screen.queryByRole("button", { name: "Case One" })).not.toBeInTheDocument();
+});
+
 vi.mock("./PriceTrackerApi", () => ({
-  default: { getTrackedItems: vi.fn(), getPriceHistory: vi.fn(), toggleBookmark: vi.fn() },
+  default: { getTrackedItems: vi.fn(), getPriceHistory: vi.fn(), toggleBookmark: vi.fn(), deleteTrackedItem: vi.fn() },
 }));
 
 vi.mock("../catalogue/CatalogueApi", () => ({

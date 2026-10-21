@@ -64,6 +64,19 @@ class MarketPricePersistenceTest {
         assertEquals(new BigDecimal("20.00"), result.getPriceNotification()); assertTrue(result.getSteamFoundCheck());
     }
 
+    @Test void recordedDatesSurviveReloadAndLatestMetadataIsSelectedForEachMarketName() {
+        String name = UUID.randomUUID().toString(); item(name, true);
+        Instant time = Instant.parse("2026-10-20T08:00:00Z"), fxDate = time.minusSeconds(3600);
+        PriceFeedSnapshot feed = new PriceFeedSnapshot(Map.of(name, BigDecimal.TEN), new BigDecimal("0.92"),
+                "dated-publication", time, null, time.toEpochMilli(), fxDate);
+        prices.persistFeed(feed);
+        var stored = prices.findLatestPrices(List.of(name, name, "absent"));
+        assertEquals(1, stored.size()); assertEquals(time, stored.get(name).sourcePublishedAt());
+        assertEquals(fxDate, stored.get(name).fxRateAsOf());
+        assertEquals(fxDate, prices.findRecordedPublication(feed.sourceVersion()).orElseThrow().fxRateAsOf());
+        assertEquals(fxDate, prices.findLastKnownQuote().orElseThrow().asOf());
+    }
+
     @Test void samePublicationCannotUseADifferentRateForAPreviouslyUntrackedMarketName() {
         String firstName = UUID.randomUUID().toString(), addedName = UUID.randomUUID().toString();
         item(firstName, true); item(addedName, true);

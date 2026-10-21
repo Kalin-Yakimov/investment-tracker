@@ -17,4 +17,6 @@ public class MarketPriceSnapshotDto {
     private BigDecimal price;
     private Instant dateExtracted;
     private String source;
+    private Instant sourcePublishedAt;
+    private Instant fxRateAsOf;
 }

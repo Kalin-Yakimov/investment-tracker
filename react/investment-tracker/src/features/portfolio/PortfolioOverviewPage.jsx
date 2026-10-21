@@ -7,6 +7,9 @@ import usePriceHistories from "../../shared/hooks/usePriceHistories";
 import { isRequestCanceled } from "../../shared/utils/RequestScope";
 import PortfolioHistorySection from "./components/PortfolioHistorySection";
 import PinnedMarketItemsSection from "./components/PinnedMarketItemsSection";
+import RequestError from "../../shared/components/RequestError";
+import { requestErrorMessage } from "../../shared/api/requestFeedback";
+import PriceAttribution from "../../shared/components/PriceAttribution";
 import "./styles/PortfolioOverviewPage.css";
 import "../price-tracker/styles/PriceTrackerPage.css";
 export default function PortfolioOverviewPage() {
@@ -16,60 +19,19 @@ export default function PortfolioOverviewPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [itemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
+  const [portfolioError, setPortfolioError] = useState("");
+  const lastPortfolioRequest = useRef({ page: 0, filter: "newest_date" });
+  const [pinnedLoading, setPinnedLoading] = useState(true);
+  const [pinnedError, setPinnedError] = useState("");
+  const [pinnedActionError, setPinnedActionError] = useState("");
+  const [summaryError, setSummaryError] = useState("");
   const navigate = useNavigate();
 
   // Portfolio Filtering & Sorting State
   const [filterSortOption, setFilterSortOption] = useState("newest_date");
 
-  const sortedFilteredItems = useMemo(() => {
-    let list = [...items];
-
-    if (filterSortOption === "bought") {
-      list = list.filter((i) => i.itemStatus === "BOUGHT");
-    } else if (filterSortOption === "sold") {
-      list = list.filter((i) => i.itemStatus === "SOLD");
-    }
-
-    list.sort((a, b) => {
-      const aQty = Number(a.quantity || 1);
-      const bQty = Number(b.quantity || 1);
-      const aUnit = Number(a.price || 0);
-      const bUnit = Number(b.price || 0);
-      const aTotal = aUnit * aQty;
-      const bTotal = bUnit * bQty;
-
-      const parseDate = (d) => {
-        if (!d) return 0;
-        if (typeof d === "number") return d;
-        if (typeof d === "string" && d.includes("/")) {
-          const p = d.split("/");
-          if (p.length === 3) return new Date(p[2], p[1] - 1, p[0]).getTime();
-        }
-        return new Date(d).getTime() || 0;
-      };
-
-      switch (filterSortOption) {
-        case "oldest_date":
-          return parseDate(a.date) - parseDate(b.date) || (a.id || 0) - (b.id || 0);
-        case "newest_date":
-          return parseDate(b.date) - parseDate(a.date) || (b.id || 0) - (a.id || 0);
-        case "highest_quantity":
-          return bQty - aQty;
-        case "highest_total_price":
-          return bTotal - aTotal;
-        case "lowest_total_price":
-          return aTotal - bTotal;
-        case "highest_unit_price":
-          return bUnit - aUnit;
-        case "lowest_unit_price":
-          return aUnit - bUnit;
-        default:
-          return 0;
-      }
-    });
-
-    return list;
-  }, [items, filterSortOption]);
+  // Filtering, order and stable tie-breakers are authoritative on the server.
+  const sortedFilteredItems = items;
 
   // Pinned Items State & Selected Timeframe
   const [selectedTimeframe, setSelectedTimeframe] = useState("7D");
@@ -83,6 +45,8 @@ export default function PortfolioOverviewPage() {
     async (page = 0, filter = filterSortOption) => {
       const request = scope.begin("portfolio");
       if (!request) return;
+      lastPortfolioRequest.current = { page, filter };
+      setPortfolioError("");
       try {
         setLoading(true);
         const result = await PortfolioApi.getUserItems(page, itemsPerPage, filter, { signal: request.signal });
@@ -92,8 +56,7 @@ export default function PortfolioOverviewPage() {
         setCurrentPage(page);
       } catch (error) {
         if (request.isCurrent() && !isRequestCanceled(error)) {
-          console.error("Error loading items:", error);
-          setItems([]);
+          setPortfolioError(requestErrorMessage(error, "Portfolio history could not be loaded."));
         }
       } finally {
         if (request.isCurrent()) setLoading(false);
@@ -106,6 +69,7 @@ export default function PortfolioOverviewPage() {
   const loadPinnedItems = useCallback(async () => {
     const request = scope.begin("pinned");
     if (!request) return;
+    setPinnedLoading(true); setPinnedError("");
     try {
       const data = await PriceTrackerApi.getTrackedItems({ signal: request.signal });
       if (!request.isCurrent()) return;
@@ -115,8 +79,9 @@ export default function PortfolioOverviewPage() {
         setAllPinnedItems(bookmarked);
       }
     } catch (err) {
-      if (request.isCurrent() && !isRequestCanceled(err)) console.error("Failed to load pinned items:", err);
+      if (request.isCurrent() && !isRequestCanceled(err)) setPinnedError(requestErrorMessage(err, "Pinned items could not be loaded."));
     } finally {
+      if (request.isCurrent()) setPinnedLoading(false);
       request.finish();
     }
   }, [scope]);
@@ -173,23 +138,25 @@ export default function PortfolioOverviewPage() {
     const request = scope.begin("unpin:" + itemId, { replace: false, abortable: false });
     if (!request) return;
     scope.cancel("pinned");
+    setPinnedActionError("");
     try {
       await PriceTrackerApi.toggleBookmark(itemId);
       if (!request.isCurrent()) return;
       setAllPinnedItems((prev) => prev.filter((i) => i.id !== itemId));
     } catch (err) {
-      if (request.isCurrent() && !isRequestCanceled(err)) console.error("Failed to unpin item:", err);
+      if (request.isCurrent() && !isRequestCanceled(err)) setPinnedActionError(requestErrorMessage(err, "The item could not be unpinned.", { mutation: true }));
     } finally {
       request.finish();
     }
   };
 
   // Portfolio summary stats across ALL registered items
-  const [stats, setStats] = useState({ count: 0, bought: 0 });
+  const [stats, setStats] = useState(null);
 
   const loadPortfolioSummary = useCallback(async () => {
     const request = scope.begin("summary");
     if (!request) return;
+    setSummaryError("");
     try {
       const summary = await PortfolioApi.getPortfolioSummary({ signal: request.signal });
       if (!request.isCurrent()) return;
@@ -198,7 +165,7 @@ export default function PortfolioOverviewPage() {
         bought: Number(summary.totalInvestmentValue || 0),
       });
     } catch (err) {
-      if (request.isCurrent() && !isRequestCanceled(err)) console.error("Failed to load portfolio summary:", err);
+      if (request.isCurrent() && !isRequestCanceled(err)) setSummaryError(requestErrorMessage(err, "Portfolio totals could not be loaded."));
     } finally {
       request.finish();
     }
@@ -215,16 +182,17 @@ export default function PortfolioOverviewPage() {
         <div className="col-12 col-sm-6">
           <div className="portfolio-stat-card p-3">
             <span className="stat-label">Registered Items</span>
-            <div className="stat-value text-white">{stats.count}</div>
+            <div className="stat-value text-white">{stats?.count ?? "—"}</div>
           </div>
         </div>
         <div className="col-12 col-sm-6">
           <div className="portfolio-stat-card p-3">
             <span className="stat-label">Total Investment Value</span>
-            <div className="stat-value text-info">€{stats.bought.toFixed(2)}</div>
+            <div className="stat-value text-info">{stats ? `€${stats.bought.toFixed(2)}` : "—"}</div>
           </div>
         </div>
       </div>
+      <RequestError message={summaryError} onRetry={loadPortfolioSummary} retryLabel="Retry portfolio totals" pending={scope.isPending("summary")} />
 
       {/* Main Portfolio Table Card */}
       <PortfolioHistorySection
@@ -234,6 +202,8 @@ export default function PortfolioOverviewPage() {
         filterSortOption={filterSortOption}
         setFilterSortOption={setFilterSortOption}
         loading={loading}
+        error={portfolioError}
+        onRetry={() => loadItems(lastPortfolioRequest.current.page, lastPortfolioRequest.current.filter)}
         items={items}
         sortedFilteredItems={sortedFilteredItems}
         handleRowClick={handleRowClick}
@@ -250,7 +220,13 @@ export default function PortfolioOverviewPage() {
         loaderRef={loaderRef}
         handleUnpin={handleUnpin}
         navigate={navigate}
+        loading={pinnedLoading}
+        error={pinnedError}
+        actionError={pinnedActionError}
+        onRetry={loadPinnedItems}
+        isUnpinPending={id => scope.isPending("unpin:" + id)}
       />
+      <PriceAttribution />
     </div>
   );
 }

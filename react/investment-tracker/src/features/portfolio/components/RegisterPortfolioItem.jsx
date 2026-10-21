@@ -1,10 +1,11 @@
 import { useState } from "react";
 import PortfolioApi from "../PortfolioApi";
 import DatePicker from "react-datepicker";
-import { format } from "date-fns";
 import "react-datepicker/dist/react-datepicker.module.css";
 import "../styles/RegisterPortfolioItem.css";
-import useCatalogueSearch from "../../catalogue/useCatalogueSearch";
+import CatalogueCombobox from "../../catalogue/CatalogueCombobox";
+import { portfolioFormError, portfolioFormPayload } from "../utils/portfolioForm";
+import { requestErrorMessage } from "../../../shared/api/requestFeedback";
 import useRequestScope from "../../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../../shared/utils/RequestScope";
 
@@ -22,8 +23,6 @@ export default function RegisterPortfolioItem({ onItemAdded }) {
   const [error, setError] = useState("");
   const { itemName, csItemId, itemStatus, date, quantity, price } = item;
 
-  const csItems = useCatalogueSearch(itemName, !csItemId, 2);
-  const showDropdown = !csItemId && csItems.length > 0;
   const submitting = scope.isPending("submit");
 
   const onInputChange = (e) => {
@@ -67,28 +66,19 @@ export default function RegisterPortfolioItem({ onItemAdded }) {
   const onSubmit = async (e) => {
     e.preventDefault();
 
-    if (!item.csItemId) {
-      setError("Please select a valid CS item from the search dropdown menu.");
-      return;
-    }
-
-    if (itemStatus === "PICK" || !itemName || !date || !quantity || !price) {
-      setError("Please fill out all fields.");
-      return;
-    }
+    const validationError = portfolioFormError(item, true);
+    if (validationError) { setError(validationError); return; }
 
     const request = scope.begin("submit", { replace: false, abortable: false });
     if (!request) return;
     try {
-      const formattedDate = format(date, "dd.MM.yyyy");
-      await PortfolioApi.createItem({ ...item, date: formattedDate });
+      await PortfolioApi.createItem(portfolioFormPayload(item));
       if (!request.isCurrent()) return;
       clearForm();
       if (onItemAdded) onItemAdded();
     } catch (error) {
       if (request.isCurrent() && !isRequestCanceled(error)) {
-        console.error("There was an error submitting the form!", error);
-        setError(error.response?.data?.error || "The item could not be registered. Please try again.");
+        setError(requestErrorMessage(error, "The item could not be registered.", { mutation: true }));
       }
     } finally {
       request.finish();
@@ -103,7 +93,7 @@ export default function RegisterPortfolioItem({ onItemAdded }) {
           <span className="text-white-50 small">Record CS items you bought or sold to track your portfolio</span>
         </div>
 
-        {error && <div className="alert alert-danger py-2">{error}</div>}
+        {error && <div className="alert alert-danger py-2" role="alert">{error}</div>}
 
         <form onSubmit={onSubmit}>
           <fieldset className="row g-3 align-items-end" disabled={submitting}>
@@ -112,39 +102,19 @@ export default function RegisterPortfolioItem({ onItemAdded }) {
               <label htmlFor="itemName" className="form-label text-white small fw-semibold">
                 Item Name
               </label>
-              <input
-                type="text"
-                className="form-control"
+              <CatalogueCombobox
+                id="itemName" label="Item Name"
                 placeholder="Search CS skin name..."
-                name="itemName"
                 value={itemName}
-                onChange={onInputChange}
-                id="itemName"
+                onChange={value => { setItem(previous => ({ ...previous, itemName: value, csItemId: null })); setError(""); }}
+                onSelect={selectCsItem}
+                enabled={!csItemId}
+                minimumLength={2}
+                disabled={submitting}
+                listClassName="list-group position-absolute w-100 dark-dropdown-menu shadow-lg"
+                optionClassName="list-group-item dark-dropdown-item d-flex align-items-center gap-2"
                 required
-                autoComplete="off"
               />
-              {showDropdown && csItems.length > 0 && (
-                <ul className="list-group position-absolute w-100 dark-dropdown-menu shadow-lg">
-                  {csItems.map((csItem) => (
-                    <li
-                      key={csItem.id}
-                      className="list-group-item dark-dropdown-item d-flex align-items-center gap-2"
-                      onClick={() => selectCsItem(csItem)}
-                    >
-                      {csItem.image ? (
-                        <img
-                          src={csItem.image}
-                          alt={csItem.name}
-                          className="dark-dropdown-thumb"
-                        />
-                      ) : (
-                        <div className="dark-dropdown-thumb-placeholder">📷</div>
-                      )}
-                      <span className="text-truncate small">{csItem.name}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
 
             {/* Status Select */}
@@ -172,6 +142,7 @@ export default function RegisterPortfolioItem({ onItemAdded }) {
                 Date
               </label>
               <DatePicker
+                id="date"
                 selected={date}
                 onChange={handleDateChange}
                 dateFormat={"dd.MM.yyyy"}

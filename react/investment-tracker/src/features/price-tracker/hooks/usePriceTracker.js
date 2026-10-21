@@ -1,6 +1,6 @@
 import PriceTrackerApi from "../PriceTrackerApi";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import useCatalogueSearch from "../../catalogue/useCatalogueSearch";
+import { requestErrorMessage } from "../../../shared/api/requestFeedback";
 import usePriceHistories from "../../../shared/hooks/usePriceHistories";
 import useRequestScope from "../../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../../shared/utils/RequestScope";
@@ -9,28 +9,22 @@ import { buildDailyPricePoints as getItemPoints, getPeriodChange, sortPriceHisto
 export default function usePriceTracker() {
   const scope = useRequestScope();
   const [query, setQuery] = useState("");
-  const [selectedSearchItem, setSelectedSearchItem] = useState(null);
-  const searchResults = useCatalogueSearch(query, !selectedSearchItem);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [trackedItems, setTrackedItems] = useState([]);
-  const priceHistories = usePriceHistories(trackedItems);
+  const historyState = usePriceHistories(trackedItems);
+  const priceHistories = historyState.histories;
 
   const [selectedTimeframe, setSelectedTimeframe] = useState("7D");
-  const [detailItem, setDetailItem] = useState(null);
+  const [detailSelection, setDetailItem] = useState(null);
+  const detailItem = trackedItems.find(item => item.id === detailSelection?.id) || null;
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-
-  // Auto-dismiss error message after 5 seconds
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => {
-      setError("");
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [error]);
 
   const fetchTrackedItems = useCallback(async () => {
     const request = scope.begin("tracked");
     if (!request) return;
+    setLoading(true); setLoadError("");
     try {
       const data = await PriceTrackerApi.getTrackedItems({ signal: request.signal });
       if (!request.isCurrent()) return;
@@ -40,10 +34,10 @@ export default function usePriceTracker() {
       setTrackedItems(list);
     } catch (err) {
       if (request.isCurrent() && !isRequestCanceled(err)) {
-        console.error("Failed to load tracked items:", err);
-        setError("Failed to load tracked items from backend.");
+        setLoadError(requestErrorMessage(err, "Tracked items could not be loaded."));
       }
     } finally {
+      if (request.isCurrent()) setLoading(false);
       request.finish();
     }
   }, [scope]);
@@ -74,7 +68,6 @@ export default function usePriceTracker() {
   const handleSelectSearchItem = async (csItem) => {
     if (scope.isPending("tracked-change")) return;
     setQuery("");
-    setSelectedSearchItem(null);
     setError("");
 
     // Instant client-side check before API call
@@ -103,12 +96,11 @@ export default function usePriceTracker() {
       await fetchTrackedItems();
     } catch (err) {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
-      console.error("Failed to add item:", err);
       const serverErr = err.error || err.response?.data?.error;
       if (serverErr && (serverErr.includes("already tracking") || serverErr.includes("already tracked"))) {
         setError("Item is already tracked.");
       } else {
-        setError(serverErr || err.message || "Failed to add item to tracker.");
+        setError(requestErrorMessage(err, "Failed to add item to tracker.", { mutation: true }));
       }
     } finally { request.finish(); }
   };
@@ -116,31 +108,34 @@ export default function usePriceTracker() {
   const handleDeleteItem = async (itemId) => {
     const request = scope.begin("tracked-change", { replace: false, abortable: false });
     if (!request) return;
+    setError("");
     scope.cancel("tracked");
     try {
       await PriceTrackerApi.deleteTrackedItem(itemId);
       if (!request.isCurrent()) return;
       setTrackedItems((prev) => prev.filter((i) => i.id !== itemId));
       setDetailItem((previous) => previous?.id === itemId ? null : previous);
+      return true;
     } catch (err) {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
-      console.error("Failed to delete item:", err);
-      setError("Failed to delete item.");
+      setError(requestErrorMessage(err, "Failed to delete item.", { mutation: true }));
+      return false;
     } finally { request.finish(); }
   };
 
   const handleToggleBookmark = async (itemId) => {
     const request = scope.begin("tracked-change", { replace: false, abortable: false });
     if (!request) return;
+    setError("");
     scope.cancel("tracked");
     try {
       const res = await PriceTrackerApi.toggleBookmark(itemId);
       if (!request.isCurrent()) return;
       setTrackedItems((prev) =>
-        prev.map((i) => (i.id === itemId ? { ...i, showInDashboard: res.bookmarked } : i))
+        prev.map((i) => (i.id === itemId ? { ...i, ...res.item, showInDashboard: res.bookmarked } : i))
       );
     } catch (err) {
-      if (request.isCurrent() && !isRequestCanceled(err)) console.error("Failed to toggle bookmark:", err);
+      if (request.isCurrent() && !isRequestCanceled(err)) setError(requestErrorMessage(err, "The bookmark could not be changed.", { mutation: true }));
     } finally { request.finish(); }
   };
 
@@ -158,7 +153,7 @@ export default function usePriceTracker() {
     return sortPriceHistoryNewestFirst(priceHistories[detailItem.id]);
   }, [detailItem, priceHistories]);
   return {
-    scope, query, setQuery, setSelectedSearchItem, searchResults, error,
+    scope, query, setQuery, error, loading, loadError, fetchTrackedItems, historyState,
     trackedItems, selectedTimeframe, setSelectedTimeframe,
     detailItem, setDetailItem, deleteConfirmId, setDeleteConfirmId,
     itemPointsMap, itemTrendsMap, handleSelectSearchItem,

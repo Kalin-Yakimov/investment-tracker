@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.tracking;
 
 import com.kalin.investment_tracker.pricing.PriceFeedService;
+import com.kalin.investment_tracker.pricing.MarketPricePersistenceService;
 
 import com.kalin.investment_tracker.admin.ActivityEventService;
 import com.kalin.investment_tracker.shared.web.ApiMessageResponse;
@@ -28,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -46,6 +48,7 @@ public class TrackedItemService {
     private final TaskExecutor applicationTaskExecutor;
     private final ActivityEventService activityEventService;
     private final TrackedItemCreationService creationService;
+    private final MarketPricePersistenceService marketPrices;
     private final Set<Integer> pendingPriceUpdates = ConcurrentHashMap.newKeySet();
 
     public List<TrackedItemDto> getTrackedItems(User user, boolean dashboardOnly) {
@@ -58,9 +61,14 @@ public class TrackedItemService {
 
         if (items.stream().anyMatch(item -> hasText(item.getMarketHashName()))) {
             priceFeedService.refreshPriceCacheIfNeeded();
+            // The refresh may have updated item.price; do not describe an earlier detached row.
+            items = itemRepository.findSteamTrackedItemsByUserId(user.getId());
+            if (dashboardOnly) items = items.stream().filter(item -> Boolean.TRUE.equals(item.getShowInDashboard())).toList();
         }
+        Map<String, MarketPricePersistenceService.RecordedMarketPrice> stored = marketPrices
+                .findLatestPrices(items.stream().map(Item::getMarketHashName).toList());
         return items.stream()
-                .map(item -> TrackedItemMapper.toDto(item, priceFeedService.getCachedItemPriceData(item.getMarketHashName())))
+                .map(item -> mapTrackedItem(item, stored.get(item.getMarketHashName())))
                 .toList();
     }
 
@@ -148,6 +156,8 @@ public class TrackedItemService {
                         .price(snapshot.getPriceEur())
                         .dateExtracted(snapshot.getObservedAt())
                         .source(snapshot.getSource())
+                        .sourcePublishedAt(snapshot.getSourcePublishedAt())
+                        .fxRateAsOf(snapshot.getFxRateAsOf())
                         .build())
                 .toList();
     }
@@ -169,7 +179,7 @@ public class TrackedItemService {
                 "Updated tracking settings for '" + updatedItem.getItemName() + "'",
                 null
         );
-        return TrackedItemMapper.toDto(updatedItem, priceFeedService.getCachedItemPriceData(updatedItem.getMarketHashName()));
+        return mapTrackedItem(updatedItem);
     }
 
     @Transactional
@@ -187,7 +197,7 @@ public class TrackedItemService {
 
         return new BookmarkResponse(
                 Boolean.TRUE.equals(updatedItem.getShowInDashboard()),
-                TrackedItemMapper.toDto(updatedItem, priceFeedService.getCachedItemPriceData(updatedItem.getMarketHashName()))
+                mapTrackedItem(updatedItem)
         );
     }
 
@@ -214,8 +224,32 @@ public class TrackedItemService {
     }
 
     public TrackedItemDto getTrackedItemDetails(Long id, User user) {
+        // Verify ownership before performing potentially costly public-source work.
+        findOwnedItem(id, user);
+        priceFeedService.refreshPriceCacheIfNeeded();
         Item item = findOwnedItem(id, user);
-        return TrackedItemMapper.toDto(item, priceFeedService.getItemPriceData(item.getMarketHashName()));
+        return mapTrackedItem(item);
+    }
+
+    private TrackedItemDto mapTrackedItem(Item item) {
+        var stored = marketPrices.findLatestPrices(java.util.Collections.singletonList(item.getMarketHashName()));
+        return mapTrackedItem(item, stored.get(item.getMarketHashName()));
+    }
+
+    private TrackedItemDto mapTrackedItem(Item item, MarketPricePersistenceService.RecordedMarketPrice stored) {
+        var cached = priceFeedService.getCachedItemPriceData(item.getMarketHashName());
+        boolean cacheAtLeastAsNew = cached != null && (cached.freshness == null || stored == null
+                || cached.freshness.observedAt() != null && !cached.freshness.observedAt().isBefore(stored.observedAt()));
+        // A mutation can join an old repeatable-read snapshot. Never attach old metadata
+        // to the current locking-read price if neither candidate matches that price.
+        boolean inconsistentStoredRead = stored != null && item.getPrice() != null
+                && stored.price().compareTo(item.getPrice()) != 0;
+        if (cacheAtLeastAsNew && (!inconsistentStoredRead || cached.freshness == null
+                || cached.freshness.observedAt() != null && cached.freshness.observedAt().isAfter(stored.observedAt()))) {
+            return TrackedItemMapper.toDto(item, cached);
+        }
+        return TrackedItemMapper.toDto(item, stored != null && !inconsistentStoredRead
+                ? priceFeedService.describeStoredPrice(stored) : null);
     }
 
     private ResolvedCatalogueItem resolveCatalogueItem(TrackedItemCreateRequest request) {

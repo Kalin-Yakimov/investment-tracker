@@ -25,14 +25,18 @@ public class PriceFeedService {
     private final Clock clock;
     // All price/history writers in this instance use this lock. Warm readers never wait for HTTP.
     private final ReentrantLock refreshLock = new ReentrantLock();
-    private volatile PriceFeedSnapshot currentFeed;
-    private volatile Instant lastCacheCheck;
+    private record CachedFeed(PriceFeedSnapshot publication, Instant checkedAt) { }
+    private volatile CachedFeed cache = new CachedFeed(null, null);
     private volatile Instant retryAfter;
 
     public static class ItemPriceData {
         public final BigDecimal currentPrice;
         public final BigDecimal price24h;
-        public ItemPriceData(BigDecimal price24h) { this.currentPrice = price24h; this.price24h = price24h; }
+        public final PriceFreshnessDto freshness;
+        public ItemPriceData(BigDecimal price24h) { this(price24h, null); }
+        public ItemPriceData(BigDecimal price24h, PriceFreshnessDto freshness) {
+            this.currentPrice = price24h; this.price24h = price24h; this.freshness = freshness;
+        }
     }
 
     public void refreshPriceCacheIfNeeded() { refreshPriceCache(false, false); }
@@ -48,7 +52,7 @@ public class PriceFeedService {
         boolean locked = false;
         try {
             locked = refreshLock.tryLock();
-            if (!locked && currentFeed == null) {
+            if (!locked && cache.publication() == null) {
                 locked = refreshLock.tryLock(properties.getRefreshWaitMs(), TimeUnit.MILLISECONDS);
             }
             if (!locked) {
@@ -76,13 +80,14 @@ public class PriceFeedService {
             if (strict) throw new ExternalServiceException("Price refresh is temporarily unavailable; try again later");
             return false;
         }
-        return force || currentFeed == null || lastCacheCheck == null
-                || !now.isBefore(lastCacheCheck.plusMillis(properties.getCheckIntervalMs()));
+        CachedFeed current = cache;
+        return force || current.publication() == null || current.checkedAt() == null
+                || !now.isBefore(current.checkedAt().plusMillis(properties.getCheckIntervalMs()));
     }
 
     private int downloadAndPublish(boolean force) {
         try {
-            PriceFeedSnapshot previous = currentFeed;
+            PriceFeedSnapshot previous = cache.publication();
             ResponseEntity<byte[]> response = feedClient.download(previous, force);
             if (previous == null && response.getStatusCode().is2xxSuccessful()
                     && response.getHeaders().getLastModified() > 0) {
@@ -96,7 +101,7 @@ public class PriceFeedService {
             }
 
             if (response.getStatusCode() == HttpStatus.NOT_MODIFIED && previous != null) {
-                lastCacheCheck = clock.instant();
+                cache = new CachedFeed(previous, clock.instant());
                 retryAfter = null;
                 return 0;
             }
@@ -117,16 +122,15 @@ public class PriceFeedService {
                 throw new ExternalServiceException("The price publication changed without a new source version");
             }
             Optional<MarketPricePersistenceService.RecordedPublication> recorded = persistence.findRecordedPublication(version);
-            BigDecimal rate = samePublication ? previous.usdToEurRate()
-                    : recorded.map(MarketPricePersistenceService.RecordedPublication::rate).orElseGet(() -> currencyRates.getRate(previous));
+            UsdToEurRateService.Quote quote = samePublication ? new UsdToEurRateService.Quote(previous.usdToEurRate(), previous.fxRateAsOf())
+                    : recorded.map(value -> new UsdToEurRateService.Quote(value.rate(), value.fxRateAsOf())).orElseGet(() -> currencyRates.getQuote(previous));
             Instant observedAt = modified > 0 ? Instant.ofEpochMilli(modified)
                     : samePublication ? previous.observedAt()
                     : recorded.map(MarketPricePersistenceService.RecordedPublication::observedAt).orElseGet(clock::instant);
-            PriceFeedSnapshot next = new PriceFeedSnapshot(prices, rate, version, observedAt, etag, modified);
+            PriceFeedSnapshot next = new PriceFeedSnapshot(prices, quote.rate(), version, observedAt, etag, modified, quote.asOf());
             // Publish only after the transaction commits, retaining the previous cache on failure.
             int count = persistence.persistFeed(next);
-            currentFeed = next;
-            lastCacheCheck = clock.instant();
+            cache = new CachedFeed(next, clock.instant());
             retryAfter = null;
             log.info("Loaded {} CSGOTrader prices; stored {} daily observations (source date {})", prices.size(), count, observedAt);
             return count;
@@ -139,7 +143,7 @@ public class PriceFeedService {
     }
 
     /** Immutable, already committed publication. Never performs HTTP or database work. */
-    public PriceFeedSnapshot getCachedPublication() { return currentFeed; }
+    public PriceFeedSnapshot getCachedPublication() { return cache.publication(); }
 
     public ItemPriceData getItemPriceData(String marketHashName) {
         refreshPriceCacheIfNeeded();
@@ -148,16 +152,25 @@ public class PriceFeedService {
 
     /** Pure cache read used by response mapping after the caller's one refresh check. */
     public ItemPriceData getCachedItemPriceData(String marketHashName) {
-        PriceFeedSnapshot feed = currentFeed;
+        CachedFeed current = cache;
+        PriceFeedSnapshot feed = current.publication();
         BigDecimal eur = feed == null || marketHashName == null ? null : feed.priceEur(marketHashName);
-        return eur == null ? null : new ItemPriceData(eur);
+        return eur == null ? null : new ItemPriceData(eur, PriceFreshnessDto.describe(feed.observedAt(),
+                feed.modifiedMillis() > 0 ? Instant.ofEpochMilli(feed.modifiedMillis()) : null,
+                current.checkedAt(), feed.fxRateAsOf(), false, clock.instant(), properties));
+    }
+
+    /** Pure metadata construction, including inside an item mutation; never downloads prices. */
+    public ItemPriceData describeStoredPrice(MarketPricePersistenceService.RecordedMarketPrice stored) {
+        return new ItemPriceData(stored.price(), PriceFreshnessDto.describe(stored.observedAt(), stored.sourcePublishedAt(),
+                null, stored.fxRateAsOf(), true, clock.instant(), properties));
     }
 
     /** Value a whole inventory against one immutable publication and one conversion rate. */
     public Map<String, BigDecimal> getCurrentPrices(Collection<String> marketNames) {
         if (marketNames == null || marketNames.isEmpty()) return Map.of();
         refreshPriceCacheIfNeeded();
-        PriceFeedSnapshot feed = currentFeed;
+        PriceFeedSnapshot feed = cache.publication();
         if (feed == null) throw new ExternalServiceException("Inventory prices are temporarily unavailable; try again later");
         Map<String, BigDecimal> prices = new HashMap<>();
         for (String name : marketNames) {
@@ -179,7 +192,7 @@ public class PriceFeedService {
         if (itemIds == null || itemIds.isEmpty()) return;
         refreshPriceCache(false, true);
         refreshLock.lock();
-        try { if (currentFeed != null) persistence.applySelected(currentFeed, itemIds); }
+        try { if (cache.publication() != null) persistence.applySelected(cache.publication(), itemIds); }
         finally { refreshLock.unlock(); }
     }
 
@@ -188,7 +201,7 @@ public class PriceFeedService {
     public void updateAllDashboardItems() {
         refreshPriceCache(false, true);
         refreshLock.lock();
-        try { if (currentFeed != null) persistence.applyDashboard(currentFeed); }
+        try { if (cache.publication() != null) persistence.applyDashboard(cache.publication()); }
         finally { refreshLock.unlock(); }
     }
     public Optional<BigDecimal> tryFetchPrice(String marketHashName) {

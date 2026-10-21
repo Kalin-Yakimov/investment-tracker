@@ -2,9 +2,11 @@ import PriceTimeframeSelector from "../../../shared/components/PriceTimeframeSel
 import { Table } from "react-bootstrap";
 import { PriceSparkline } from "../../../shared/components/PriceCharts";
 import { buildDailyPricePoints as getItemPoints, getPeriodChange } from "../../../shared/utils/priceHistory";
-import { formatCurrency } from "../../../shared/utils/formatCurrency";
+import PriceValue from "../../../shared/components/PriceValue";
+import RequestError from "../../../shared/components/RequestError";
+import PriceTrend from "../../../shared/components/PriceTrend";
 
-export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinnedItems, selectedTimeframe, setSelectedTimeframe, pinnedHistories, pinnedVisibleCount, loaderRef, handleUnpin, navigate }) {
+export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinnedItems, selectedTimeframe, setSelectedTimeframe, pinnedHistories, pinnedVisibleCount, loaderRef, handleUnpin, navigate, loading, error, actionError, onRetry, isUnpinPending }) {
   return (
       <div className="card portfolio-table-card shadow-lg p-4">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
@@ -14,7 +16,8 @@ export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinned
           <PriceTimeframeSelector selectedTimeframe={selectedTimeframe} onSelect={setSelectedTimeframe} />
         </div>
 
-        {allPinnedItems.length === 0 ? (
+        <RequestError message={actionError} />
+        {error ? <RequestError message={error} onRetry={onRetry} retryLabel="Retry pinned items" pending={loading} /> : loading ? <div className="p-4 text-secondary" role="status">Loading pinned items...</div> : allPinnedItems.length === 0 ? (
           <div className="p-4 text-center text-white my-2" style={{ background: "rgba(255, 255, 255, 0.02)", borderRadius: "12px", border: "1px dashed rgba(255, 255, 255, 0.1)" }}>
             <h6 className="mb-0 text-white fw-normal">No pinned items at the moment.</h6>
           </div>
@@ -33,7 +36,7 @@ export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinned
               </thead>
               <tbody>
                 {visiblePinnedItems.map((item) => {
-                  const history = pinnedHistories[item.id] || [];
+                  const history = pinnedHistories.histories[item.id] || [];
                   const points = getItemPoints(history, selectedTimeframe);
                   const trend = getPeriodChange(points);
                   const strokeColor = trend.direction === "positive" ? "#10b981" : trend.direction === "negative" ? "#ef4444" : "#6b7280";
@@ -45,6 +48,8 @@ export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinned
                           type="button"
                           className="btn btn-sm p-1 border-0 text-warning"
                           title="Unpin from Main Dashboard"
+                          aria-label={`Unpin ${item.itemName}`}
+                          disabled={isUnpinPending?.(item.id)}
                           style={{ fontSize: "1.2rem", background: "transparent" }}
                         >
                           ⭐
@@ -62,28 +67,16 @@ export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinned
                         )}
                       </td>
                       <td>
-                        <div className="fw-semibold text-white">{item.itemName}</div>
+                        <button type="button" className="fw-semibold text-white item-name-action" onClick={event => { event.stopPropagation(); navigate("/tracker"); }}>{item.itemName}</button>
                       </td>
                       <td className="font-mono fw-bold text-success">
-                        {formatCurrency(item.price)}
+                        <PriceValue item={item} />
                       </td>
                       <td>
-                        <span
-                          className={`badge ${
-                            trend.direction === "positive"
-                              ? "bg-success"
-                              : trend.direction === "negative"
-                              ? "bg-danger"
-                              : "bg-secondary"
-                          }`}
-                        >
-                          {trend.pct == null
-                            ? "—"
-                            : `${trend.direction === "positive" ? "▲ +" : trend.direction === "negative" ? "▼ " : ""}${trend.pct.toFixed(2)}%`}
-                        </span>
+                        <PriceTrend trend={trend} points={points} />
                       </td>
                       <td>
-                        <PriceSparkline emptyClassName="" points={points} strokeColor={strokeColor} />
+                        <PriceSparkline emptyClassName="" points={points} strokeColor={strokeColor} state={pinnedHistories.states[item.id] || { status: "loading" }} onRetry={() => pinnedHistories.retry(item.id)} />
                       </td>
                     </tr>
                   );

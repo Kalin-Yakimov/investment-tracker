@@ -33,6 +33,8 @@ public final class TrackedItemMapper {
                 .steamFoundCheck(item.getSteamFoundCheck())
                 .image(catalogueItem != null ? catalogueItem.getImage() : null)
                 .price24h(price24h)
+                .priceFreshness(priceData != null && priceData.freshness != null ? priceData.freshness
+                        : com.kalin.investment_tracker.pricing.PriceFreshnessDto.unknownStored(currentPrice != null))
                 .build();
     }
 

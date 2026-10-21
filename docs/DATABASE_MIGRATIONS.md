@@ -10,9 +10,15 @@ real MySQL together with Hibernate schema validation and real InnoDB auth locks.
 `V2__unique_tracked_items.sql` adds generated tracked-only uniqueness without
 restricting repeated portfolio transactions. It never deletes duplicates: an
 installation containing duplicate tracked owner/market pairs fails safely and
-needs explicit review. Fresh installs execute V1 then V2; adopted V1 databases
-apply only pending V2. Never edit either migration after it has been applied.
+needs explicit review. Fresh installs execute V1, V2 and V3; adopted databases
+apply only pending migrations. Never edit a migration after it has been applied.
 Implementation and verification: [DATA_CONSISTENCY_STAGE4.md](DATA_CONSISTENCY_STAGE4.md).
+
+`V3__price_freshness_metadata.sql` adds nullable `source_published_at` and
+`fx_rate_as_of` columns to `market_price_snapshot`. Existing prices, dates,
+relations and daily uniqueness remain unchanged. Old provenance remains NULL:
+no provider or currency dates are guessed from the time the migration runs.
+See [FRONTEND_RELIABILITY_STAGE5.md](FRONTEND_RELIABILITY_STAGE5.md).
 
 | Profile | Schema management |
 | --- | --- |
@@ -68,7 +74,7 @@ arguments. Variables are separate from the running application's configuration:
 - `MIGRATION_DB_USERNAME`, `MIGRATION_DB_PASSWORD`: maintenance credentials.
 - `MIGRATION_REFERENCE_URL`: separate disposable database created with the
   shipped **V1 only**; needed for legacy `verify` and `adopt`. A latest-version
-  V2 reference must not be used to baseline an original V1 database.
+  V2/V3 reference must not be used to baseline an original V1 database.
 - `MIGRATION_REFERENCE_USERNAME`, `MIGRATION_REFERENCE_PASSWORD`: optional
   separate reference credentials (otherwise the target credentials are used).
 - `MIGRATION_BACKUP_RESTORE_VERIFIED=true`: operator acknowledgment required
@@ -152,7 +158,7 @@ This check does not replace a data-integrity review or a restore rehearsal.
 .\gradlew.bat databaseMigration -PmigrationAction=adopt -PmigrationDatabase=investment_restore_check
 ```
 
-8. Run `migrate` on the adopted clone to apply pending V2, then test the migrated
+8. Run `migrate` on the adopted clone to apply pending V2/V3, then test the migrated
    application against the clone in an isolated environment.
    Only then repeat the verification and explicit adoption on the original
    during the approved maintenance window, with all writers stopped and the
@@ -162,7 +168,7 @@ This check does not replace a data-integrity review or a restore rehearsal.
 `adopt` refuses an existing history marker. It is not a re-baseline operation.
 `migrate` on non-empty unadopted databases still fails safely.
 
-### Already adopted V1 installation: upgrade to V2
+### Already adopted V1 installation: upgrade to V2/V3
 
 No new baseline or V1 adoption is needed. Stop all app writers, retain a verified
 private backup, and check for duplicates before the migration window:
@@ -192,10 +198,15 @@ The 2026-10-21 Stage 4 read-only preflight found zero duplicate groups on the
 developer database. V2 has **not** been applied to that real database by the
 implementation/test runs; isolated MySQL 8.0.37 and 8.4.11 upgrades were tested.
 
+Stage 5 also tested V3 on both disposable MySQL versions, including an upgrade
+from V2 with existing observations. V3 has **not** been applied to the real
+developer database. The next normal app startup will apply pending V2/V3 before
+Hibernate validation. Plan this as a schema upgrade, not a read-only UI preview.
+
 ## Release and recovery rules
 
 Once V1 is applied or adopted, never edit it. Add increasing migrations, e.g.
-`V3__add_token_indexes.sql`, and test both fresh and upgrade paths on real MySQL.
+`V4__add_token_indexes.sql`, and test both fresh and upgrade paths on real MySQL.
 Run migration validation and database tests before each release. Use a separate
 migration credential where the runtime account cannot change the schema.
 

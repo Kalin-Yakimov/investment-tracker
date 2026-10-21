@@ -1,11 +1,14 @@
 import TablePagination from "../../shared/components/TablePagination";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import PortfolioApi from "./PortfolioApi";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../shared/utils/RequestScope";
 import { Table } from "react-bootstrap";
 import Card from "../../shared/components/Card";
+import RequestError from "../../shared/components/RequestError";
+import { requestErrorMessage } from "../../shared/api/requestFeedback";
+import { formatCalendarDate } from "../../shared/utils/calendarDate";
 
 export default function PortfolioItemDetailsPage() {
   const scope = useRequestScope();
@@ -24,6 +27,9 @@ export default function PortfolioItemDetailsPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [historyTotalPages, setHistoryTotalPages] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const requestedHistoryPage = useRef(0);
   const { id } = useParams();
   const itemsPerPage = 10;
 
@@ -40,8 +46,7 @@ export default function PortfolioItemDetailsPage() {
       setActiveItem(result);
     } catch (error) {
       if (request.isCurrent() && !isRequestCanceled(error)) {
-        console.error("Error fetching item:", error);
-        setError("Item not found");
+        setError(error.response?.status === 404 ? "Item not found" : requestErrorMessage(error, "Item details could not be loaded."));
       }
     } finally {
       if (request.isCurrent()) setLoading(false);
@@ -54,6 +59,7 @@ export default function PortfolioItemDetailsPage() {
       const request = scope.begin("history");
       if (!request) return;
       setHistoryLoading(true);
+      setHistoryError(""); requestedHistoryPage.current = page;
       try {
         const result = await PortfolioApi.getItemByName(
           item.itemName,
@@ -66,7 +72,7 @@ export default function PortfolioItemDetailsPage() {
         setHistoryTotalPages(result.totalPages || 0);
         setCurrentPage(page);
       } catch (error) {
-        if (request.isCurrent() && !isRequestCanceled(error)) console.error("Error fetching item history:", error);
+        if (request.isCurrent() && !isRequestCanceled(error)) setHistoryError(requestErrorMessage(error, "Transaction history could not be loaded."));
       } finally {
         if (request.isCurrent()) setHistoryLoading(false);
         request.finish();
@@ -90,12 +96,13 @@ export default function PortfolioItemDetailsPage() {
   const deleteItem = async () => {
     const request = scope.begin("delete", { replace: false, abortable: false });
     if (!request) return;
+    setActionError("");
     try {
       const targetId = activeItem?.id || id;
       await PortfolioApi.deleteItem(targetId);
       if (request.isCurrent()) window.location.href = "/";
     } catch (error) {
-      if (request.isCurrent() && !isRequestCanceled(error)) console.error("Error deleting item:", error);
+      if (request.isCurrent() && !isRequestCanceled(error)) setActionError(requestErrorMessage(error, "The item could not be deleted.", { mutation: true }));
     } finally { request.finish(); }
   };
 
@@ -119,6 +126,7 @@ export default function PortfolioItemDetailsPage() {
         <div className="alert alert-danger mb-3" role="alert">
           {error}
         </div>
+        <button className="btn btn-outline-light me-2" onClick={loadItem}>Retry item details</button>
         <Link className="btn btn-primary" to={"/"}>
           Back to Portfolio
         </Link>
@@ -132,6 +140,7 @@ export default function PortfolioItemDetailsPage() {
 
   return (
     <div className="container mt-4 mb-5">
+      <RequestError message={actionError} />
       <div className="card shadow-lg p-4">
         {/* Header Title */}
         <div className="d-flex align-items-center justify-content-between mb-4">
@@ -178,7 +187,7 @@ export default function PortfolioItemDetailsPage() {
               <div className="col-6">
                 <div className="portfolio-stat-card p-3">
                   <span className="stat-label">Record Date</span>
-                  <div className="stat-value text-white fs-5">{currentItem.date}</div>
+                  <div className="stat-value text-white fs-5">{formatCalendarDate(currentItem.date)}</div>
                 </div>
               </div>
               <div className="col-6">
@@ -199,7 +208,7 @@ export default function PortfolioItemDetailsPage() {
               <Link className="btn btn-primary px-4" to={`/editItem/${currentItem.id || id}`}>
                 Edit Item
               </Link>
-              <button className="btn btn-danger px-4 ms-auto" onClick={deleteItem}>
+              <button className="btn btn-danger px-4 ms-auto" onClick={deleteItem} disabled={scope.isPending("delete")}>
                 🗑️ Delete Item
               </button>
             </div>
@@ -212,7 +221,7 @@ export default function PortfolioItemDetailsPage() {
             <h4 className="text-white mb-0">Transaction History for {item.itemName}</h4>
           </div>
 
-          {historyLoading ? (
+          {historyError ? <RequestError message={historyError} onRetry={() => loadItemHistory(requestedHistoryPage.current)} retryLabel="Retry transaction history" pending={historyLoading} /> : historyLoading ? (
             <div className="alert alert-info py-2">Loading transaction logs...</div>
           ) : history.length > 0 ? (
             <Card>
@@ -252,13 +261,14 @@ export default function PortfolioItemDetailsPage() {
                             <div className="portfolio-item-thumb-placeholder">📷</div>
                           )}
                         </td>
-                        <td className="fw-semibold">{historyItem.itemName}</td>
+                        <td className="fw-semibold"><button type="button" className="item-name-action" aria-pressed={isSelected}
+                          aria-label={`Select transaction ${historyItem.id}: ${historyItem.itemName}`} onClick={event => { event.stopPropagation(); setActiveItem(historyItem); }}>{historyItem.itemName}</button></td>
                         <td>
                           <span className={`badge-status ${hBought ? "badge-bought" : "badge-sold"}`}>
                             {hBought ? "Bought" : "Sold"}
                           </span>
                         </td>
-                        <td className="text-muted small">{historyItem.date}</td>
+                        <td className="text-muted small">{formatCalendarDate(historyItem.date)}</td>
                         <td className="text-center font-mono">{historyItem.quantity}</td>
                         <td className="text-end font-mono fw-bold">
                           €{Number(historyItem.price).toFixed(2)}

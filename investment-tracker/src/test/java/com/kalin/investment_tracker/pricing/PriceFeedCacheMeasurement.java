@@ -27,7 +27,7 @@ class PriceFeedCacheMeasurement {
         var clock = java.time.Clock.systemUTC();
         PriceFeedService service = new PriceFeedService(
                 new CsgotraderFeedClient(http, new ObjectMapper(), settings),
-                new UsdToEurRateService(http, new ObjectMapper(), persistence),
+                new UsdToEurRateService(http, new ObjectMapper(), persistence, java.time.Clock.systemUTC()),
                 new PriceRefreshCooldown(settings, clock), persistence, settings, clock);
 
 

@@ -35,7 +35,7 @@ test("search debounces, aborts the old query and ignores a late old response", a
   act(() => vi.advanceTimersByTime(ITEM_SEARCH_DEBOUNCE_MS));
   await act(async () => second.resolve([{ id: "new", name: "Case" }]));
   await act(async () => first.resolve([{ id: "old", name: "AK" }]));
-  expect(result.current).toEqual([{ id: "new", name: "Case" }]);
+  expect(result.current.results).toEqual([{ id: "new", name: "Case" }]);
 });
 
 test("clearing or selecting a query cancels pending work and prevents dropdown resurrection", async () => {
@@ -48,7 +48,7 @@ test("clearing or selecting a query cancels pending work and prevents dropdown r
   rerender({ enabled: false });
   await act(async () => response.resolve([{ id: 1 }]));
   expect(signal.aborted).toBe(true);
-  expect(result.current).toEqual([]);
+  expect(result.current.results).toEqual([]);
 });
 
 test("unmount clears an unsent debounce timer", () => {
@@ -73,7 +73,7 @@ test("histories have at most four active requests and are not duplicated by sibl
   await act(async () => responses[1].resolve([]));
   expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(6);
   await act(async () => responses.slice(2).forEach((response) => response.resolve([])));
-  expect(Object.keys(result.current)).toHaveLength(6);
+  expect(Object.keys(result.current.histories)).toHaveLength(6);
   expect(PriceTrackerApi.getPriceHistory.mock.calls.map(([id]) => id)).toEqual(["1", "2", "3", "4", "5", "6"]);
 });
 
@@ -86,7 +86,7 @@ test("removed item history is aborted and cannot reappear in the result map", as
   rerender({ items: [] });
   expect(signal.aborted).toBe(true);
   await act(async () => response.resolve([{ price: 99 }]));
-  expect(result.current).toEqual({});
+  expect(result.current.histories).toEqual({});
 });
 
 test("failed histories are not repeatedly retried; explicit revision permits a new load", async () => {
@@ -108,7 +108,7 @@ test("StrictMode cleanup does not strand the history queue", async () => {
   const wrapper = ({ children }) => <React.StrictMode>{children}</React.StrictMode>;
   const { result } = renderHook(() => usePriceHistories([{ id: 1 }]), { wrapper });
   await act(async () => {});
-  expect(result.current["1"]).toEqual([{ price: 12 }]);
+  expect(result.current.histories["1"]).toEqual([{ price: 12 }]);
   expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(1);
 });
 
@@ -118,7 +118,22 @@ test("histories start when the item list arrives after the initial empty render"
   rerender({ items: [{ id: 1 }, { id: 2 }] });
   await act(async () => {});
   expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(2);
-  expect(result.current).toEqual({ "1": [], "2": [] });
+  expect(result.current.histories).toEqual({ "1": [], "2": [] });
+});
+
+test("a failed history stays distinct from empty success and supports one explicit bounded retry", async () => {
+  const pending = deferred();
+  PriceTrackerApi.getPriceHistory.mockRejectedValueOnce(new Error("offline")).mockReturnValueOnce(pending.promise);
+  const { result } = renderHook(() => usePriceHistories([{ id: 1 }]));
+  await act(async () => {});
+  expect(result.current.states[1]).toMatchObject({ status: "error", error: "Price history could not be loaded." });
+  expect(result.current.histories[1]).toBeUndefined();
+  act(() => { result.current.retry(1); result.current.retry(1); });
+  await act(async () => {});
+  expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(2);
+  await act(async () => pending.resolve([]));
+  expect(result.current.states[1].status).toBe("success");
+  expect(result.current.histories[1]).toEqual([]);
 });
 
 test("a session notification invalidates old private requests and cleans up its subscription", () => {

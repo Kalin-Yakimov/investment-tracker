@@ -30,7 +30,7 @@ export function buildDailyPricePoints(history = [], timeframe = "7D", now = Date
     if (entry?.price == null || !entry?.dateExtracted) return;
     const dateObj = new Date(entry.dateExtracted);
     const price = Number(entry.price);
-    if (!Number.isFinite(dateObj.getTime()) || !Number.isFinite(price) || dateObj.getTime() < cutoff) return;
+    if (!Number.isFinite(dateObj.getTime()) || !Number.isFinite(price) || price < 0 || dateObj.getTime() < cutoff || dateObj.getTime() > now) return;
     const day = dateObj.toISOString().slice(0, 10);
     const previous = dailyPoints.get(day);
     if (!previous || dateObj.getTime() > previous.dateObj.getTime()) {
@@ -42,6 +42,7 @@ export function buildDailyPricePoints(history = [], timeframe = "7D", now = Date
     .map((point) => ({
       ...point,
       dateExtracted: point.dateObj.toISOString(),
+      timestamp: point.dateObj.getTime(),
       label: formatPriceDate(point.dateObj),
     }));
 }

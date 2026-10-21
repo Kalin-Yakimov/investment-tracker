@@ -1,5 +1,9 @@
 # Frontend request lifecycle — Stage 6
 
+This is the historical refactoring Stage 6 from 2026-10-10, **not** Stage 6 of
+the current production roadmap. For subsequent timeout, retry, chart, form and
+accessibility changes see [FRONTEND_RELIABILITY_STAGE5.md](FRONTEND_RELIABILITY_STAGE5.md).
+
 This stage preserves the existing screens and business behavior. It changes
 how the React interface owns pending work, accepts responses and cleans up
 after navigation. There are no backend, database-schema or real MySQL changes
