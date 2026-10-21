@@ -22,6 +22,8 @@ public class SecurityConfig {
 
     private final JwtFilter jwtAuthFilter;
     private final AuthenticationProvider authenticationProvider;
+    private final com.kalin.investment_tracker.validation.ResourceLimitsProperties resourceLimits;
+    private final com.kalin.investment_tracker.validation.ApiRequestBudget requestBudgets;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -52,7 +54,9 @@ public class SecurityConfig {
                 )
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(new CookieAuthenticationFilter(), JwtFilter.class);
+                .addFilterBefore(new CookieAuthenticationFilter(), JwtFilter.class)
+                .addFilterBefore(new RequestProtectionFilter(resourceLimits, requestBudgets), CookieAuthenticationFilter.class)
+                .addFilterAfter(new AuthenticatedRequestBudgetFilter(resourceLimits, requestBudgets), JwtFilter.class);
 
         return http.build();
     }

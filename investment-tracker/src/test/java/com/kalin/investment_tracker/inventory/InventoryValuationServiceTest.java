@@ -27,7 +27,7 @@ class InventoryValuationServiceTest {
     private final Map<DescriptionKey, Description> descriptions = new HashMap<>();
 
     @BeforeEach void setup() {
-        valuation = new InventoryValuationService(steam, catalogue, prices);
+        valuation = new InventoryValuationService(steam, catalogue, prices, new SteamWorkLimiter(new SteamInventoryProperties()));
         when(steam.loadInventory(ID)).thenAnswer(call -> new Inventory(assets, descriptions));
         lenient().when(steam.fetchProfile(ID)).thenReturn(new Profile("Example", null));
     }

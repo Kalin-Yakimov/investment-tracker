@@ -97,7 +97,7 @@ public class PortfolioService {
         return mapPageToDto(items);
     }
 
-    @Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id")
+    @Cacheable(value = com.kalin.investment_tracker.config.CacheConfig.PORTFOLIO_SUMMARY_CACHE, key = "#user.id", sync = true)
     public PortfolioSummaryDto getPortfolioSummary(User user) {
         long count = itemRepository.countAllUserItems(user.getId());
         java.math.BigDecimal totalBought = itemRepository.sumTotalInvestmentValue(user.getId());

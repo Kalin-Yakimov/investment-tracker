@@ -6,7 +6,7 @@ import PriceValue from "../../../shared/components/PriceValue";
 import RequestError from "../../../shared/components/RequestError";
 import PriceTrend from "../../../shared/components/PriceTrend";
 
-export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinnedItems, selectedTimeframe, setSelectedTimeframe, pinnedHistories, pinnedVisibleCount, loaderRef, handleUnpin, navigate, loading, error, actionError, onRetry, isUnpinPending }) {
+export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinnedItems, selectedTimeframe, setSelectedTimeframe, pinnedHistories, hasMore, loaderRef, handleUnpin, navigate, loading, error, actionError, onRetry, isUnpinPending }) {
   return (
       <div className="card portfolio-table-card shadow-lg p-4">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
@@ -17,7 +17,8 @@ export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinned
         </div>
 
         <RequestError message={actionError} />
-        {error ? <RequestError message={error} onRetry={onRetry} retryLabel="Retry pinned items" pending={loading} /> : loading ? <div className="p-4 text-secondary" role="status">Loading pinned items...</div> : allPinnedItems.length === 0 ? (
+        <RequestError message={error} onRetry={onRetry} retryLabel="Retry pinned items" pending={loading} />
+        {loading && allPinnedItems.length === 0 ? <div className="p-4 text-secondary" role="status">Loading pinned items...</div> : error && allPinnedItems.length === 0 ? null : allPinnedItems.length === 0 ? (
           <div className="p-4 text-center text-white my-2" style={{ background: "rgba(255, 255, 255, 0.02)", borderRadius: "12px", border: "1px dashed rgba(255, 255, 255, 0.1)" }}>
             <h6 className="mb-0 text-white fw-normal">No pinned items at the moment.</h6>
           </div>
@@ -85,9 +86,9 @@ export default function PinnedMarketItemsSection({ allPinnedItems, visiblePinned
             </Table>
 
             {/* Infinite Scroll Sentinel / Loader */}
-            {pinnedVisibleCount < allPinnedItems.length && (
+            {hasMore && (
               <div ref={loaderRef} className="text-center py-3 text-muted small">
-                ⚡ Loading more pinned items...
+                {loading ? "Loading more pinned items..." : "Scroll to load more pinned items"}
               </div>
             )}
           </div>

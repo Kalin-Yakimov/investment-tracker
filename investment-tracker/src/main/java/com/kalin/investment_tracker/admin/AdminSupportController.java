@@ -81,23 +81,27 @@ public class AdminSupportController {
     }
 
     @GetMapping("/users/{userId}/tracked-items")
-    public ResponseEntity<List<AdminDtos.TrackedItem>> trackedItems(
+    public ResponseEntity<PageResponse<AdminDtos.TrackedItem>> trackedItems(
             @AuthenticationPrincipal User actor,
             @PathVariable @Positive Integer userId,
             @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
-            HttpServletRequest request
+            HttpServletRequest request,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(service.getTrackedItems(actor, userId, reason, request.getRemoteAddr()));
+        return ResponseEntity.ok(PageResponse.from(service.getTrackedItems(actor, userId, reason, request.getRemoteAddr(), page, size)));
     }
 
     @GetMapping("/users/{userId}/sessions")
-    public ResponseEntity<List<AdminDtos.Session>> sessions(
+    public ResponseEntity<PageResponse<AdminDtos.Session>> sessions(
             @AuthenticationPrincipal User actor,
             @PathVariable @Positive Integer userId,
             @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
-            HttpServletRequest request
+            HttpServletRequest request,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(service.getSessions(actor, userId, reason, request.getRemoteAddr()));
+        return ResponseEntity.ok(PageResponse.from(service.getSessions(actor, userId, reason, request.getRemoteAddr(), page, size)));
     }
 
     @GetMapping("/users/{userId}/activity")

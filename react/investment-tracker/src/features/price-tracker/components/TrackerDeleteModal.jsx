@@ -32,7 +32,7 @@ export default function TrackerDeleteModal({ deleteConfirmId, setDeleteConfirmId
                   if (await handleDeleteItem(deleteConfirmId)) {
                     setDeleteConfirmId(null);
                     // The original trigger was deleted; restore focus to a stable control.
-                    requestAnimationFrame(() => onRemoved?.());
+                    onRemoved?.();
                   }
                 }}
               >

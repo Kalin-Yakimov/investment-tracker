@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.shared.web;
 
 import com.kalin.investment_tracker.tracking.TrackedItemController;
+import com.kalin.investment_tracker.tracking.TrackedItemDto;
 
 import com.kalin.investment_tracker.inventory.SteamInventoryController;
 
@@ -40,6 +41,30 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class ApiValidationTest {
+    @ParameterizedTest
+    @ValueSource(strings = {"page=-1", "size=0", "size=101", "page=invalid"})
+    void invalidTrackedPaginationIsRejectedBeforeService(String parameter) throws Exception {
+        String[] parts = parameter.split("=");
+        mvc.perform(get("/api/items").param(parts[0], parts[1])).andExpect(status().isBadRequest());
+        verifyNoInteractions(tracked);
+    }
+
+    @Test void trackedPageContractCarriesCountsAndServerPagination() throws Exception {
+        when(tracked.getTrackedItems(any(User.class), eq(true), eq(1), eq(20)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(TrackedItemDto.builder().id(9L).build()),
+                        org.springframework.data.domain.PageRequest.of(1, 20), 21));
+        mvc.perform(get("/api/items").param("dashboard", "true").param("page", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(9))
+                .andExpect(jsonPath("$.number").value(1)).andExpect(jsonPath("$.totalElements").value(21));
+    }
+
+    @Test void busyInventoryIsARecoverable503WithRetryAfterRatherThanAStoredEmptyResult() throws Exception {
+        when(inventory.calculateInventory(anyString())).thenThrow(new com.kalin.investment_tracker.validation.ResourceLimitException(
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "The inventory calculator is busy. Please try again shortly.", 2));
+        mvc.perform(post("/api/v1/inventory/calculate").contentType(MediaType.APPLICATION_JSON).content("{\"steamUrl\":\"76561198000000001\"}"))
+                .andExpect(status().isServiceUnavailable()).andExpect(header().string("Retry-After", "2"))
+                .andExpect(jsonPath("$.error").value("The inventory calculator is busy. Please try again shortly."));
+    }
     private MockMvc mvc;
     private PortfolioService portfolio;
     private TrackedItemService tracked;

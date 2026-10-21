@@ -39,6 +39,13 @@ import static org.springframework.http.HttpStatus.*;
 @Slf4j
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.kalin.investment_tracker.validation.ResourceLimitException.class)
+    public ResponseEntity<ExceptionResponse> handleResourceLimit(com.kalin.investment_tracker.validation.ResourceLimitException exception) {
+        var response = ResponseEntity.status(exception.getStatus());
+        if (exception.getRetryAfterSeconds() > 0) response.header(HttpHeaders.RETRY_AFTER, Long.toString(exception.getRetryAfterSeconds()));
+        return response.body(ExceptionResponse.builder().error(exception.getMessage()).build());
+    }
+
     @ExceptionHandler(DuplicateTrackedItemException.class)
     public ResponseEntity<ExceptionResponse> handleDuplicateTrackedItem(DuplicateTrackedItemException exception) {
         return errorResponse(CONFLICT, exception.getMessage());

@@ -95,13 +95,16 @@ commit and publication on 2026-10-21, followed by implementation of Stage 4.
 
 ## Remaining gates
 
-Stage 3 is published as `9ce96b1`. Stage 4 data-consistency work is implemented
-and verified locally, with commit/publication approved on 2026-10-21; see
-[DATA_CONSISTENCY_STAGE4.md](DATA_CONSISTENCY_STAGE4.md) for the current results.
-No V2 migration has been applied to the real developer database.
+Stage 3 is published as `9ce96b1`, Stage 4 as `5dd3983`, and Stage 5 as
+`c516f6f` to GitLab/GitHub. Stage 6 limits/performance work was then approved,
+implemented and verified locally; the owner also approved committing and pushing
+it to both remotes on 2026-10-21. See
+[RESOURCE_LIMITS_STAGE6.md](RESOURCE_LIMITS_STAGE6.md) for the current results.
+The implementation/test runs did not apply V2/V3 to the original developer DB;
+subsequent user-started application runs are not inspected by this checkpoint.
 
-Do not deploy publicly yet. Stages 5–8 need separate approval:
-frontend correctness, limits/performance, fail-closed production
+Do not deploy publicly yet. Stages 7–8 still need separate approval:
+fail-closed production
 settings, HTTPS/proxy/cookies, least-privilege DB access, monitoring, encrypted
 automated off-host backup/recovery, release/rollback and final browser acceptance.
 No real SMTP delivery, live provider requests or public deployment was performed

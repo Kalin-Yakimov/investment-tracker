@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -51,25 +53,19 @@ public class TrackedItemService {
     private final MarketPricePersistenceService marketPrices;
     private final Set<Integer> pendingPriceUpdates = ConcurrentHashMap.newKeySet();
 
-    public List<TrackedItemDto> getTrackedItems(User user, boolean dashboardOnly) {
-        List<Item> items = itemRepository.findSteamTrackedItemsByUserId(user.getId());
-        if (dashboardOnly) {
-            items = items.stream()
-                    .filter(item -> Boolean.TRUE.equals(item.getShowInDashboard()))
-                    .toList();
-        }
+    public Page<TrackedItemDto> getTrackedItems(User user, boolean dashboardOnly, int page, int size) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.PAGE_SIZE);
+        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
+        Page<Item> items = itemRepository.findTrackedPage(user.getId(), dashboardOnly, pageable);
 
         if (items.stream().anyMatch(item -> hasText(item.getMarketHashName()))) {
             priceFeedService.refreshPriceCacheIfNeeded();
             // The refresh may have updated item.price; do not describe an earlier detached row.
-            items = itemRepository.findSteamTrackedItemsByUserId(user.getId());
-            if (dashboardOnly) items = items.stream().filter(item -> Boolean.TRUE.equals(item.getShowInDashboard())).toList();
+            items = itemRepository.findTrackedPage(user.getId(), dashboardOnly, pageable);
         }
         Map<String, MarketPricePersistenceService.RecordedMarketPrice> stored = marketPrices
                 .findLatestPrices(items.stream().map(Item::getMarketHashName).toList());
-        return items.stream()
-                .map(item -> mapTrackedItem(item, stored.get(item.getMarketHashName())))
-                .toList();
+        return items.map(item -> mapTrackedItem(item, stored.get(item.getMarketHashName())));
     }
 
     @Transactional(propagation = Propagation.NEVER)

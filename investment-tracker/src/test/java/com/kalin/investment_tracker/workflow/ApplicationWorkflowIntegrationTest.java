@@ -184,7 +184,7 @@ class ApplicationWorkflowIntegrationTest {
         mvc.perform(authorized(patch("/api/items/{id}/bookmark", id), owner))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.bookmarked").value(true));
         mvc.perform(authorized(get("/api/items").param("dashboard", "true"), owner))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(id));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(id));
 
         Instant previousDay = Instant.now().truncatedTo(ChronoUnit.DAYS).minus(1, ChronoUnit.DAYS).plusSeconds(3600);
         Instant today = previousDay.plus(1, ChronoUnit.DAYS);
@@ -239,6 +239,27 @@ class ApplicationWorkflowIntegrationTest {
         mvc.perform(authorized(get("/api/admin/users/{id}", account("ADMIN").getId())
                         .header("X-Support-Reason", "Integration test"), support))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void supportSessionPagesKeepCountsAndDoNotExposeAdministratorOnlyIpAddresses() throws Exception {
+        Login support = login(account("SUPPORT"));
+        User target = account("USER"); login(target); login(target);
+        mvc.perform(authorized(get("/api/admin/users/{id}/sessions", target.getId())
+                        .header("X-Support-Reason", "Investigating a reported session issue").param("size", "1"), support))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].ipAddress").doesNotExist());
+        mvc.perform(authorized(get("/api/admin/users/{id}/tracked-items", target.getId())
+                        .header("X-Support-Reason", "Investigating a reported tracking issue"), support))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void oversizedJsonIsRejectedByTheRealSecurityChainBeforeAuthentication() throws Exception {
+        mvc.perform(post("/api/v1/auth/authenticate").contentType(MediaType.APPLICATION_JSON).content(new byte[65537]))
+                .andExpect(status().is(413)).andExpect(jsonPath("$.error").value("Request body is too large."));
     }
 
     @Test

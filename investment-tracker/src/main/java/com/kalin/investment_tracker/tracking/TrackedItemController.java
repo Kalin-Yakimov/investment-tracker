@@ -5,6 +5,10 @@ import com.kalin.investment_tracker.pricing.MarketPriceSnapshotDto;
 import com.kalin.investment_tracker.user.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
+import com.kalin.investment_tracker.shared.web.PageResponse;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,11 +33,13 @@ public class TrackedItemController {
     private final TrackedItemService trackedItemService;
 
     @GetMapping("/items")
-    public ResponseEntity<List<TrackedItemDto>> getAllItems(
+    public ResponseEntity<PageResponse<TrackedItemDto>> getAllItems(
             @AuthenticationPrincipal User user,
-            @RequestParam(value = "dashboard", defaultValue = "false") boolean dashboard
+            @RequestParam(value = "dashboard", defaultValue = "false") boolean dashboard,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(trackedItemService.getTrackedItems(user, dashboard));
+        return ResponseEntity.ok(PageResponse.from(trackedItemService.getTrackedItems(user, dashboard, page, size)));
     }
 
     @PostMapping("/items")

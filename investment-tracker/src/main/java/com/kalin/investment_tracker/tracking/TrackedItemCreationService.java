@@ -18,6 +18,7 @@ public class TrackedItemCreationService {
     private final MarketPricePersistenceService prices;
     private final ActivityEventService activity;
     private final PriceFeedService feedService;
+    private final com.kalin.investment_tracker.validation.ResourceLimitsProperties limits;
 
     @Transactional
     public TrackedItemDto create(Item item, PriceFeedSnapshot feed) {
@@ -27,6 +28,11 @@ public class TrackedItemCreationService {
         if (items.existsByUserIdAndMarketHashNameAndSteamFoundCheckTrue(
                 item.getUser().getId(), item.getMarketHashName())) {
             throw new DuplicateTrackedItemException();
+        }
+        // The publication guard serializes all tracked insertions, including across instances.
+        if (items.countTrackedItemsByUserId(item.getUser().getId()) >= limits.getTrackedItemsPerUser()) {
+            throw new com.kalin.investment_tracker.validation.ResourceLimitException(org.springframework.http.HttpStatus.CONFLICT,
+                    "Tracking limit reached (" + limits.getTrackedItemsPerUser() + " items). Remove an item before adding another.", 0);
         }
         prices.initializeTrackedPrice(item, feed);
         Item saved = items.saveAndFlush(item);

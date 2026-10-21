@@ -7,6 +7,8 @@ versioned migrations, stricter transaction boundaries and nullable source/FX
 timestamps. Current freshness behavior and verification are documented in
 [FRONTEND_RELIABILITY_STAGE5.md](FRONTEND_RELIABILITY_STAGE5.md); the old
 no-schema-change statement below describes the 2026-10-10 work only.
+Production Stage 6 subsequently added shared Steam concurrency/start-spacing
+budgets and weighted cache capacity; see [RESOURCE_LIMITS_STAGE6.md](RESOURCE_LIMITS_STAGE6.md).
 
 ## Scope and unchanged behavior
 

@@ -91,6 +91,14 @@ points and calculator result retention during navigation.
 
 ## Stage 6 — limits and performance (P0-7 / P1-11)
 
+Approved and implemented locally on 2026-10-21 after publishing Stage 5 as
+`c516f6f` to GitLab and GitHub. Request-body and per-peer/account admission limits,
+bounded Steam lookups/downloads, tracked insertion quotas, database pagination,
+weighted inventory caching and route code splitting are in place. No additional
+schema migration or real-database change was made. Verification and operating
+boundaries: [RESOURCE_LIMITS_STAGE6.md](RESOURCE_LIMITS_STAGE6.md).
+The owner approved committing and pushing Stage 6 to both remotes on 2026-10-21.
+
 Add justified request limits, bounded Steam concurrency, quotas, pagination and
 separate cache capacities. Files: request protection, inventory/tracking APIs,
 frontend history loading. Verify controlled load, query counts, memory and
@@ -111,7 +119,7 @@ Browser E2E, MySQL regression, security checks, responsive/keyboard review and
 current documentation against a specific release commit. All applicable gates
 must pass before public release. Unit tests alone are not production readiness.
 
-The owner approved Stage 5 publication and starting Stage 6 on 2026-10-21.
-Stages 7–8 remain unimplemented and require approval. Commit and publication of
-Stage 6 will require a separate decision after implementation and verification.
+The owner approved Stage 5 publication, starting Stage 6, and subsequently
+committing and pushing the verified Stage 6 changes on 2026-10-21.
+Stages 7–8 remain unimplemented and require approval.
 Merging branches and public deployment remain unauthorized.

@@ -15,7 +15,6 @@ test("both edges disable navigation and keep the existing page labels", () => {
   fireEvent.click(screen.getByRole("button", { name: "Previous" }));
   expect(onPageChange).toHaveBeenLastCalledWith(1);
 });
-
 test("empty results retain the one-page display and disabled arrows", () => {
   const onPageChange = vi.fn();
   render(<TablePagination currentPage={0} totalPages={0} onPageChange={onPageChange} />);
@@ -24,4 +23,17 @@ test("empty results retain the one-page display and disabled arrows", () => {
   expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   expect(onPageChange).not.toHaveBeenCalled();
+});
+
+test("large datasets render a bounded navigation window with reachable first and last pages", () => {
+  const onPageChange = vi.fn();
+  render(<TablePagination currentPage={5000} totalPages={10000} onPageChange={onPageChange} />);
+  expect(screen.getAllByRole("button")).toHaveLength(9);
+  expect(screen.getByRole("button", { name: "5001", exact: true })).toHaveAttribute("aria-current", "page");
+  fireEvent.click(screen.getByRole("button", { name: "10000", exact: true }));
+  expect(onPageChange).toHaveBeenCalledWith(9999);
+});
+test("pending loads disable page changes, including previous and next", () => {
+  render(<TablePagination currentPage={1} totalPages={3} disabled onPageChange={vi.fn()} />);
+  expect(screen.getAllByRole("button").every(button => button.disabled)).toBe(true);
 });

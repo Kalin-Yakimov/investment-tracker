@@ -20,9 +20,15 @@ public class InventoryValuationService {
     private final SteamCommunityClient steam;
     private final CsItemRepository catalogue;
     private final PriceFeedService prices;
+    private final SteamWorkLimiter work;
 
     @Cacheable(value = CacheConfig.INVENTORY_CALCULATOR_CACHE, key = "#steamId", sync = true)
     public SteamInventoryResponseDto calculate(String steamId) {
+        // Cache hits and same-profile single-flight do not consume calculation slots.
+        return work.calculate(() -> calculateUncached(steamId));
+    }
+
+    private SteamInventoryResponseDto calculateUncached(String steamId) {
         Inventory inventory = steam.loadInventory(steamId);
         Map<GroupKey, Group> groups = new LinkedHashMap<>();
         for (Asset asset : inventory.assets()) {

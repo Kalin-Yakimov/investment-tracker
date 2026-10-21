@@ -3,6 +3,8 @@
 This is the historical refactoring Stage 6 from 2026-10-10, **not** Stage 6 of
 the current production roadmap. For subsequent timeout, retry, chart, form and
 accessibility changes see [FRONTEND_RELIABILITY_STAGE5.md](FRONTEND_RELIABILITY_STAGE5.md).
+Subsequent server pagination, visible-page history loading and route code splitting
+are documented in [RESOURCE_LIMITS_STAGE6.md](RESOURCE_LIMITS_STAGE6.md).
 
 This stage preserves the existing screens and business behavior. It changes
 how the React interface owns pending work, accepts responses and cleans up

@@ -40,7 +40,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=create-drop")
-@Import({PortfolioService.class, TrackedItemService.class, TrackedItemCreationService.class, MarketPricePersistenceService.class})
+@Import({PortfolioService.class, TrackedItemService.class, TrackedItemCreationService.class, MarketPricePersistenceService.class,
+        com.kalin.investment_tracker.validation.ResourceLimitsProperties.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class ItemBoundaryIntegrationTest {
     @Autowired PortfolioService portfolio;
@@ -130,7 +131,7 @@ class ItemBoundaryIntegrationTest {
         tracked.updateTrackedItem(item.getId(), new TrackedItemUpdateRequest(true, new BigDecimal("10.00")), owner);
         assertTrue(items.findById(item.getId()).orElseThrow().getShowInDashboard());
         assertFalse(tracked.toggleBookmark(item.getId(), owner).bookmarked());
-        assertEquals(1, tracked.getTrackedItems(owner, false).size());
+        assertEquals(1, tracked.getTrackedItems(owner, false, 0, 20).getTotalElements());
         tracked.deleteTrackedItem(item.getId(), owner);
         assertFalse(items.existsById(item.getId()));
     }

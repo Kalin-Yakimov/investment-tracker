@@ -10,12 +10,39 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.Duration;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class PortfolioSummaryCacheTest {
+    @org.junit.jupiter.api.Test
+    void singleFlightSummaryLoadingCannotRepopulateAnEntryAfterAConcurrentEviction() throws Exception {
+        Cache cache = cache();
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        try (var workers = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var load = workers.submit(() -> cache.get(7, () -> {
+                entered.countDown();
+                if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("Missing test release");
+                return "old summary";
+            }));
+            org.junit.jupiter.api.Assertions.assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            var evictionStarted = new java.util.concurrent.CountDownLatch(1);
+            var invalidate = workers.submit(() -> {
+                evictionStarted.countDown();
+                transaction().executeWithoutResult(status -> cache.evict(7));
+            });
+            try {
+                org.junit.jupiter.api.Assertions.assertTrue(evictionStarted.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                org.junit.jupiter.api.Assertions.assertThrows(java.util.concurrent.TimeoutException.class,
+                        () -> invalidate.get(100, java.util.concurrent.TimeUnit.MILLISECONDS));
+            } finally { release.countDown(); }
+            org.junit.jupiter.api.Assertions.assertEquals("old summary", load.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            invalidate.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        org.junit.jupiter.api.Assertions.assertNull(cache.get(7));
+        org.junit.jupiter.api.Assertions.assertEquals("new summary", cache.get(7, () -> "new summary"));
+    }
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void summaryEvictionWaitsForCommitAndIsCancelledOnRollback(boolean commit) {
@@ -54,8 +81,9 @@ class PortfolioSummaryCacheTest {
     }
 
     private Cache cache() {
-        Duration ttl = Duration.ofMinutes(15);
-        SimpleCacheManager manager = (SimpleCacheManager) new CacheConfig().cacheManager(ttl, ttl, ttl, 1, 10);
+        var settings = new com.kalin.investment_tracker.config.CacheProperties();
+        settings.setInitialCapacity(1); settings.setMaximumSize(10);
+        SimpleCacheManager manager = (SimpleCacheManager) new CacheConfig().cacheManager(settings);
         manager.initializeCaches();
         Cache cache = manager.getCache(CacheConfig.PORTFOLIO_SUMMARY_CACHE);
         assertNotNull(cache);

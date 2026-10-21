@@ -35,13 +35,13 @@ class TrackedItemControllerTest {
     @Test
     void getAllItemsDelegatesToTrackedItemService() {
         TrackedItemDto item = TrackedItemDto.builder().id(10L).itemName("AK-47 | Redline").build();
-        when(trackedItemService.getTrackedItems(user, true)).thenReturn(List.of(item));
+        when(trackedItemService.getTrackedItems(user, true, 0, 20)).thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(item)));
 
-        var response = controller.getAllItems(user, true);
+        var response = controller.getAllItems(user, true, 0, 20);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(List.of(item), response.getBody());
-        verify(trackedItemService).getTrackedItems(user, true);
+        assertEquals(List.of(item), response.getBody().content());
+        verify(trackedItemService).getTrackedItems(user, true, 0, 20);
     }
 
     @Test

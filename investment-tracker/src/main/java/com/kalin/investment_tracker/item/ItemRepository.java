@@ -51,10 +51,10 @@ public interface ItemRepository extends JpaRepository<Item, Long>, ItemMutationR
     @Query("SELECT i FROM Item i WHERE i.steamFoundCheck = true")
     List<Item> findAllSteamTrackedItems();
 
-    // Efficient DB-level query for a specific user's Steam-tracked items.
-    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND i.steamFoundCheck = true")
+    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND i.steamFoundCheck = true " +
+            "AND (:dashboardOnly = false OR i.showInDashboard = true)")
     @EntityGraph(attributePaths = "catalogueItem")
-    List<Item> findSteamTrackedItemsByUserId(@Param("userId") Integer userId);
+    Page<Item> findTrackedPage(@Param("userId") Integer userId, @Param("dashboardOnly") boolean dashboardOnly, Pageable pageable);
 
     // Fast DB-level check if a user is already tracking a market hash name
     boolean existsByUserIdAndMarketHashNameAndSteamFoundCheckTrue(Integer userId, String marketHashName);

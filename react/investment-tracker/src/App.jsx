@@ -1,14 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Routes, Route, useParams, useLocation } from "react-router-dom";
 import RouteErrorBoundary from "./shared/components/RouteErrorBoundary";
 import "bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./layout/Navbar";
-import PortfolioOverviewPage from "./features/portfolio/PortfolioOverviewPage";
-import PriceTrackerPage from "./features/price-tracker/PriceTrackerPage";
-import InventoryCalculatorPage from "./features/inventory/InventoryCalculatorPage";
-import RegisterPortfolioItem from "./features/portfolio/components/RegisterPortfolioItem";
-import EditPortfolioItemPage from "./features/portfolio/EditPortfolioItemPage";
-import PortfolioItemDetailsPage from "./features/portfolio/PortfolioItemDetailsPage";
 import NotFoundPage from "./shared/NotFoundPage";
 import LoginPage from "./features/auth/pages/LoginPage";
 import RegistrationPage from "./features/auth/pages/RegistrationPage";
@@ -17,8 +11,16 @@ import ForgotPasswordPage from "./features/auth/pages/ForgotPasswordPage";
 import ProtectedRoute from "./features/auth/ProtectedRoute";
 import AuthService from "./features/auth/AuthService";
 import SupportPanelRoute from "./features/auth/SupportPanelRoute";
-import SupportPanelPage from "./features/support/SupportPanelPage";
 import { CookiesProvider } from "react-cookie";
+
+// Load feature code only when its route is opened; public sign-in does not need charts or support tables.
+const PortfolioOverviewPage = lazy(() => import("./features/portfolio/PortfolioOverviewPage"));
+const PriceTrackerPage = lazy(() => import("./features/price-tracker/PriceTrackerPage"));
+const InventoryCalculatorPage = lazy(() => import("./features/inventory/InventoryCalculatorPage"));
+const RegisterPortfolioItem = lazy(() => import("./features/portfolio/components/RegisterPortfolioItem"));
+const EditPortfolioItemPage = lazy(() => import("./features/portfolio/EditPortfolioItemPage"));
+const PortfolioItemDetailsPage = lazy(() => import("./features/portfolio/PortfolioItemDetailsPage"));
+const SupportPanelPage = lazy(() => import("./features/support/SupportPanelPage"));
 
 function ItemRoute({ component: Component }) {
   const { id } = useParams();
@@ -60,6 +62,7 @@ function App() {
       <div className="App">
         <Navbar />
         <RouteErrorBoundary key={`${owner ?? "public"}:${location.pathname}`}>
+        <Suspense fallback={<div className="container py-5 text-secondary" role="status">Loading page...</div>}>
         <Routes>
           <Route exact path="/login" element={<LoginPage />} />
           <Route exact path="/registration" element={<RegistrationPage />} />
@@ -132,6 +135,7 @@ function App() {
           />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </Suspense>
         </RouteErrorBoundary>
       </div>
     </CookiesProvider>

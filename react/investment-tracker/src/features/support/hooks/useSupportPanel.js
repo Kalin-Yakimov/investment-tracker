@@ -23,8 +23,8 @@ export default function useSupportPanel() {
   const [userTab, setUserTab] = useState("profile");
   const userTabRef = useRef("profile");
   const [portfolio, setPortfolio] = useState(EMPTY_PAGE);
-  const [trackedItems, setTrackedItems] = useState([]);
-  const [sessions, setSessions] = useState([]);
+  const [trackedItems, setTrackedItems] = useState(EMPTY_PAGE);
+  const [sessions, setSessions] = useState(EMPTY_PAGE);
   const [activity, setActivity] = useState(EMPTY_PAGE);
   const [audit, setAudit] = useState(EMPTY_PAGE);
   const [tickets, setTickets] = useState(EMPTY_PAGE);
@@ -129,8 +129,8 @@ export default function useSupportPanel() {
     setUserTab("profile");
     userTabRef.current = "profile";
     setPortfolio(EMPTY_PAGE);
-    setTrackedItems([]);
-    setSessions([]);
+    setTrackedItems(EMPTY_PAGE);
+    setSessions(EMPTY_PAGE);
     setActivity(EMPTY_PAGE);
   };
 
@@ -155,9 +155,9 @@ export default function useSupportPanel() {
     if (tab === "portfolio") {
       await read("tab", (config) => SupportPanelApi.getPortfolio(selectedUser.id, supportReason, page, 20, config), setPortfolio);
     } else if (tab === "tracked") {
-      await read("tab", (config) => SupportPanelApi.getTrackedItems(selectedUser.id, supportReason, config), setTrackedItems);
+      await read("tab", (config) => SupportPanelApi.getTrackedItems(selectedUser.id, supportReason, page, 20, config), setTrackedItems);
     } else if (tab === "sessions") {
-      await read("tab", (config) => SupportPanelApi.getSessions(selectedUser.id, supportReason, config), setSessions);
+      await read("tab", (config) => SupportPanelApi.getSessions(selectedUser.id, supportReason, page, 20, config), setSessions);
     } else if (tab === "activity") {
       await read("tab", (config) => SupportPanelApi.getActivity(selectedUser.id, supportReason, page, 30, config), setActivity);
     }

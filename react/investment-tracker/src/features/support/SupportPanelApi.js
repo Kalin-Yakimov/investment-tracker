@@ -39,18 +39,20 @@ class SupportPanelApi {
     ).data;
   }
 
-  static async getTrackedItems(userId, reason, config = {}) {
+  static async getTrackedItems(userId, reason, page = 0, size = 20, config = {}) {
     return (
       await apiClient.get(`${SupportPanelApi.BASE_URL}/users/${userId}/tracked-items`, {
+        params: { page, size },
         signal: config.signal,
         headers: SupportPanelApi.supportHeaders(reason),
       })
     ).data;
   }
 
-  static async getSessions(userId, reason, config = {}) {
+  static async getSessions(userId, reason, page = 0, size = 20, config = {}) {
     return (
       await apiClient.get(`${SupportPanelApi.BASE_URL}/users/${userId}/sessions`, {
+        params: { page, size },
         signal: config.signal,
         headers: SupportPanelApi.supportHeaders(reason),
       })

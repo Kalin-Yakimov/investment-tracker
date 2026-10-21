@@ -22,7 +22,9 @@ class SteamProfileXmlTest {
     @BeforeEach void setup() {
         RestTemplate http = new RestTemplate();
         server = MockRestServiceServer.bindTo(http).build();
-        client = new SteamCommunityClient(http, new ObjectMapper(), new SteamInventoryProperties(), Clock.systemUTC());
+        var settings = new SteamInventoryProperties();
+        settings.setMinimumRequestIntervalMs(1);
+        client = new SteamCommunityClient(http, new ObjectMapper(), settings, Clock.systemUTC(), new SteamWorkLimiter(settings));
     }
     private void expect(String url, String xml) {
         server.expect(requestTo(url)).andRespond(withSuccess(xml, MediaType.APPLICATION_XML));

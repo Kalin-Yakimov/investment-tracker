@@ -13,7 +13,6 @@ import org.springframework.http.*;
 import org.springframework.web.client.RestTemplate;
 import java.math.BigDecimal;
 import java.time.Clock;
-import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -98,21 +97,24 @@ class InventoryCacheTest {
         @Bean SteamInventoryProperties settings() {
             SteamInventoryProperties settings = new SteamInventoryProperties();
             settings.setPageDelayMs(0);
+            settings.setMinimumRequestIntervalMs(1);
             return settings;
         }
         @Bean Clock clock() { return Clock.systemUTC(); }
         @Bean CacheManager cacheManager() {
-            Duration ttl = Duration.ofMinutes(15);
-            return new CacheConfig().cacheManager(ttl, ttl, ttl, 1, 10);
+            var settings = new com.kalin.investment_tracker.config.CacheProperties();
+            settings.setInitialCapacity(1); settings.setMaximumSize(10);
+            return new CacheConfig().cacheManager(settings);
         }
-        @Bean SteamCommunityClient steam(RestTemplate http, SteamInventoryProperties settings, Clock clock) {
-            return new SteamCommunityClient(http, new ObjectMapper(), settings, clock);
+        @Bean SteamWorkLimiter work(SteamInventoryProperties settings) { return new SteamWorkLimiter(settings); }
+        @Bean SteamCommunityClient steam(RestTemplate http, SteamInventoryProperties settings, Clock clock, SteamWorkLimiter work) {
+            return new SteamCommunityClient(http, new ObjectMapper(), settings, clock, work);
         }
-        @Bean InventoryValuationService valuation(SteamCommunityClient steam, CsItemRepository catalogue, PriceFeedService prices) {
-            return new InventoryValuationService(steam, catalogue, prices);
+        @Bean InventoryValuationService valuation(SteamCommunityClient steam, CsItemRepository catalogue, PriceFeedService prices, SteamWorkLimiter work) {
+            return new InventoryValuationService(steam, catalogue, prices, work);
         }
-        @Bean SteamInventoryService facade(SteamCommunityClient steam, InventoryValuationService valuation) {
-            return new SteamInventoryService(steam, valuation);
+        @Bean SteamInventoryService facade(SteamCommunityClient steam, InventoryValuationService valuation, SteamWorkLimiter work) {
+            return new SteamInventoryService(steam, valuation, work);
         }
     }
 }

@@ -43,6 +43,8 @@ export default defineConfig(({ mode }) => {
       target: ["chrome87", "edge88", "firefox78", "safari14"],
     },
     test: {
+      // Keep isolated DOM environments without starting one heavyweight worker per CPU.
+      maxWorkers: 4,
       environment: "jsdom",
       environmentOptions: { jsdom: { url: "http://localhost:3000" } },
       setupFiles: ["./src/setupTests.js"],

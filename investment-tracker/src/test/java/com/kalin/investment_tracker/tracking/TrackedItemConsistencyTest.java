@@ -34,7 +34,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=create-drop")
-@Import({TrackedItemService.class, TrackedItemCreationService.class, MarketPricePersistenceService.class})
+@Import({TrackedItemService.class, TrackedItemCreationService.class, MarketPricePersistenceService.class,
+        com.kalin.investment_tracker.validation.ResourceLimitsProperties.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class TrackedItemConsistencyTest {
     private static final Instant PUBLICATION = Instant.parse("2026-10-20T08:00:00Z");

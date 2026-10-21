@@ -49,6 +49,11 @@ test("support reason, pagination/filter parameters and read cancellation remain 
   await SupportPanelApi.getPortfolio(7, "Reported a problem", 1, 20, { signal: controller.signal });
   expect(requests[1].headers["X-Support-Reason"]).toBe("Reported a problem");
   expect(requests[1].params).toEqual({ page: 1, size: 20 });
+  await PriceTrackerApi.getTrackedItems({ page: 2, size: 10, dashboard: true, signal: controller.signal });
+  expect(requests[2].params).toEqual({ page: 2, size: 10, dashboard: true });
+  await SupportPanelApi.getTrackedItems(7, "Reported a problem", 2, 20, { signal: controller.signal });
+  expect(requests[3].params).toEqual({ page: 2, size: 20 });
+  expect(requests[3].headers["X-Support-Reason"]).toBe("Reported a problem");
 });
 
 test("global Axios is not configured with application cookies or interceptors", () => {

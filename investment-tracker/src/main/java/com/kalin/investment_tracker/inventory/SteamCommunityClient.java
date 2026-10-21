@@ -38,6 +38,7 @@ public class SteamCommunityClient {
     private final ObjectMapper mapper;
     private final SteamInventoryProperties settings;
     private final Clock clock;
+    private final SteamWorkLimiter work;
     private final AtomicReference<Instant> retryAfter = new AtomicReference<>();
 
     public record DescriptionKey(String classId, String instanceId) {}
@@ -64,7 +65,7 @@ public class SteamCommunityClient {
             String name = xmlText(profile, "steamID");
             String avatar = xmlText(profile, "avatarFull");
             return new Profile(name == null ? fallback : name, safeAvatar(avatar));
-        } catch (ExternalServiceException failure) {
+        } catch (ExternalServiceException | com.kalin.investment_tracker.validation.ResourceLimitException failure) {
             // Optional metadata failure must not discard an already complete inventory.
             return new Profile(fallback, null);
         }
@@ -143,7 +144,14 @@ public class SteamCommunityClient {
         headers.set("User-Agent", "InvestmentTracker/1.0");
         headers.setAccept(List.of(inventory ? MediaType.APPLICATION_JSON : MediaType.APPLICATION_XML));
         try {
-            ResponseEntity<String> response = http.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+            ResponseEntity<String> response = work.request(() -> {
+                // A request may have entered before another request established a cooldown.
+                Instant cooldown = retryAfter.get();
+                if (cooldown != null && clock.instant().isBefore(cooldown)) {
+                    throw new ExternalServiceException("Steam is temporarily rate limited; please try again later");
+                }
+                return http.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+            });
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null || response.getBody().isBlank()) throw malformed();
             return response.getBody();
         } catch (RestClientResponseException failure) {
@@ -156,7 +164,7 @@ public class SteamCommunityClient {
             }
             log.warn("Steam Community request failed (HTTP {})", status);
             throw new ExternalServiceException("Steam is temporarily unavailable; please try again later");
-        } catch (ExternalServiceException failure) { throw failure; }
+        } catch (ExternalServiceException | com.kalin.investment_tracker.validation.ResourceLimitException failure) { throw failure; }
         catch (Exception failure) {
             log.warn("Steam Community request failed ({})", failure.getClass().getSimpleName());
             throw new ExternalServiceException("Could not reach Steam; please try again later");

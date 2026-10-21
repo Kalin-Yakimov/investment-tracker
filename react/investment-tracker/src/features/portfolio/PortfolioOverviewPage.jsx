@@ -1,6 +1,6 @@
 import PortfolioApi from "./PortfolioApi";
 import PriceTrackerApi from "../price-tracker/PriceTrackerApi";
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import usePriceHistories from "../../shared/hooks/usePriceHistories";
@@ -36,8 +36,11 @@ export default function PortfolioOverviewPage() {
   // Pinned Items State & Selected Timeframe
   const [selectedTimeframe, setSelectedTimeframe] = useState("7D");
   const [allPinnedItems, setAllPinnedItems] = useState([]);
-  const [pinnedVisibleCount, setPinnedVisibleCount] = useState(10);
-  const visiblePinnedItems = useMemo(() => allPinnedItems.slice(0, pinnedVisibleCount), [allPinnedItems, pinnedVisibleCount]);
+  const [pinnedPage, setPinnedPage] = useState(0);
+  const [pinnedTotal, setPinnedTotal] = useState(0);
+  const lastPinnedPage = useRef(0);
+  const pinnedVisibleCount = allPinnedItems.length;
+  const visiblePinnedItems = allPinnedItems;
   const pinnedHistories = usePriceHistories(visiblePinnedItems);
   const loaderRef = useRef(null);
 
@@ -66,18 +69,18 @@ export default function PortfolioOverviewPage() {
     [itemsPerPage, filterSortOption, scope],
   );
 
-  const loadPinnedItems = useCallback(async () => {
+  const loadPinnedItems = useCallback(async (page = 0) => {
     const request = scope.begin("pinned");
     if (!request) return;
+    lastPinnedPage.current = page;
     setPinnedLoading(true); setPinnedError("");
     try {
-      const data = await PriceTrackerApi.getTrackedItems({ signal: request.signal });
+      const data = await PriceTrackerApi.getTrackedItems({ page, size: 10, dashboard: true, signal: request.signal });
       if (!request.isCurrent()) return;
-      if (Array.isArray(data)) {
-        const bookmarked = data.filter((item) => item.showInDashboard === true);
-        bookmarked.sort((a, b) => (b.id || 0) - (a.id || 0));
-        setAllPinnedItems(bookmarked);
-      }
+      if (!Array.isArray(data?.content)) throw new Error("Invalid pinned-item page");
+      setAllPinnedItems(previous => page === 0 ? data.content
+        : [...new Map([...previous, ...data.content].map(item => [item.id, item])).values()]);
+      setPinnedPage(data.number); setPinnedTotal(data.totalElements);
     } catch (err) {
       if (request.isCurrent() && !isRequestCanceled(err)) setPinnedError(requestErrorMessage(err, "Pinned items could not be loaded."));
     } finally {
@@ -101,14 +104,7 @@ export default function PortfolioOverviewPage() {
     const observer = new IntersectionObserver(
       (entries) => {
         const target = entries[0];
-        if (target.isIntersecting) {
-          setPinnedVisibleCount((prev) => {
-            if (prev < allPinnedItems.length) {
-              return prev + 10;
-            }
-            return prev;
-          });
-        }
+        if (target.isIntersecting && !pinnedLoading && !pinnedError && pinnedVisibleCount < pinnedTotal) loadPinnedItems(pinnedPage + 1);
       },
       { threshold: 0.2 }
     );
@@ -121,7 +117,7 @@ export default function PortfolioOverviewPage() {
     return () => {
       observer.disconnect();
     };
-  }, [allPinnedItems]);
+  }, [pinnedLoading, pinnedError, pinnedVisibleCount, pinnedTotal, pinnedPage, loadPinnedItems]);
 
   const handleRowClick = (id) => {
     navigate(`/viewItem/${id}`);
@@ -143,6 +139,8 @@ export default function PortfolioOverviewPage() {
       await PriceTrackerApi.toggleBookmark(itemId);
       if (!request.isCurrent()) return;
       setAllPinnedItems((prev) => prev.filter((i) => i.id !== itemId));
+      // Offset pages shift after unpinning. Reload the first page instead of skipping the next item.
+      await loadPinnedItems(0);
     } catch (err) {
       if (request.isCurrent() && !isRequestCanceled(err)) setPinnedActionError(requestErrorMessage(err, "The item could not be unpinned.", { mutation: true }));
     } finally {
@@ -216,14 +214,14 @@ export default function PortfolioOverviewPage() {
         selectedTimeframe={selectedTimeframe}
         setSelectedTimeframe={setSelectedTimeframe}
         pinnedHistories={pinnedHistories}
-        pinnedVisibleCount={pinnedVisibleCount}
+        hasMore={pinnedVisibleCount < pinnedTotal}
         loaderRef={loaderRef}
         handleUnpin={handleUnpin}
         navigate={navigate}
         loading={pinnedLoading}
         error={pinnedError}
         actionError={pinnedActionError}
-        onRetry={loadPinnedItems}
+        onRetry={() => loadPinnedItems(lastPinnedPage.current)}
         isUnpinPending={id => scope.isPending("unpin:" + id)}
       />
       <PriceAttribution />

@@ -108,24 +108,24 @@ class TrackedItemServiceTest {
 
     @Test
     void trackedItemsAreAlwaysLoadedForAuthenticatedUser() {
-        when(itemRepository.findSteamTrackedItemsByUserId(7)).thenReturn(List.of(trackedItem));
+        stubTrackedPage();
 
-        var result = service.getTrackedItems(user, false);
+        var result = service.getTrackedItems(user, false, 0, 20).getContent();
 
         assertEquals(1, result.size());
         verify(priceFeedService).refreshPriceCacheIfNeeded();
         verify(priceFeedService, never()).getItemPriceData(any());
-        verify(itemRepository, org.mockito.Mockito.times(2)).findSteamTrackedItemsByUserId(7);
+        verify(itemRepository, org.mockito.Mockito.times(2)).findTrackedPage(org.mockito.ArgumentMatchers.eq(7), org.mockito.ArgumentMatchers.eq(false), any());
         verify(itemRepository, never()).findAllSteamTrackedItems();
     }
 
     @Test
     void currentFeedPriceOverridesStoredDisplayPrice() {
-        when(itemRepository.findSteamTrackedItemsByUserId(7)).thenReturn(List.of(trackedItem));
+        stubTrackedPage();
         when(priceFeedService.getCachedItemPriceData(trackedItem.getMarketHashName()))
                 .thenReturn(new PriceFeedService.ItemPriceData(new BigDecimal("52.75")));
 
-        var result = service.getTrackedItems(user, false);
+        var result = service.getTrackedItems(user, false, 0, 20).getContent();
 
         assertEquals(new BigDecimal("52.75"), result.getFirst().getPrice());
         assertEquals(new BigDecimal("52.75"), result.getFirst().getPrice24h());
@@ -137,7 +137,7 @@ class TrackedItemServiceTest {
         var stored = new RecordedMarketPrice(trackedItem.getPrice(), newer, newer, newer);
         var fallback = new PriceFreshnessDto("STORED_FALLBACK", "CSGOTRADER_24H", newer, newer,
                 null, newer, true, false, false);
-        when(itemRepository.findSteamTrackedItemsByUserId(7)).thenReturn(List.of(trackedItem));
+        stubTrackedPage();
         when(marketPrices.findLatestPrices(List.of(trackedItem.getMarketHashName())))
                 .thenReturn(Map.of(trackedItem.getMarketHashName(), stored));
         when(priceFeedService.getCachedItemPriceData(trackedItem.getMarketHashName()))
@@ -145,7 +145,7 @@ class TrackedItemServiceTest {
         when(priceFeedService.describeStoredPrice(stored))
                 .thenReturn(new PriceFeedService.ItemPriceData(stored.price(), fallback));
 
-        var result = service.getTrackedItems(user, false).getFirst();
+        var result = service.getTrackedItems(user, false, 0, 20).getContent().getFirst();
 
         assertEquals(new BigDecimal("45.00"), result.getPrice());
         assertEquals(fallback, result.getPriceFreshness());
@@ -194,6 +194,11 @@ class TrackedItemServiceTest {
     private static PriceFeedService.ItemPriceData cachedPrice(String price, Instant date) {
         return new PriceFeedService.ItemPriceData(new BigDecimal(price),
                 new PriceFreshnessDto("FRESH", "CSGOTRADER_24H", date, date, date, date, false, false, false));
+    }
+
+    private void stubTrackedPage() {
+        when(itemRepository.findTrackedPage(org.mockito.ArgumentMatchers.eq(7), org.mockito.ArgumentMatchers.eq(false), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(trackedItem)));
     }
 
     @Test

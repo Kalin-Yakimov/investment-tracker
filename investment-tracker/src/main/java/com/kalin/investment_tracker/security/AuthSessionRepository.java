@@ -6,7 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface AuthSessionRepository extends JpaRepository<AuthSession, String> {
 
@@ -44,9 +45,9 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, String
 
     long countByUserIdAndRevokedAtIsNullAndExpiresAtAfter(Integer userId, LocalDateTime now);
 
-    List<AuthSession> findByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(
+    Page<AuthSession> findByUserIdAndRevokedAtIsNullAndExpiresAtAfter(
             Integer userId,
-            LocalDateTime now
+            LocalDateTime now, Pageable pageable
     );
 
     @Query("""

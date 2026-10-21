@@ -37,7 +37,8 @@ class SteamCommunityClientTest {
         server = MockRestServiceServer.bindTo(http).build();
         settings = new SteamInventoryProperties();
         settings.setPageDelayMs(0);
-        client = new SteamCommunityClient(http, new ObjectMapper(), settings, clock);
+        settings.setMinimumRequestIntervalMs(1);
+        client = new SteamCommunityClient(http, new ObjectMapper(), settings, clock, new SteamWorkLimiter(settings));
     }
     private void expect(String url, String json) {
         server.expect(requestTo(url)).andRespond(withSuccess(json, MediaType.APPLICATION_JSON));

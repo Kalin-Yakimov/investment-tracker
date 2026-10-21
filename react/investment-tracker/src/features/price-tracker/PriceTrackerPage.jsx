@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import PriceTimeframeSelector from "../../shared/components/PriceTimeframeSelector";
 import usePriceTracker from "./hooks/usePriceTracker";
 import TrackerSearch from "./components/TrackerSearch";
@@ -7,12 +7,21 @@ import TrackedItemsTable from "./components/TrackedItemsTable";
 import TrackerDeleteModal from "./components/TrackerDeleteModal";
 import RequestError from "../../shared/components/RequestError";
 import PriceAttribution from "../../shared/components/PriceAttribution";
+import TablePagination from "../../shared/components/TablePagination";
 import "./styles/PriceTrackerPage.css";
 
 export default function PriceTrackerPage() {
   const state = usePriceTracker();
   const searchInput = useRef(null);
   const { scope, error, selectedTimeframe, setSelectedTimeframe } = state;
+  const [restoreSearchFocus, setRestoreSearchFocus] = useState(false);
+  const changingItems = scope.isPending("tracked-change");
+  useEffect(() => {
+    if (restoreSearchFocus && !state.loading && !changingItems) {
+      searchInput.current?.focus({ preventScroll: true });
+      setRestoreSearchFocus(false);
+    }
+  }, [restoreSearchFocus, state.loading, changingItems]);
   return (
     <div className="tracker-page-container container py-4 pb-5">
       {/* Page Header */}
@@ -44,7 +53,7 @@ export default function PriceTrackerPage() {
 
       {/* Search & Add Item Section */}
       <TrackerSearch {...state} inputRef={searchInput} />
-      <RequestError message={state.loadError} onRetry={state.fetchTrackedItems} retryLabel="Retry tracked items" pending={state.loading} />
+      <RequestError message={state.loadError} onRetry={state.retryTrackedItems} retryLabel="Retry tracked items" pending={state.loading} />
 
 
       {/* Global Timeframe Control Bar */}
@@ -61,10 +70,12 @@ export default function PriceTrackerPage() {
 
       {/* Main Tracked Items Table */}
       <TrackedItemsTable {...state} pending={state.loading || scope.isPending("tracked-change")} />
+      {state.totalPages > 1 && <TablePagination label="Tracked items pagination" currentPage={state.currentPage}
+        totalPages={state.totalPages} onPageChange={state.fetchTrackedItems} disabled={state.loading || scope.isPending("tracked-change")} />}
 
       {/* Centered Custom Delete Confirmation Modal */}
       <TrackerDeleteModal {...state} pending={scope.isPending("tracked-change")}
-        onRemoved={() => searchInput.current?.focus({ preventScroll: true })} />
+        onRemoved={() => setRestoreSearchFocus(true)} />
       <PriceAttribution />
     </div>
   );

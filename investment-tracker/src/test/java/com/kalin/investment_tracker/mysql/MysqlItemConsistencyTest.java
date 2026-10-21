@@ -49,7 +49,8 @@ import static org.mockito.Mockito.*;
         "spring.jpa.hibernate.ddl-auto=validate", "spring.flyway.enabled=true"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({TrackedItemService.class, TrackedItemCreationService.class, MarketPricePersistenceService.class})
+@Import({TrackedItemService.class, TrackedItemCreationService.class, MarketPricePersistenceService.class,
+        com.kalin.investment_tracker.validation.ResourceLimitsProperties.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class MysqlItemConsistencyTest {
     private static final String URL = System.getenv("MYSQL_TEST_URL");
@@ -73,11 +74,61 @@ class MysqlItemConsistencyTest {
     @Autowired TrackedItemService tracked;
     @Autowired PlatformTransactionManager transactions;
     @Autowired EntityManager entityManager;
+    @Autowired jakarta.persistence.EntityManagerFactory entityManagerFactory;
+    @Autowired com.kalin.investment_tracker.validation.ResourceLimitsProperties limits;
     @MockitoBean PriceFeedService prices;
     @MockitoBean ActivityEventService activity;
     @MockitoBean TaskExecutor applicationTaskExecutor;
 
     @BeforeEach void resetObservations() { snapshots.deleteAll(); }
+
+    @Test void thousandTrackedRowsUseABoundedPageAndNoCatalogueNPlusOne() throws Exception {
+        User owner = user(); CsItem entry = entry();
+        try (var connection = DriverManager.getConnection(URL, USER, PASSWORD);
+             var insert = connection.prepareStatement("INSERT INTO item(user_id,item_name,market_hash_name,steam_found_check,quantity,price,show_in_dashboard,cs_item_id) VALUES(?,?,?,1,1,1,?,?)")) {
+            for (int i = 0; i < 1000; i++) {
+                insert.setInt(1, owner.getId()); insert.setString(2, "Load fixture " + i);
+                insert.setString(3, entry.getMarketHashName() + "-" + i); insert.setBoolean(4, i % 2 == 0);
+                insert.setString(5, entry.getId()); insert.addBatch();
+            }
+            insert.executeBatch();
+        }
+        var statistics = entityManagerFactory.unwrap(org.hibernate.SessionFactory.class).getStatistics();
+        boolean enabled = statistics.isStatisticsEnabled(); statistics.setStatisticsEnabled(true); statistics.clear();
+        long started = System.nanoTime();
+        try {
+            var page = tracked.getTrackedItems(owner, false, 0, 20);
+            assertEquals(1000, page.getTotalElements()); assertEquals(20, page.getContent().size());
+            assertTrue(page.getContent().stream().allMatch(item -> entry.getId().equals(item.getCsItemId())));
+            long statements = statistics.getPrepareStatementCount();
+            assertTrue(statements <= 5, "Page mapping performed per-item queries: " + statements);
+            System.out.printf("Stage 6 MySQL fixture: 1000 owned rows, 20 returned, %d SQL statements, %.2f ms%n", statements, (System.nanoTime() - started) / 1000000.0);
+            var next = tracked.getTrackedItems(owner, false, 1, 20);
+            assertTrue(page.getContent().stream().noneMatch(first -> next.getContent().stream().anyMatch(second -> first.getId().equals(second.getId()))));
+            var pinned = tracked.getTrackedItems(owner, true, 0, 10);
+            assertEquals(500, pinned.getTotalElements());
+            assertTrue(pinned.getContent().stream().allMatch(item -> Boolean.TRUE.equals(item.getShowInDashboard())));
+        } finally { statistics.setStatisticsEnabled(enabled); }
+    }
+
+    @Test void concurrentDifferentItemsCannotExceedTheAccountQuota() throws Exception {
+        User owner = user(); CsItem firstEntry = entry(); CsItem secondEntry = entry();
+        int previousLimit = limits.getTrackedItemsPerUser(); limits.setTrackedItemsPerUser(1);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            java.util.function.Function<CsItem, Callable<Boolean>> task = candidate -> () -> {
+                await(start);
+                try { tracked.addTrackedItem(request(candidate), owner); return true; }
+                catch (com.kalin.investment_tracker.validation.ResourceLimitException quota) {
+                    assertEquals(409, quota.getStatus().value()); return false;
+                }
+            };
+            var first = workers.submit(task.apply(firstEntry)); var second = workers.submit(task.apply(secondEntry)); start.countDown();
+            assertNotEquals(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS));
+        } finally { limits.setTrackedItemsPerUser(previousLimit); }
+        assertEquals(1, items.countTrackedItemsByUserId(owner.getId()));
+        verify(activity).recordUserAction(any(), eq("TRACKED_ITEM_ADDED"), anyString(), isNull());
+    }
 
     @Test void v1UpgradePreservesRowsAndUniquenessAppliesOnlyToTrackedItems() throws Exception {
         String url = v1Database();

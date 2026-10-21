@@ -13,27 +13,29 @@ export function PortfolioTable({ page, loadPage }) {
   );
 }
 
-export function TrackedTable({ items }) {
+export function TrackedTable({ page, loadPage }) {
   return (
     <div className="admin-table-scroll compact">
       <table className="admin-table"><thead><tr><th>Item</th><th>Current price</th><th>Quantity</th><th>Dashboard</th></tr></thead>
-        <tbody>{items.map((item) => <tr key={item.id}><td><strong>{item.itemName}</strong><small>{item.marketHashName}</small></td><td>{formatMoney(item.currentPrice)}</td><td>{item.quantity}</td><td>{item.showInDashboard ? "Yes" : "No"}</td></tr>)}</tbody>
+        <tbody>{page.content.map((item) => <tr key={item.id}><td><strong>{item.itemName}</strong><small>{item.marketHashName}</small></td><td>{formatMoney(item.currentPrice)}</td><td>{item.quantity}</td><td>{item.showInDashboard ? "Yes" : "No"}</td></tr>)}</tbody>
       </table>
-      {items.length === 0 && <div className="admin-empty small">No tracked items.</div>}
+      {page.content.length === 0 && <div className="admin-empty small">No tracked items.</div>}
+      <Pagination page={page} onChange={loadPage} />
     </div>
   );
 }
 
-export function SessionsTable({ sessions }) {
+export function SessionsTable({ page, loadPage }) {
   return (
     <div className="admin-session-list">
-      {sessions.map((session) => (
+      {page.content.map((session) => (
         <article key={session.id}>
           <div><strong>{session.userAgent || "Unknown browser"}</strong><small>Last used {formatDate(session.lastUsedAt)}</small></div>
           <div><span>{session.remembered ? "Remembered" : "Standard"}</span><small>Expires {formatDate(session.expiresAt)}</small>{session.ipAddress && <small>IP {session.ipAddress}</small>}</div>
         </article>
       ))}
-      {sessions.length === 0 && <div className="admin-empty small">No active sessions.</div>}
+      {page.content.length === 0 && <div className="admin-empty small">No active sessions.</div>}
+      <Pagination page={page} onChange={loadPage} />
     </div>
   );
 }

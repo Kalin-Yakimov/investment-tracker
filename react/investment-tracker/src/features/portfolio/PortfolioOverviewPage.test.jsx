@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import PortfolioApi from "./PortfolioApi";
 import PriceTrackerApi from "../price-tracker/PriceTrackerApi";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import PortfolioOverviewPage from "./PortfolioOverviewPage";
 import AuthService from "../auth/AuthService";
@@ -18,7 +18,8 @@ const page = (name) => ({ content: [{ id: 1, itemName: name, itemStatus: "BOUGHT
 beforeEach(() => {
   vi.clearAllMocks();
   AuthService.getSessionVersion.mockReturnValue(1);
-  PriceTrackerApi.getTrackedItems.mockResolvedValue([]);
+  PriceTrackerApi.getTrackedItems.mockResolvedValue({ content: [], number: 0, totalElements: 0, totalPages: 0 });
+  PriceTrackerApi.getPriceHistory.mockResolvedValue([]);
   PortfolioApi.getPortfolioSummary.mockResolvedValue({ count: 1, totalInvestmentValue: 2 });
   globalThis.IntersectionObserver = vi.fn(function () {
     return { observe: vi.fn(), disconnect: vi.fn() };
@@ -63,10 +64,31 @@ test("failed loading is not an empty portfolio and a retry can recover", async (
   expect(PortfolioApi.getUserItems).toHaveBeenCalledTimes(2);
 });
 
+test("pinned scrolling requests only dashboard pages and preserves loaded rows while the next page waits", async () => {
+  PortfolioApi.getUserItems.mockResolvedValue(page("Ledger record"));
+  const callbacks = [];
+  globalThis.IntersectionObserver = vi.fn(function (callback) {
+    callbacks.push(callback); return { observe: vi.fn(), disconnect: vi.fn() };
+  });
+  const first = Array.from({ length: 10 }, (_, index) => ({ id: index + 1, itemName: `Pinned ${index + 1}`, price: 1, showInDashboard: true }));
+  const next = deferred();
+  PriceTrackerApi.getTrackedItems.mockResolvedValueOnce({ content: first, number: 0, totalElements: 12, totalPages: 2 })
+    .mockReturnValueOnce(next.promise);
+  render(<MemoryRouter><PortfolioOverviewPage /></MemoryRouter>);
+  await screen.findByRole("button", { name: "Pinned 1", exact: true });
+  await waitFor(() => expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(10));
+  await act(async () => callbacks.at(-1)([{ isIntersecting: true }]));
+  expect(PriceTrackerApi.getTrackedItems.mock.calls.at(-1)[0]).toMatchObject({ page: 1, size: 10, dashboard: true });
+  expect(screen.getByRole("button", { name: "Pinned 1", exact: true })).toBeInTheDocument();
+  await act(async () => next.resolve({ content: [{ id: 11, itemName: "Pinned 11", price: 1 }, { id: 12, itemName: "Pinned 12", price: 1 }], number: 1, totalElements: 12, totalPages: 2 }));
+  await screen.findByRole("button", { name: "Pinned 12", exact: true });
+  await waitFor(() => expect(PriceTrackerApi.getPriceHistory).toHaveBeenCalledTimes(12));
+});
+
 vi.mock("./PortfolioApi", () => ({
   default: { getUserItems: vi.fn(), getPortfolioSummary: vi.fn() },
 }));
 
 vi.mock("../price-tracker/PriceTrackerApi", () => ({
-  default: { getTrackedItems: vi.fn() },
+  default: { getTrackedItems: vi.fn(), getPriceHistory: vi.fn() },
 }));

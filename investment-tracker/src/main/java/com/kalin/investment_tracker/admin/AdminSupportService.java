@@ -148,16 +148,17 @@ public class AdminSupportService {
     }
 
     @Transactional
-    public List<AdminDtos.TrackedItem> getTrackedItems(
+    public org.springframework.data.domain.Page<AdminDtos.TrackedItem> getTrackedItems(
             User actor,
             Integer userId,
             String reason,
-            String ipAddress
+            String ipAddress, int page, int size
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
-        List<Item> items = itemRepository.findSteamTrackedItemsByUserId(userId);
-        return items.stream()
+        var items = itemRepository.findTrackedPage(userId, false, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
+        return items
                 .map(item -> {
                     var catalogueItem = item.getCatalogueItem();
                     return new AdminDtos.TrackedItem(
@@ -171,26 +172,25 @@ public class AdminSupportService {
                             item.getPriceNotification(),
                             catalogueItem != null ? catalogueItem.getImage() : null
                     );
-                })
-                .toList();
+                });
     }
 
     @Transactional
-    public List<AdminDtos.Session> getSessions(
+    public Page<AdminDtos.Session> getSessions(
             User actor,
             Integer userId,
             String reason,
-            String ipAddress
+            String ipAddress, int page, int size
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
         boolean actorIsAdmin = hasRole(actor, RoleNames.ADMIN);
         return authSessionRepository
-                .findByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(
+                .findByUserIdAndRevokedAtIsNullAndExpiresAtAfter(
                         target.getId(),
-                        LocalDateTime.now()
+                        LocalDateTime.now(), PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lastUsedAt", "id"))
                 )
-                .stream()
                 .map(session -> new AdminDtos.Session(
                         session.getId(),
                         session.getCreatedAt(),
@@ -199,8 +199,7 @@ public class AdminSupportService {
                         session.isRemembered(),
                         session.getUserAgent(),
                         actorIsAdmin ? session.getIpAddress() : null
-                ))
-                .toList();
+                ));
     }
 
     @Transactional

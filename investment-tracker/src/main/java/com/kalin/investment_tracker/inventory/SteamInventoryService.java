@@ -8,8 +8,12 @@ import org.springframework.stereotype.Service;
 public class SteamInventoryService {
     private final SteamCommunityClient steam;
     private final InventoryValuationService valuation;
+    private final SteamWorkLimiter work;
 
     public SteamInventoryResponseDto calculateInventory(String inputUrlOrId) {
+        return work.lookup(() -> calculateAdmitted(inputUrlOrId));
+    }
+    private SteamInventoryResponseDto calculateAdmitted(String inputUrlOrId) {
         SteamProfileReference profile = SteamProfileReference.parse(inputUrlOrId);
         String steamId = profile.directId() ? profile.identifier() : steam.resolveVanityId(profile.identifier());
         // Cache only after validation/resolution, so URL, vanity and direct-ID forms share a result.

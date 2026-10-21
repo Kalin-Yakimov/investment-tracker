@@ -78,8 +78,8 @@ export default function UserSupportView(props) {
         )}
 
         {props.userTab === "portfolio" && <PortfolioTable page={props.portfolio} loadPage={(page) => props.loadUserTab("portfolio", page)} />}
-        {props.userTab === "tracked" && <TrackedTable items={props.trackedItems} />}
-        {props.userTab === "sessions" && <SessionsTable sessions={props.sessions} />}
+        {props.userTab === "tracked" && <TrackedTable page={props.trackedItems} loadPage={page => props.loadUserTab("tracked", page)} />}
+        {props.userTab === "sessions" && <SessionsTable page={props.sessions} loadPage={page => props.loadUserTab("sessions", page)} />}
         {props.userTab === "activity" && <ActivityTable page={props.activity} loadPage={(page) => props.loadUserTab("activity", page)} />}
       </div>
     </div>

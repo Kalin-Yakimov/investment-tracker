@@ -1,5 +1,5 @@
 import PriceTrackerApi from "../PriceTrackerApi";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { requestErrorMessage } from "../../../shared/api/requestFeedback";
 import usePriceHistories from "../../../shared/hooks/usePriceHistories";
 import useRequestScope from "../../../shared/hooks/useRequestScope";
@@ -13,6 +13,9 @@ export default function usePriceTracker() {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [trackedItems, setTrackedItems] = useState([]);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const requestedPage = useRef(0);
   const historyState = usePriceHistories(trackedItems);
   const priceHistories = historyState.histories;
 
@@ -21,17 +24,18 @@ export default function usePriceTracker() {
   const detailItem = trackedItems.find(item => item.id === detailSelection?.id) || null;
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  const fetchTrackedItems = useCallback(async () => {
+  const fetchTrackedItems = useCallback(async (page = 0) => {
     const request = scope.begin("tracked");
     if (!request) return;
+    requestedPage.current = page;
     setLoading(true); setLoadError("");
     try {
-      const data = await PriceTrackerApi.getTrackedItems({ signal: request.signal });
+      const data = await PriceTrackerApi.getTrackedItems({ page, size: 20, signal: request.signal });
       if (!request.isCurrent()) return;
-      const list = Array.isArray(data) ? data : [];
-      // Sort so newly added items (highest ID) appear on top
-      list.sort((a, b) => (b.id || 0) - (a.id || 0));
-      setTrackedItems(list);
+      if (!Array.isArray(data?.content)) throw new Error("Invalid tracked-item page");
+      setTrackedItems(data.content);
+      setCurrentPage(data.number);
+      setTotalPages(data.totalPages);
     } catch (err) {
       if (request.isCurrent() && !isRequestCanceled(err)) {
         setLoadError(requestErrorMessage(err, "Tracked items could not be loaded."));
@@ -93,7 +97,7 @@ export default function usePriceTracker() {
 
       await PriceTrackerApi.addTrackedItem(payload);
       if (!request.isCurrent()) return;
-      await fetchTrackedItems();
+      await fetchTrackedItems(0);
     } catch (err) {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
       const serverErr = err.error || err.response?.data?.error;
@@ -115,6 +119,7 @@ export default function usePriceTracker() {
       if (!request.isCurrent()) return;
       setTrackedItems((prev) => prev.filter((i) => i.id !== itemId));
       setDetailItem((previous) => previous?.id === itemId ? null : previous);
+      await fetchTrackedItems(trackedItems.length === 1 && currentPage > 0 ? currentPage - 1 : currentPage);
       return true;
     } catch (err) {
       if (!request.isCurrent() || isRequestCanceled(err)) return;
@@ -154,6 +159,7 @@ export default function usePriceTracker() {
   }, [detailItem, priceHistories]);
   return {
     scope, query, setQuery, error, loading, loadError, fetchTrackedItems, historyState,
+    currentPage, totalPages, retryTrackedItems: () => fetchTrackedItems(requestedPage.current),
     trackedItems, selectedTimeframe, setSelectedTimeframe,
     detailItem, setDetailItem, deleteConfirmId, setDeleteConfirmId,
     itemPointsMap, itemTrendsMap, handleSelectSearchItem,

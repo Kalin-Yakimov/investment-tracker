@@ -43,8 +43,8 @@ beforeEach(() => {
   SupportPanelApi.getNewTicketCount.mockResolvedValue(0);
   SupportPanelApi.getUserDetails.mockImplementation((id) => Promise.resolve(details(id === 1 ? alice : bob)));
   SupportPanelApi.getPortfolio.mockResolvedValue(empty);
-  SupportPanelApi.getTrackedItems.mockResolvedValue([]);
-  SupportPanelApi.getSessions.mockResolvedValue([]);
+  SupportPanelApi.getTrackedItems.mockResolvedValue(empty);
+  SupportPanelApi.getSessions.mockResolvedValue(empty);
   SupportPanelApi.getActivity.mockResolvedValue(empty);
   SupportPanelApi.getAudit.mockResolvedValue(empty);
   SupportPanelApi.getTickets.mockResolvedValue(empty);
@@ -99,7 +99,7 @@ test("tab cancellation cannot hide the pending indicator of a newer tab request"
   await act(async () => old.resolve(empty));
   expect(signal.aborted).toBe(true);
   expect(container.querySelector(".admin-loading-bar")).not.toBeNull();
-  await act(async () => latest.resolve([]));
+  await act(async () => latest.resolve(empty));
   expect(container.querySelector(".admin-loading-bar")).toBeNull();
 });
 
