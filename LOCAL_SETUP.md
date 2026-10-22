@@ -201,6 +201,18 @@ the first catalogue synchronization can take longer than later startups.
 
 The backend is ready when the console reports that Tomcat started on port 8080.
 
+Swagger is disabled by default. To use local API documentation, start the same
+backend with the explicit developer profile instead:
+
+```powershell
+.\gradlew.bat bootRun --args="--spring.profiles.active=dev"
+```
+
+This profile binds the backend to loopback and enables local docs, not a test
+database. Existing DB/mail settings and normal startup jobs still apply.
+See [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) for Authorize, safe test
+accounts and production restrictions. Never combine `dev` with `prod`.
+
 ## 8. Start the frontend
 
 Open a second PowerShell window from the repository root:
@@ -242,7 +254,9 @@ Check the following:
 - portfolio records can be created and displayed;
 - PriceTracker can search the synchronized catalogue;
 - the Support Panel appears for the configured administrator;
-- local API documentation opens at `http://localhost:8080/swagger-ui.html`.
+- when explicitly started with `dev`, local API documentation opens at
+  `http://127.0.0.1:8080/swagger-ui.html`; it remains unavailable in normal/default
+  and production mode.
 
 Activation messages can initially appear in the Gmail Spam folder.
 

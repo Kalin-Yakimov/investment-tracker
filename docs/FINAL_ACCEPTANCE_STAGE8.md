@@ -4,8 +4,10 @@
 Базов публикуван commit: `d69a50018a28cd5e8906f124273233cfee044b95` (Етап 7),
 качен в GitLab и GitHub по одобрение на собственика. Този отчет описва
 **локално проверената кандидат-версия преди нейното публикуване**, не deployment.
-Собственикът одобри commit/push на Етап 8 на 2026-10-22. Remote CI върху новия
-commit трябва да се провери отделно; одобрението не включва merge или deployment.
+Публикуван като `cbecc30` в GitLab/GitHub на 2026-10-22. GitHub Actions е
+потвърден успешен за тази ревизия; одобрението не включва merge или deployment.
+Таблицата по-долу запазва оригиналните Stage 8 резултати; следващи промени и
+проверки са отделни checkpoints в [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
 ## 1. Какво е добавено
 
@@ -138,9 +140,11 @@ audit също е моментна проверка, не гаранция за 
 GitHub Actions за **публикувания Етап 7**, commit `d69a500`, е проверен като
 успешен за frontend, backend и Linux operations, включително седемте operations
 теста: [run 39768969950](https://github.com/Kalin-Yakimov/investment-tracker/actions/runs/39768969950).
-Това не е remote CI резултат за локалните промени от Етап 8. Новият browser job
-в GitHub Actions и GitLab CI ще бъде remote-verified едва след одобрено качване.
-Актуалният GitLab pipeline не е проверен; не е отчетен като успешен.
+След публикацията е проверен и **Етап 8, commit `cbecc30`**: frontend, backend,
+Linux operations и browser acceptance са успешни в
+[run 39774862670](https://github.com/Kalin-Yakimov/investment-tracker/actions/runs/39774862670).
+Актуалният GitLab pipeline не е проверен; не е отчетен като успешен. Този резултат
+не се пренася автоматично върху последващи commits.
 
 Остават съществуващ react-datepicker source-map warning и Java/Mockito dynamic
 agent warning в тестовете; те не са неуспешни production builds. Един по-стар

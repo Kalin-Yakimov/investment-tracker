@@ -5,8 +5,10 @@ Source preparation: Stages 7–8, 2026-10-22. Public deployment remains unauthor
 Each operational box needs an owner, timestamp, target and release commit.
 
 Local candidate evidence: [FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md).
-These results do not mark the release gates below complete: Stage 8 is not yet
-a published clean release, and no actual hosting acceptance has been performed.
+Stage 8 is published as `cbecc30` with successful GitHub Actions. This does not
+mark the release gates below complete: no production release or hosting
+acceptance has been performed; current GitLab CI remains unverified. Later
+commits need their own verification. See [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
 ## Code and artifacts
 

@@ -18,6 +18,7 @@ public class ProductionSettingsValidator implements EnvironmentPostProcessor, Or
 
     @Override public void postProcessEnvironment(ConfigurableEnvironment env, SpringApplication application) {
         if (!env.acceptsProfiles(Profiles.of("prod"))) return;
+        require(!env.acceptsProfiles(Profiles.of("dev")), "spring.profiles.active (dev with prod)");
         validate(env);
     }
 

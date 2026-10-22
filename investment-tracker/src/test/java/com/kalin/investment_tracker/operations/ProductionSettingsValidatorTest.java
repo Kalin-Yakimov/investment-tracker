@@ -39,6 +39,16 @@ class ProductionSettingsValidatorTest {
         new ProductionSettingsValidator().postProcessEnvironment(new MockEnvironment(), null);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"dev,prod", "prod,dev"})
+    void developmentAndProductionCannotBeCombinedRegardlessOfProfileOrder(String profiles) throws Exception {
+        MockEnvironment env = valid();
+        env.setActiveProfiles(profiles.split(","));
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> new ProductionSettingsValidator().postProcessEnvironment(env, null));
+        assertEquals("Unsafe or missing production setting: spring.profiles.active (dev with prod)", failure.getMessage());
+    }
+
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
             "security.auth.cookie-secure|false", "security.auth.cookie-same-site|None",

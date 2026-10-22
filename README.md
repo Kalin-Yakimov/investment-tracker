@@ -2,6 +2,10 @@
 
 Investment Tracker is a local full-stack web application for recording an investment portfolio, tracking CS2 market items, viewing stored price observations and inspecting a public Steam inventory. It also includes account registration with email activation and a restricted Support Panel for administrators and support users.
 
+Start with [Current status and documentation index](docs/CURRENT_STATUS.md) for
+verified revisions, runtime baseline and the difference between local checks
+and actual production acceptance.
+
 The repository contains both parts of the application:
 
 - `investment-tracker/` — Spring Boot REST API and database access;
@@ -15,6 +19,9 @@ The repository contains both parts of the application:
 - [docs/RESOURCE_LIMITS_STAGE6.md](docs/RESOURCE_LIMITS_STAGE6.md) — request budgets, bounded Steam work, weighted caches, paginated tracking and performance verification.
 - [docs/PRODUCTION_OPERATIONS.md](docs/PRODUCTION_OPERATIONS.md) — Stage 7 settings, private health/metrics, HTTPS proxy, encrypted backup and release/rollback.
 - [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) — remaining release and hosting acceptance gates.
+- [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) — explicit local dev Swagger, bearer authorization and write-operation warnings.
+- [docs/INCIDENT_RUNBOOK.md](docs/INCIDENT_RUNBOOK.md) — alert triage, safe diagnostics and recovery decisions.
+- [docs/PRICE_DATA_SEMANTICS.md](docs/PRICE_DATA_SEMANTICS.md) — current price, FX, freshness, history and portfolio total meanings.
 - `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
 - `docs/EXTERNAL_SERVICES.md` — external HTTP limits, atomic price refreshes and background-job policies.
 - `docs/DAILY_PRICE_HISTORY.md` — daily price observations, stale-publication protection and existing-database adoption.
@@ -77,7 +84,8 @@ The local application normally uses:
 
 - frontend: `http://localhost:3000`;
 - backend: `http://localhost:8080`;
-- local API documentation: `http://localhost:8080/swagger-ui.html`.
+- API documentation: `http://127.0.0.1:8080/swagger-ui.html`, only with explicit
+  `dev` backend profile; [activation and usage](docs/API_DOCUMENTATION.md).
 
 ## Configuration and secrets
 

@@ -133,8 +133,10 @@ route-contract coverage and candidate artifact hashing. Three discovered issues
 profile menu bounds) were corrected without changing the original database.
 See [FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md) for reproducible
 commands, current evidence and the separate, still-unchecked hosting gates.
-The owner approved Stage 8 commit/push on 2026-10-22. Remote CI on the new commit
-remains a separate check; merge and deployment remain unauthorized.
+The owner approved Stage 8 commit/push on 2026-10-22; it is published as `cbecc30`.
+All four GitHub jobs passed on that exact commit. GitLab remains unverified;
+merge and deployment remain unauthorized. Current evidence and the subsequent
+documentation/development-Swagger follow-up: [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
 Browser E2E, MySQL regression, security checks, responsive/keyboard review and
 current documentation against a specific release commit. All applicable gates

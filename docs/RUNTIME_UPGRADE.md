@@ -2,6 +2,9 @@
 
 Production-roadmap Stage 2, local checkpoint 2026-10-21. No deployment or system
 MySQL service replacement. See `PRODUCTION_PLAN.md` for scope and later gates.
+For the current verified revision and runtime baseline, start with
+[CURRENT_STATUS.md](CURRENT_STATUS.md); the tests below retain their original
+Stage 2 date and do not certify a later production release.
 
 ## Selected baseline
 

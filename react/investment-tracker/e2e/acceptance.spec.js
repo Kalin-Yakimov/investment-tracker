@@ -102,6 +102,32 @@ test("sign-out revokes both independently issued sessions", async ({ request }) 
   }
 });
 
+test("development Swagger sends bearer authorization to a protected real endpoint", async ({ page, request }) => {
+  const login = await request.post(`${API}/api/v1/auth/authenticate`, { data: { email: accounts.user, password: PASSWORD } });
+  expect(login.status()).toBe(200);
+  const token = (await login.json()).token;
+  await page.goto(`${API}/swagger-ui/index.html`);
+  await expect(page.getByRole("heading", { name: /Investment Tracker API/ })).toBeVisible();
+  await page.getByRole("button", { name: "Authorize", exact: true }).click();
+  const authorization = page.locator(".dialog-ux");
+  await authorization.locator('input[type="text"]').fill(token);
+  await authorization.getByRole("button", { name: "Apply credentials", exact: true }).click();
+  await authorization.getByRole("button", { name: "Close", exact: true }).click();
+  const endpoint = page.locator(".opblock").filter({ has: page.getByText("/api/v1/auth/validate-token", { exact: true }) });
+  await endpoint.locator(".opblock-summary-control").click();
+  await endpoint.getByRole("button", { name: "Try it out", exact: true }).click();
+  let bearerSent = false;
+  page.on("request", outgoing => {
+    if (outgoing.url() === `${API}/api/v1/auth/validate-token`) bearerSent = outgoing.headers().authorization === `Bearer ${token}`;
+  });
+  const [response] = await Promise.all([
+    page.waitForResponse(result => result.url() === `${API}/api/v1/auth/validate-token`),
+    endpoint.getByRole("button", { name: "Execute", exact: true }).click(),
+  ]);
+  expect(bearerSent).toBe(true);
+  expect(response.status()).toBe(200);
+});
+
 test("catalogue keyboard selection, tracking pagination and chart dialog work", async ({ page }, testInfo) => {
   await signIn(page);
   await page.getByRole("link", { name: "Steam Price Tracker", exact: true }).click();

@@ -123,6 +123,15 @@ class ApplicationWorkflowIntegrationTest {
     }
 
     @Test
+    void documentationRemainsDeniedOutsideExplicitDevelopmentEvenWithAValidSession() throws Exception {
+        Login owner = login(account("USER"));
+        for (String path : List.of("/swagger-ui.html", "/swagger-ui/index.html", "/v3/api-docs", "/v3/api-docs/swagger-config")) {
+            mvc.perform(get(path)).andExpect(status().isUnauthorized());
+            mvc.perform(authorized(get(path), owner)).andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
     void anonymousRequestsCannotReadDataOrSubmitContactRequests() throws Exception {
         for (String route : List.of("/get-user-items", "/api/items", "/api/admin/overview")) {
             mvc.perform(get(route)).andExpect(status().isUnauthorized());

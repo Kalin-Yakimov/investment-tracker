@@ -1,10 +1,13 @@
-# Production конфигурация и операции — Етап 7
+# Production deployment и operations guide
 
 Подготвено на 2026-10-22 в `production-auth-migrations`, след Етап 6 (`0cdc3b1`).
 Това е реализация и проверка на конфигурацията и инструментите, **не deployment**.
 Не е променяна реалната база, не са активирани timers, proxy или backup акаунти.
 Собственикът одобри commit/push на Етап 7 и започването на Етап 8 на 2026-10-22.
-Етап 8 и проверките върху избрания hosting остават задължителни.
+Етап 8 е публикуван като `cbecc30`, с потвърден успешен GitHub Actions run.
+Проверките върху избрания hosting остават задължителни. Това е текущият
+provider-independent deployment guide; таблицата в раздел 9 запазва резултатите
+от първоначалния Етап 7. Актуалният статус е в [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
 ## 1. Поддържана начална топология
 
@@ -37,6 +40,10 @@ config data и **преди създаване на beans / connection pool / Fl
   точния loopback peer като trusted proxy. Няма trust на всички private ranges.
 - Hibernate `validate`, Flyway validation, без automatic baseline/clean;
   Swagger/JMX, SQL/request-detail logging и debug/trace са изключени.
+
+Swagger се включва само чрез local `dev`, не чрез Production override.
+Комбинацията `dev` + `prod` е изрично забранена. Local usage:
+[API_DOCUMENTATION.md](API_DOCUMENTATION.md).
 
 Съобщението при грешка съдържа **името на настройката, не стойността**. Промяна
 на Java system properties след тази проверка не е поддържан deployment подход.
@@ -180,6 +187,9 @@ UI Audit Log остава последните **100** записи, както 
 важните security events. Това не е tamper-proof SIEM и DB ring от 100 не е
 дългосрочен audit archive. Проверете ограничените права и изтриването по политика.
 
+Действия според конкретните alert имена, safe diagnostics, session/secret incident
+и recovery решения: [INCIDENT_RUNBOOK.md](INCIDENT_RUNBOOK.md).
+
 ## 7. Encrypted automated off-host backup
 
 `ops/backup/backup-mysql.sh` и systemd template/timers са **неактивирани**.
@@ -260,7 +270,11 @@ schema/частична migration: спрете трафика, предпоче
 възстановете verified backup на отделна инстанция с отчетена загуба след RPO.
 Никога blind Flyway `repair/clean`, automatic downgrade или overwritten V1–V3.
 
-## 9. Проверки и граници (2026-10-22)
+## 9. Исторически checkpoint на Етап 7 (2026-10-22)
+
+За последващите локални и remote резултати използвайте
+[CURRENT_STATUS.md](CURRENT_STATUS.md). Тази таблица не се преименува на резултат
+за по-нов commit и не означава, че hosting checks са изпълнени.
 
 | Проверка | Резултат |
 | --- | --- |
@@ -286,8 +300,9 @@ repository; Linux permissions/flock cases са маркирани за Linux CI 
 HTTP rehearsal се skip-ва там, вместо да отслабва TLS guard-а. GitHub loopback
 service и локалният MySQL harness я изпълняват.
 
-Реален hosting firewall/TLS/CSP/browser, off-host restore, timers, alert delivery,
-recovery time и remote CI за този commit са **непроверени до съответната репетиция**.
+Реален hosting firewall/TLS/CSP/browser, off-host restore, timers, alert delivery
+и recovery time са **непроверени до съответната репетиция**. Remote CI се отчита
+за точния commit отделно в [CURRENT_STATUS.md](CURRENT_STATUS.md).
 Етап 7 не превръща автоматично локалните тестове в публична Production сертификация.
 
 ## Официални източници

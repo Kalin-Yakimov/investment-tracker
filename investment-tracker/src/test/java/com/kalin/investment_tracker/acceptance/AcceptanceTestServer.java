@@ -59,7 +59,7 @@ public class AcceptanceTestServer {
         });
         var outbound = mock(RestTemplate.class, call -> { throw new AssertionError("Outbound HTTP is disabled in acceptance tests"); });
         String[] arguments = {
-                "--spring.profiles.active=acceptance", "--server.address=127.0.0.1", "--server.port=18080",
+                "--spring.profiles.active=acceptance,dev", "--server.address=127.0.0.1", "--server.port=18080",
                 "--spring.datasource.url=jdbc:h2:mem:acceptance-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1",
                 "--spring.datasource.driver-class-name=org.h2.Driver", "--spring.datasource.username=sa", "--spring.datasource.password=",
                 "--spring.jpa.database-platform=org.hibernate.dialect.H2Dialect", "--spring.jpa.hibernate.ddl-auto=create-drop",

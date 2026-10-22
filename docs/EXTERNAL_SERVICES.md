@@ -2,6 +2,9 @@
 
 Stage 4, 2026-10-10. Work branch: `security-reliability-refactor`.
 
+Current price/FX/date semantics: [PRICE_DATA_SEMANTICS.md](PRICE_DATA_SEMANTICS.md).
+Current release evidence: [CURRENT_STATUS.md](CURRENT_STATUS.md).
+
 This is the historical refactoring checkpoint. Later production stages added
 versioned migrations, stricter transaction boundaries and nullable source/FX
 timestamps. Current freshness behavior and verification are documented in

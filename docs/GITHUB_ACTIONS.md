@@ -26,9 +26,12 @@ from fast frontend checks, with no deployment. See
 
 The published Stage 7 revision `d69a500` has a confirmed successful
 [GitHub Actions run](https://github.com/Kalin-Yakimov/investment-tracker/actions/runs/39768969950)
-for its three jobs, including all Linux operations checks. The new Stage 8
-browser job is local until an approved push; its remote result is not yet known.
-The following October 12 checkpoint is historical, not the current release gate.
+for its three jobs, including all Linux operations checks. Stage 8 `cbecc30` is
+also published and all four jobs, including browser acceptance, passed in
+[run 39774862670](https://github.com/Kalin-Yakimov/investment-tracker/actions/runs/39774862670).
+Later commits need their own CI result. See [CURRENT_STATUS.md](CURRENT_STATUS.md).
+
+### Historical checkpoint (2026-10-12)
 
 The same application commands passed in GitLab pipeline
 [2938937025](https://gitlab.com/yakimovs/Investment-tracker/-/pipelines/2938937025)
@@ -56,7 +59,7 @@ workflow directory reported no findings. No application source was changed.
   no payment, quota or repository-visibility setting is changed by this file.
 
 No production MySQL or SMTP service is started. The backend tests use isolated
-H2 fixtures and mocked outbound services. The frontend smoke server is temporary,
+H2 fixtures, a disposable MySQL service and mocked outbound providers. The frontend smoke server is temporary,
 loopback-only and closes after checking built routes/assets.
 
 ## Starting and interpreting checks
