@@ -1,0 +1,38 @@
+groups:
+  - name: investment
+    rules:
+      - alert: InvestmentBackendUnavailable
+        expr: up{job="investment"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "Backend cannot be scraped; inspect process and readiness"}
+      - alert: InvestmentBackgroundJobFailed
+        expr: investment_jobs_failed{job="investment"} == 1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "A background job has failed; cached data may still be available"}
+      - alert: InvestmentPricePublicationUnavailable
+        expr: investment_prices_publication_available{job="investment"} == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "No price publication has been loaded since startup"}
+      - alert: InvestmentPricePublicationOld
+        expr: investment_prices_publication_age_seconds{job="investment"} > 129600
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "CSGOTrader observation is older than 36 hours; do not force retry loops"}
+      - alert: InvestmentFxOld
+        expr: investment_prices_fx_age_seconds{job="investment"} > 259200
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "FX quote is older than 72 hours"}
+      - alert: InvestmentDatabasePoolBusy
+        expr: hikaricp_connections_pending{job="investment"} > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "Requests are waiting for database connections"}
+      - alert: InvestmentServerErrors
+        expr: sum(rate(http_server_requests_seconds_count{job="investment",status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job="investment"}[5m])), 0.01) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "More than 5 percent of API responses are server errors"}

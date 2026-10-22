@@ -132,3 +132,14 @@
 Опиши страницата, последователността от действия, очакваното и действителното
 поведение. Снимка е достатъчна за начало. Не изпращай пароли, кодове за активиране,
 refresh cookies или access tokens. Не е нужно да правиш commit или merge сам.
+## Production Етап 7
+
+- Локалното стартиране остава с default profile и `npm.cmd start`; не сменяйте
+  личната среда на `prod` за обикновен preview. Production изисква отделни settings.
+- За staging проверете HTTPS cookie flags, refresh/logout, CSP/images и spoofed
+  forwarding headers през реалния proxy, не само през localhost Vite.
+- Readiness трябва да спре да е UP при недостъпна тестова DB, но Steam outage
+  не трябва да проваля liveness. Metrics/env/heapdump не трябва да са публични.
+- Backup/restore, alert delivery, Linux services и rollback са отделни проверки
+  от [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md); не използвайте реалната DB
+  за експерименти с recovery или migration failures.

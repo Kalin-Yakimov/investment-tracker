@@ -36,6 +36,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'com.github.ben-manes.caffeine:caffeine'
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -87,6 +89,15 @@ tasks.register('databaseMigration', JavaExec) {
 	mainClass = 'com.kalin.investment_tracker.migration.DatabaseMigrationTool'
 	args providers.gradleProperty('migrationAction').getOrElse('verify'),
 		 providers.gradleProperty('migrationDatabase').getOrElse('UNCONFIRMED')
+}
+
+// A separate maintenance entry point; deploying the app never requires Gradle or DDL credentials.
+tasks.register('migrationBootJar', org.springframework.boot.gradle.tasks.bundling.BootJar) {
+	group = 'build'
+	archiveClassifier = 'migrations'
+	targetJavaVersion = JavaVersion.VERSION_21
+	mainClass = 'com.kalin.investment_tracker.migration.DatabaseMigrationTool'
+	classpath sourceSets.main.runtimeClasspath
 }
 
 apply from: 'gradle/dependency-audit.gradle'

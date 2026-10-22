@@ -12,6 +12,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class ActivityEventService {
 
     private static final int MAX_STORED_EVENTS = 100;
@@ -105,6 +106,20 @@ public class ActivityEventService {
 
     private void saveAndApplyRetention(ActivityEvent event) {
         repository.save(event);
+        // The UI keeps its 100-event ring. Important events also reach the protected
+        // operational log, but only after commit and without free text, email or IP.
+        if (!ActivityEvent.USER_ACTION.equals(event.getCategory())) {
+            Runnable publish = () -> log.info("audit category={} action={} actorId={} targetId={}",
+                    event.getCategory(), event.getEventType().matches("[A-Z0-9_]{1,80}") ? event.getEventType() : "OTHER",
+                    event.getActorUser() == null ? null : event.getActorUser().getId(),
+                    event.getTargetUser() == null ? null : event.getTargetUser().getId());
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override public void afterCommit() { publish.run(); }
+                        });
+            } else publish.run();
+        }
         long excess = repository.count() - MAX_STORED_EVENTS;
 
         while (excess > 0) {

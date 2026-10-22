@@ -13,6 +13,8 @@ The repository contains both parts of the application:
 - [docs/DATA_CONSISTENCY_STAGE4.md](docs/DATA_CONSISTENCY_STAGE4.md) — atomic tracked-item creation, tracked-only uniqueness, price commits and concurrent mutations.
 - [docs/FRONTEND_RELIABILITY_STAGE5.md](docs/FRONTEND_RELIABILITY_STAGE5.md) — price freshness, chronological charts, recoverable errors, calendar dates, forms and keyboard navigation.
 - [docs/RESOURCE_LIMITS_STAGE6.md](docs/RESOURCE_LIMITS_STAGE6.md) — request budgets, bounded Steam work, weighted caches, paginated tracking and performance verification.
+- [docs/PRODUCTION_OPERATIONS.md](docs/PRODUCTION_OPERATIONS.md) — Stage 7 settings, private health/metrics, HTTPS proxy, encrypted backup and release/rollback.
+- [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) — remaining release and hosting acceptance gates.
 - `docs/API_VALIDATION.md` — request limits, ownership/type boundaries and verification results.
 - `docs/EXTERNAL_SERVICES.md` — external HTTP limits, atomic price refreshes and background-job policies.
 - `docs/DAILY_PRICE_HISTORY.md` — daily price observations, stale-publication protection and existing-database adoption.

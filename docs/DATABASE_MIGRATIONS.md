@@ -24,7 +24,7 @@ See [FRONTEND_RELIABILITY_STAGE5.md](FRONTEND_RELIABILITY_STAGE5.md).
 | --- | --- |
 | Default local | Flyway on, Hibernate `validate` |
 | `migrated` | Compatibility alias for the same safe defaults |
-| `prod` | Flyway on, Hibernate `validate`, plus production security settings |
+| `prod` | Flyway validation only; missing/pending migrations refused; Hibernate `validate` |
 
 Do not start any profile on an unadopted non-empty database. Flyway deliberately
 refuses it. Keep `baseline-on-migrate=false`,
@@ -97,7 +97,10 @@ database and executes V1 only. It is not a general downgrade or baseline action.
 .\gradlew.bat databaseMigration -PmigrationAction=migrate -PmigrationDatabase=investment
 ```
 
-4. Start with the default profile locally, or `prod` only when all
+4. Stage 7 provides a standalone `migrationBootJar` maintenance artifact. In
+   `prod`, startup validates only and refuses pending migrations: run maintenance
+   migration first with separate credentials. See [PRODUCTION_OPERATIONS.md](PRODUCTION_OPERATIONS.md).
+   Start with the default profile locally, or `prod` only when all
    remaining production safeguards have been configured. Set the application's
    `DB_URL`, `DB_USERNAME` and `DB_PASSWORD` to that same database.
 
@@ -188,8 +191,9 @@ FROM (
 If the count is nonzero, stop and review the records privately with the owner.
 No automatic merge or deletion is supplied. With the explicit maintenance
 variables/name set to the intended database, `migrationAction=migrate` applies
-only pending migrations and validates checksums. Normal application startup
-also runs pending migrations before Hibernate validation; never start an older
+only pending migrations and validates checksums. Default/local application startup
+also runs pending migrations before Hibernate validation. Production validates
+only and requires a separate maintenance migration. Never start an older
 writer concurrently during the upgrade. V2 failure must be inspected, including
 Flyway history, rather than hidden by blind `repair`. The disposable MySQL tests
 verify that a duplicate-index failure leaves item rows and columns unchanged.

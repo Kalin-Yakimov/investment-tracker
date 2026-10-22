@@ -1,6 +1,6 @@
 # Production-readiness implementation checkpoint
 
-Updated 2026-10-21. Branch: `production-auth-migrations`, based on
+Updated 2026-10-22. Branch: `production-auth-migrations`, based on
 `security-reliability-refactor`. The owner approved commit and publication of
 these changes to GitLab/GitHub on 2026-10-21. No deployment, credential rotation
 or merge is included. The sequential plan is
@@ -103,9 +103,15 @@ it to both remotes on 2026-10-21. See
 The implementation/test runs did not apply V2/V3 to the original developer DB;
 subsequent user-started application runs are not inspected by this checkpoint.
 
-Do not deploy publicly yet. Stages 7–8 still need separate approval:
-fail-closed production
-settings, HTTPS/proxy/cookies, least-privilege DB access, monitoring, encrypted
-automated off-host backup/recovery, release/rollback and final browser acceptance.
+Stage 6 was published as `0cdc3b1`. The owner approved Stage 7 implementation on
+2026-10-22. Its code, tests, operation templates and procedures are prepared
+locally: [PRODUCTION_OPERATIONS.md](PRODUCTION_OPERATIONS.md).
+Current checkpoint: 520 regular backend tests passed (one manual test skipped),
+217 frontend tests and 17 HTTP smoke checks passed, and 27 real-MySQL tests
+passed on each isolated MySQL 8.4.11/8.0.37 server. Both JARs build; 136 runtime
+dependencies have zero OSV matches at this timestamp. Four Linux-specific backup
+wrapper cases remain unrun locally, not silently counted as passes.
+Do not deploy publicly yet: real hosting/TLS, off-host restore, alerts, Linux
+service validation and Stage 8 browser/release acceptance remain required.
 No real SMTP delivery, live provider requests or public deployment was performed
 by these verification checks.

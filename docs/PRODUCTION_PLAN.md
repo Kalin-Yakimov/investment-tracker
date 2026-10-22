@@ -106,6 +106,16 @@ latency. Tune limits against real workflows; avoid arbitrary restrictions.
 
 ## Stage 7 — production configuration and operations (P0-5 / P1-12 / P1-14)
 
+Approved on 2026-10-22 and implemented locally after Stage 6 commit `0cdc3b1`.
+Early fail-closed checks, validation-only production schema startup, a separate
+maintenance JAR, private Actuator/Prometheus, operational audit logging, HTTPS
+proxy/service templates and encrypted backup automation are prepared. No real
+database, host configuration or deployment was changed. Hosting-specific TLS,
+off-host backup/restore, alert delivery and Linux service checks remain release
+gates, not claims made by local tests. See [PRODUCTION_OPERATIONS.md](PRODUCTION_OPERATIONS.md)
+and [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md). The owner approved
+committing and pushing Stage 7 to both remotes on 2026-10-22.
+
 Fail-closed startup configuration, HTTPS/proxy/cookie contract, health/metrics,
 audit retention, encrypted off-host automated backup and release/rollback
 procedure. Files: production properties, security, CI/release/monitoring docs.
@@ -121,5 +131,6 @@ must pass before public release. Unit tests alone are not production readiness.
 
 The owner approved Stage 5 publication, starting Stage 6, and subsequently
 committing and pushing the verified Stage 6 changes on 2026-10-21.
-Stages 7–8 remain unimplemented and require approval.
+The owner approved Stage 7 publication and starting Stage 8 on 2026-10-22.
+Activation of hosting-specific infrastructure remains a separate approval gate.
 Merging branches and public deployment remain unauthorized.

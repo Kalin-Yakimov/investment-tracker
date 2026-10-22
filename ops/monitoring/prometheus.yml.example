@@ -1,0 +1,11 @@
+# Same-host Prometheus only; its own web UI must also remain private.
+global:
+  scrape_interval: 30s
+rule_files:
+  - investment-alerts.yml
+scrape_configs:
+  - job_name: investment
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['127.0.0.1:8081']
+    # URI templates only, never add email/user/item/query labels.

@@ -21,6 +21,33 @@ class ActivityEventServiceTest {
     private final ActivityEventService service = new ActivityEventService(repository);
 
     @Test
+    void operationalAuditIsPublishedOnlyAfterCommitWithoutFreeTextOrIp() {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(ActivityEventService.class);
+        var capture = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        capture.start(); logger.addAppender(capture);
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.recordSecurityEvent(null, "TEST_SECURITY", "private-free-text", "198.51.100.42");
+            assertEquals(0, capture.list.size());
+            var callbacks = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            callbacks.forEach(c -> c.afterCompletion(org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK));
+            assertEquals(0, capture.list.size());
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+            org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+            service.recordSecurityEvent(null, "TEST_SECURITY", "private-free-text", "198.51.100.42");
+            org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+            assertEquals(1, capture.list.size());
+            String message = capture.list.getFirst().getFormattedMessage();
+            org.junit.jupiter.api.Assertions.assertTrue(message.contains("TEST_SECURITY"));
+            org.junit.jupiter.api.Assertions.assertFalse(message.contains("private-free-text") || message.contains("198.51.100.42"));
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+            logger.detachAppender(capture); capture.stop();
+        }
+    }
+
+    @Test
     void supportReasonMustBeMeaningful() {
         assertThrows(IllegalArgumentException.class, () -> service.requireReason("help"));
     }

@@ -31,3 +31,12 @@ test("does not include unrelated or private backend settings", () => {
   expect(Object.keys(readPublicEnvironment(env)).sort())
     .toEqual(["VITE_API_URL", "VITE_ITEM_SEARCH_DEBOUNCE_MS"]);
 });
+
+test("deployment build requires an explicit HTTPS API origin without URL credentials", () => {
+  for (const url of [undefined, "http://localhost:8080", "https://user:secret@tracker.test", "https://tracker.test/api", "https://tracker.test/", "https://tracker.test?secret=yes"]) {
+    expect(() => readPublicEnvironment({ VITE_DEPLOYMENT_TARGET: "production", VITE_API_URL: url }))
+      .toThrow("Production build requires an explicit HTTPS origin");
+  }
+  expect(readPublicEnvironment({ VITE_DEPLOYMENT_TARGET: "production", VITE_API_URL: "https://tracker.example.test" }).VITE_API_URL)
+    .toBe("https://tracker.example.test");
+});

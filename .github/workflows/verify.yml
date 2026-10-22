@@ -14,6 +14,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  operations:
+    name: Operations template checks (no credentials)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify backup wrapper and deployment contracts
+        run: python3 -m unittest discover -s ops/tests -v
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-24.04
@@ -96,7 +108,7 @@ jobs:
       - name: Enable Gradle wrapper
         run: chmod +x gradlew
       - name: Run backend tests and build
-        run: ./gradlew --no-daemon --console=plain test mysqlTest bootJar
+        run: ./gradlew --no-daemon --console=plain test mysqlTest bootJar migrationBootJar
       - name: Upload backend test and coverage reports
         if: ${{ always() && !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -1,0 +1,72 @@
+# Reference single-host topology, NOT installed automatically.
+# Replace domain, certificate and root; nginx -t before any reload.
+# Include inside the http {} context. Use only maintained NGINX/OpenSSL packages.
+server_tokens off;
+# Deliberately omit URI/query, cookies, Authorization, IP and request bodies.
+log_format investment_minimal '$time_iso8601 status=$status method=$request_method bytes=$body_bytes_sent duration=$request_time requestId=$upstream_http_x_request_id';
+
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+server {
+    listen 80;
+    server_name tracker.example.invalid;
+    return 308 https://tracker.example.invalid$request_uri;
+}
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;
+}
+server {
+    listen 443 ssl;
+    server_name tracker.example.invalid;
+    ssl_certificate /etc/investment/tls/fullchain.pem;
+    ssl_certificate_key /etc/investment/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    root /opt/investment/current/frontend;
+    index index.html;
+    client_max_body_size 64k;
+    client_body_timeout 10s;
+    access_log /var/log/nginx/investment-access.log investment_minimal;
+
+    include /etc/nginx/snippets/investment-security-headers.conf;
+
+    location = /actuator { return 404; }
+    location ^~ /actuator/ { return 404; }
+    location ^~ /swagger-ui { return 404; }
+    location ^~ /v3/api-docs { return 404; }
+    location ~ /\. { return 404; }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host tracker.example.invalid;
+        # Overwrite, never append untrusted client forwarding headers.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Forwarded '';
+        proxy_set_header X-Forwarded-Host '';
+        proxy_set_header X-Forwarded-Port '';
+        proxy_set_header Connection '';
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 15s;
+        proxy_next_upstream off;
+        proxy_hide_header Strict-Transport-Security;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control 'no-store' always;
+        include /etc/nginx/snippets/investment-security-headers.conf;
+    }
+    location /assets/ {
+        try_files $uri =404;
+        expires 1y;
+    }
+    location / {
+        expires -1;
+        try_files $uri $uri/ /index.html;
+    }
+}

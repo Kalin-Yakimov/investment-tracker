@@ -41,6 +41,8 @@
     "dev": "vite",
     "prebuild": "npm run check:runtime",
     "build": "vite build",
+    "prebuild:production": "npm run check:runtime",
+    "build:production": "node scripts/build-production.js",
     "pretest": "npm run check:runtime",
     "test": "vitest run",
     "pretest:watch": "npm run check:runtime",

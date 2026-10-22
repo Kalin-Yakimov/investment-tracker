@@ -169,7 +169,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MessagingException.class)
     public ResponseEntity<ExceptionResponse> handleException(MessagingException exp) {
-        log.error("Email delivery failed", exp);
+        log.error("Email delivery failed ({})", exp.getClass().getSimpleName());
         return errorResponse(INTERNAL_SERVER_ERROR, "The email could not be sent. Please try again later.");
     }
 
@@ -202,7 +202,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ExceptionResponse> handleException(Exception exp) {
-        log.error("Unhandled server error", exp);
+        log.error("Unhandled server error ({})", exp.getClass().getSimpleName());
         return ResponseEntity
                 .status(INTERNAL_SERVER_ERROR)
                 .body(
