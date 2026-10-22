@@ -125,6 +125,17 @@ microservices are implied. A Git rollback does not roll back MySQL DDL.
 
 ## Stage 8 — final acceptance
 
+Approved on 2026-10-22 after publishing Stage 7 as `d69a500` to both remotes.
+Implemented and verified locally: isolated built-frontend/browser
+acceptance, cross-account/session regression, MySQL verification, deployment
+route-contract coverage and candidate artifact hashing. Three discovered issues
+(legacy API proxy routing, case-independent portfolio history and narrow-screen
+profile menu bounds) were corrected without changing the original database.
+See [FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md) for reproducible
+commands, current evidence and the separate, still-unchecked hosting gates.
+The owner approved Stage 8 commit/push on 2026-10-22. Remote CI on the new commit
+remains a separate check; merge and deployment remain unauthorized.
+
 Browser E2E, MySQL regression, security checks, responsive/keyboard review and
 current documentation against a specific release commit. All applicable gates
 must pass before public release. Unit tests alone are not production readiness.

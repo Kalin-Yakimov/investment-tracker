@@ -99,3 +99,20 @@
 .popover-item-btn:hover {
   background: rgba(255, 255, 255, 0.07) !important;
 }
+
+/* Keep the account menu anchored to the right edge, not clipped off the left
+   when navigation wraps on a narrow screen. Desktop layout is unchanged. */
+@media (max-width: 991.98px) {
+  .navbar-account-actions { margin-left: auto; }
+  .navbar-primary-links {
+    order: 3;
+    width: 100%;
+    margin-top: 0.5rem;
+    justify-content: center;
+  }
+  .navbar-primary-links .nav-pill-link {
+    flex: 1;
+    text-align: center;
+    padding-inline: 0.65rem;
+  }
+}

@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.shared.text;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 public class StringUtils {
@@ -12,7 +13,7 @@ public class StringUtils {
         // Replace multiple spaces between words with a single one.
         String normalized = trimmed.replaceAll("\\s+", " ");
 
-        return normalized.toLowerCase();
+        return normalized.toLowerCase(Locale.ROOT);
     }
 
     public static String formatString(String input) {

@@ -4,7 +4,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 
 export default [
-  { ignores: ["build/**", "coverage/**", "node_modules/**"] },
+  { ignores: ["build/**", "coverage/**", "node_modules/**", "test-results/**", "playwright-report/**"] },
   {
     files: ["**/*.{js,jsx,cjs}"],
     ...js.configs.recommended,

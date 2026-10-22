@@ -1,20 +1,34 @@
 # GitHub Actions verification
 
 Prepared and approved for publication: 2026-10-12.
+Updated for production stages 7–8: 2026-10-22.
 Workflow: `.github/workflows/verify.yml`.
 Target repository requested by the owner:
 `https://github.com/Kalin-Yakimov/investment-tracker.git`.
 
 ## What the workflow does
 
-Independent frontend and backend jobs run on GitHub-hosted Ubuntu 24.04 runners
+Independent frontend, backend, operations and browser jobs run on GitHub-hosted Ubuntu 24.04 runners
 for pushes, pull requests and manual dispatch. Frontend checks use Node.js
 24.20.0, locked `npm ci`, ESLint, Vitest with JUnit output, a Vite build and the
 existing production HTTP smoke check. Backend checks use Temurin Java 21 and
-the project's Gradle 8.14.6 wrapper for `test mysqlTest bootJar`. The backend job
+the project's Gradle 8.14.6 wrapper for `test mysqlTest bootJar migrationBootJar`. The backend job
 includes an isolated MySQL 8.4.11 LTS service with synthetic test-only credentials.
 It tests real migrations, safe adoption and InnoDB auth concurrency, not just H2.
 See `DATABASE_MIGRATIONS.md` for local execution and data-safety boundaries.
+
+Operations checks exercise backup wrapper safety and deployment contracts on
+Linux, without credentials or an actual remote backup. The browser job builds
+the frontend and runs Playwright Chromium desktop/mobile against a fresh,
+test-only H2 backend with synthetic users and outbound mocks. It is separate
+from fast frontend checks, with no deployment. See
+[FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md) for isolation and limits.
+
+The published Stage 7 revision `d69a500` has a confirmed successful
+[GitHub Actions run](https://github.com/Kalin-Yakimov/investment-tracker/actions/runs/39768969950)
+for its three jobs, including all Linux operations checks. The new Stage 8
+browser job is local until an approved push; its remote result is not yet known.
+The following October 12 checkpoint is historical, not the current release gate.
 
 The same application commands passed in GitLab pipeline
 [2938937025](https://gitlab.com/yakimovs/Investment-tracker/-/pipelines/2938937025)
@@ -53,7 +67,7 @@ automatically. **Run workflow** becomes available once the workflow also exists
 on the default branch; adding it to the feature branch alone does not authorize
 merging that branch into `main`.
 
-Both jobs must be successful. A green run only confirms the defined automated
+All applicable jobs must be successful on the exact candidate commit. A green run only confirms the defined automated
 checks; manual browser acceptance, external-provider behavior and production
 deployment remain separate concerns.
 

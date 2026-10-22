@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.task.TaskExecutor;
@@ -79,6 +80,8 @@ class ApplicationWorkflowIntegrationTest {
     @Autowired SupportTicketRepository tickets;
     @Autowired PasswordEncoder passwords;
     @Autowired MarketPricePersistenceService marketPrices;
+    @Autowired @Qualifier("requestMappingHandlerMapping")
+    org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping mappings;
     @MockitoBean CsItemService catalogueSync;
     @MockitoBean PriceFeedService priceFeed;
     @MockitoBean EmailService email;
@@ -99,6 +102,24 @@ class ApplicationWorkflowIntegrationTest {
     @AfterEach
     void neverContactRealProviders() {
         verifyNoInteractions(outboundHttp);
+    }
+
+    @Test
+    void productionProxyCoversEveryApplicationApiMappingIncludingLegacyPortfolioRoutes() throws Exception {
+        var config = java.nio.file.Path.of("../ops/nginx/investment.conf.example");
+        if (!java.nio.file.Files.exists(config)) config = java.nio.file.Path.of("ops/nginx/investment.conf.example");
+        String text = java.nio.file.Files.readString(config);
+        var locations = java.util.regex.Pattern.compile("location\\s+(=\\s+)?([^\\s{}]+)\\s*\\{\\s*include /etc/nginx/snippets/investment-api-proxy\\.conf;")
+                .matcher(text).results().map(match -> java.util.Map.entry(match.group(2), match.group(1) != null)).toList();
+        var paths = mappings.getHandlerMethods().entrySet().stream()
+                .filter(entry -> entry.getValue().getBeanType().getPackageName().startsWith("com.kalin.investment_tracker"))
+                .flatMap(entry -> entry.getKey().getPatternValues().stream()).distinct().toList();
+        assertTrue(paths.size() > 30, "Inspect real application controllers, not an empty mapping registry");
+        for (String path : paths) {
+            assertTrue(locations.stream().anyMatch(location -> location.getValue()
+                            ? path.equals(location.getKey()) : path.startsWith(location.getKey())),
+                    () -> "Production proxy does not cover API route " + path);
+        }
     }
 
     @Test
@@ -154,6 +175,12 @@ class ApplicationWorkflowIntegrationTest {
         JsonNode created = response(mvc.perform(authorized(body(post("/item"), portfolio(item, 2)), owner))
                 .andExpect(status().isOk()).andReturn());
         long id = created.get("id").asLong();
+        JsonNode ownedHistory = response(mvc.perform(authorized(get("/item/history").param("name", item.getName()), owner))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(id, ownedHistory.get("content").get(0).get("id").asLong());
+        JsonNode foreignHistory = response(mvc.perform(authorized(get("/item/history").param("name", item.getName()), stranger))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(0, foreignHistory.get("content").size());
         mvc.perform(authorized(get("/item/{id}", id), stranger)).andExpect(status().isNotFound());
         mvc.perform(authorized(body(put("/item/{id}", id), portfolio(item, 5)), stranger)).andExpect(status().isNotFound());
         mvc.perform(authorized(delete("/item/{id}", id), stranger)).andExpect(status().isNotFound());

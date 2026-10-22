@@ -1,8 +1,12 @@
 # Pre-release checklist
 
 This is a release gate, not a claim that unchecked infrastructure exists.
-Source preparation: Stage 7, 2026-10-22. Public deployment remains unauthorized.
+Source preparation: Stages 7–8, 2026-10-22. Public deployment remains unauthorized.
 Each operational box needs an owner, timestamp, target and release commit.
+
+Local candidate evidence: [FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md).
+These results do not mark the release gates below complete: Stage 8 is not yet
+a published clean release, and no actual hosting acceptance has been performed.
 
 ## Code and artifacts
 

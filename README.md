@@ -115,6 +115,12 @@ npm run smoke:build
 
 `npm run verify` runs all four frontend checks. The smoke check serves the built
 files temporarily on loopback; it does not start the backend or use real data.
+`npm.cmd run test:e2e` additionally builds the frontend and starts an isolated
+test-only backend with synthetic accounts/H2 and mocked outbound providers.
+It requires Java 21 and `npx.cmd playwright install chromium`; it never reuses
+your running application. See [Stage 8 acceptance](docs/FINAL_ACCEPTANCE_STAGE8.md)
+for scenarios, safe ports and limitations. Normal `npm run verify` stays fast
+and does not start this separate browser suite.
 GitLab CI and GitHub Actions run frontend/backend verification and collect test
 reports after an approved push to the respective site. Neither deploys the
 application. See [GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for the second hosting
@@ -139,4 +145,9 @@ other installations automatically. A Windows backup helper is available at
 
 ## Deployment status
 
-The documented configuration is intended for local development and demonstration. A public deployment additionally requires HTTPS, production secrets, a restricted database user, secure cookies, explicit CORS origins and managed database migrations.
+Local setup remains intended for development and demonstration. Production
+configuration, standalone migrations and operations templates are prepared in
+[PRODUCTION_OPERATIONS.md](docs/PRODUCTION_OPERATIONS.md). They are not installed
+automatically and no deployment has been performed. Public release requires the
+hosting-specific checks in [PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md),
+not just passing local tests.

@@ -2,6 +2,12 @@
 
 Updated: 2026-10-12. Branch: `security-reliability-refactor`.
 
+Historical refactor checkpoint. For the newer production-readiness candidate,
+browser acceptance, real MySQL and operations evidence, see
+[FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md) and
+[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md). Results below describe only
+the original October 12 stage, not the current source snapshot.
+
 The automated verification and CI configuration are implemented locally. Browser
 acceptance, a real GitLab pipeline and publication/merge are separate remaining
 steps. This document does not claim production readiness or completed manual QA.

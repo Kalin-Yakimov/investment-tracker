@@ -119,7 +119,12 @@ VITE_API_URL=https://your-real-domain.example npm run build:production
 localhost fallback. Обикновеното `npm run build` остава за local/CI smoke.
 Изходът е `react/investment-tracker/build`; Vite dev/preview НЕ е Production server.
 
-`ops/nginx/investment.conf.example` и shared security-headers snippet са шаблони:
+`ops/nginx/investment.conf.example` и двата snippets
+`investment-api-proxy.conf` / `investment-security-headers.conf` са шаблони.
+Копирайте snippets в `/etc/nginx/snippets/`; заменете примерния домейн както в
+server configuration, така и в фиксирания proxy `Host`. API snippet се включва
+и за legacy Portfolio routes извън `/api/`; те не трябва да попадат в SPA fallback.
+След всяка промяна проверете `nginx -t` преди reload.
 
 1. Изберете реален домейн, проверете DNS и инсталирайте валиден сертификат с
    автоматично renewal и alert преди изтичане. Не активирайте `.invalid` примерите.

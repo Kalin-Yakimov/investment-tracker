@@ -86,7 +86,7 @@ export default function Navbar() {
               <span className="logo-text">Investment Tracker</span>
             </Link>
 
-            <div className="d-flex align-items-center gap-2 mx-auto">
+            <div className="d-flex align-items-center gap-2 mx-auto navbar-primary-links">
               {isLoggedIn && (
                 <>
                   <Link
@@ -111,7 +111,7 @@ export default function Navbar() {
               )}
             </div>
 
-            <div className="d-flex align-items-center gap-3">
+            <div className="d-flex align-items-center gap-3 navbar-account-actions">
               {isLoggedIn ? (
                 <div className="position-relative" ref={menuRef}>
                   <button

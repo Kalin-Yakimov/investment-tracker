@@ -82,11 +82,15 @@ class TemplateSafetyTest(unittest.TestCase):
 
     def test_proxy_overwrites_forwarding_and_preserves_headers_in_api_location(self):
         proxy = (ROOT / "ops/nginx/investment.conf.example").read_text()
-        self.assertIn("proxy_set_header X-Forwarded-For $remote_addr;", proxy)
-        self.assertNotIn("$proxy_add_x_forwarded_for", proxy)
-        self.assertEqual(2, proxy.count("include /etc/nginx/snippets/investment-security-headers.conf;"))
+        upstream = (ROOT / "ops/nginx/investment-api-proxy.conf").read_text()
+        self.assertIn("proxy_set_header X-Forwarded-For $remote_addr;", upstream)
+        self.assertNotIn("$proxy_add_x_forwarded_for", upstream)
+        self.assertIn("include /etc/nginx/snippets/investment-security-headers.conf;", proxy)
+        self.assertIn("include /etc/nginx/snippets/investment-security-headers.conf;", upstream)
         self.assertIn("location ^~ /actuator/ { return 404; }", proxy)
-        self.assertIn("proxy_next_upstream off;", proxy)
+        self.assertIn("proxy_next_upstream off;", upstream)
+        for location in ["/api/", "= /item", "/item/", "= /get-user-items", "= /portfolio-summary", "/cs-items/", "= /items/search"]:
+            self.assertIn("location " + location + " { include /etc/nginx/snippets/investment-api-proxy.conf; }", proxy)
 
     def test_backend_service_is_unprivileged_and_does_not_run_migrations(self):
         service = (ROOT / "ops/systemd/investment-tracker.service").read_text()

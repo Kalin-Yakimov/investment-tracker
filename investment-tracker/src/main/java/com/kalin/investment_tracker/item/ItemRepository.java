@@ -43,7 +43,7 @@ public interface ItemRepository extends JpaRepository<Item, Long>, ItemMutationR
     Page<Item> findPortfolioOrderByTotalPriceAsc(@Param("userId") Integer userId, Pageable pageable);
 
     // Used for the item history (non-Steam items only).
-    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND i.itemName = :itemName AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) ORDER BY i.date DESC, i.id DESC")
+    @Query("SELECT i FROM Item i WHERE i.user.id = :userId AND LOWER(i.itemName) = :itemName AND (i.steamFoundCheck IS NULL OR i.steamFoundCheck = false) ORDER BY i.date DESC, i.id DESC")
     @EntityGraph(attributePaths = "catalogueItem")
     Page<Item> findByUserIdAndItemNameOrderByDateDesc(@Param("userId") Integer userId, @Param("itemName") String itemName, Pageable pageable);
 

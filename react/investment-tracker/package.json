@@ -20,6 +20,7 @@
     "react-router-dom": "7.18.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@eslint/js": "10.0.1",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
@@ -53,6 +54,7 @@
     "preview": "vite preview",
     "presmoke:build": "npm run check:runtime",
     "smoke:build": "node scripts/smoke-build.js",
-    "verify": "npm run lint && npm test && npm run build && npm run smoke:build"
+    "verify": "npm run lint && npm test && npm run build && npm run smoke:build",
+    "test:e2e": "playwright test"
   }
 }

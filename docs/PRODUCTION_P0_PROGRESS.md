@@ -115,3 +115,15 @@ Do not deploy publicly yet: real hosting/TLS, off-host restore, alerts, Linux
 service validation and Stage 8 browser/release acceptance remain required.
 No real SMTP delivery, live provider requests or public deployment was performed
 by these verification checks.
+
+## Stage 8 — local acceptance candidate (2026-10-22)
+
+Stage 7 was committed as `d69a500` and pushed to both remotes by approval.
+Its GitHub frontend/backend/Linux-operations workflow is confirmed successful.
+Stage 8 adds isolated browser/API acceptance, source/artifact identification
+and regression fixes for proxy routing, case-independent transaction history
+and narrow profile menus. See [FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md)
+for results, limitations and repeatable commands. No original DB or hosting
+settings were changed. The owner approved Stage 8 commit/push on 2026-10-22;
+remote CI and clean-release acceptance must be checked on the published commit.
+Real hosting/TLS, off-host recovery, alerting and rollout are still release gates.

@@ -100,6 +100,15 @@ tasks.register('migrationBootJar', org.springframework.boot.gradle.tasks.bundlin
 	classpath sourceSets.main.runtimeClasspath
 }
 
+// Test-only server: H2 + synthetic accounts + mocked outbound providers, never in bootJar.
+tasks.register('acceptanceServer', JavaExec) {
+	group = 'verification'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.kalin.investment_tracker.acceptance.AcceptanceTestServer'
+	environment 'ACCEPTANCE_TEST_MODE', 'isolated-loopback'
+}
+
 apply from: 'gradle/dependency-audit.gradle'
 
 jacoco {

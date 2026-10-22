@@ -16,3 +16,5 @@
 # GitLab job-local tool cache
 /.gradle-ci/
 /ops/tests/__pycache__/
+/react/investment-tracker/test-results/
+/react/investment-tracker/playwright-report/
