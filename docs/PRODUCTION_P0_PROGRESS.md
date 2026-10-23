@@ -1,0 +1,131 @@
+# Production-readiness implementation checkpoint
+
+Updated 2026-10-22. Branch: `production-auth-migrations`, based on
+`security-reliability-refactor`. The owner approved commit and publication of
+these changes to GitLab/GitHub on 2026-10-21. No deployment, credential rotation
+or merge is included. The sequential plan is
+[PRODUCTION_PLAN.md](PRODUCTION_PLAN.md), not the historical refactor plan.
+
+## Stage 1 — completed locally
+
+- Versioned V1 SQL defines all 16 application tables, indexes, foreign keys,
+  ID-generator tables and the market-price mutex seed. No user data/secrets.
+- A real private dump of the developer `investment` database was made with
+  consistent InnoDB snapshot options. The dump is about 15.5 MB and is ignored
+  by Git under `backups/database/`; no export is uploaded.
+- It was restored into a separate isolated MySQL database. All 16 table row
+  counts and extended checksums matched the original. The file's SHA-256 was
+  rechecked and the application-table fingerprints still matched after adoption.
+- The restored schema and sequence state were compared with a separate fresh
+  V1 reference, then explicitly adopted at version 1 and used for a complete
+  application startup with outbound HTTP/mail mocked and jobs disabled/delayed.
+- Only after that rehearsal was the original database explicitly baselined at
+  V1. No application table was recreated and no application records reset.
+- Default, `migrated` and `prod` profiles now use Flyway plus Hibernate
+  `validate`, never automatic `update`. Unadopted non-empty databases fail
+  safely. Automatic baseline and destructive clean remain disabled.
+
+The local dump is **not encrypted** and must remain private. Store an encrypted
+copy outside this computer before relying on it for disaster recovery. This
+local verification is not an automated encrypted off-host production backup
+policy; that operational work remains Stage 7. Test data is still sensitive
+when it includes real account email addresses/hashes/sessions.
+
+Procedure and maintenance tool: [DATABASE_MIGRATIONS.md](DATABASE_MIGRATIONS.md).
+V1 is now applied/adopted and must not be edited; use a new migration instead.
+
+## Stage 2 — completed locally: supported runtime foundation
+
+Spring Boot 4.1.1, compatible modular starters/test packages, Gradle 8.14.6 with
+distribution checksum, BOM-managed dependencies and springdoc 3.1.1. Jackson
+3.1.8 / Jackson 2.21.8 and Tomcat 11.0.27 are aligned same-line security patches
+newer than the Boot BOM. Java 21 and Node 24.20.0 remain unchanged.
+
+MySQL 8.4.11 LTS is the selected new-install/CI target, tested using a separate
+official portable server. The system MySQL 8.0.37 service is unchanged. A full
+startup was also verified against the restored/adopted 8.0.37 clone using the
+new framework versions. Changing the system service is a separate operation.
+
+Regression checks preserve login defaults, ISO date/time JSON, numeric prices,
+strict quantities/IDs and fresh role membership under Hibernate 7's changed
+locking behavior. No provider cadence or financial logic was changed.
+
+Details, advisory triage, commands and primary references:
+[RUNTIME_UPGRADE.md](RUNTIME_UPGRADE.md).
+
+## Earlier P0 authentication groundwork retained
+
+- Reliable all-device sign-out with expired/missing access-token fallback via
+  an active protected refresh cookie, idempotent cookie deletion, and a
+  non-simple request requirement for cookie-authenticated refresh/logout.
+- Account-first locking for login, refresh, reset/password changes, revocation
+  and administrative security mutations. Refresh updates only last-use state
+  conditionally, never saves a stale whole session that could clear revocation.
+- Real MySQL tests cover stale managed security/role state, role addition and
+  removal after a repeatable-read snapshot, pending writes, refresh/revoke and
+  login/reset races, and independence of different accounts.
+
+Access lifetime remains **30 minutes**; remembered refresh remains **60 days**.
+Release frontend/backend auth changes together because cookie-authenticated
+refresh/logout require the new header. See [AUTH_SECURITY.md](AUTH_SECURITY.md).
+The later Stage 3 password-policy/API-error/JWT-decoding work is now implemented
+and verified locally, separately from the published Stages 1–2 commit. See
+[AUTH_LIFECYCLE_STAGE3.md](AUTH_LIFECYCLE_STAGE3.md). The owner approved their
+commit and publication on 2026-10-21, followed by implementation of Stage 4.
+
+## Stages 1–2 verification checkpoint (2026-10-21, before Stage 3)
+
+- Backend: 398 regular tests; 397 passed, one pre-existing manual measurement
+  test disabled, zero failures/errors. `bootJar` succeeds.
+- Isolated MySQL 8.4.11: all 13 migration/adoption, Hibernate validation, full
+  startup and real InnoDB concurrency tests passed. Restored MySQL 8.0.37
+  startup also succeeds. Both disposable servers have been stopped.
+- Runtime dependency audit: 119 resolved Maven components checked in OSV;
+  **zero advisory matches** after the documented patches. This is a timestamped
+  dependency check, not a guarantee of zero vulnerabilities or a host/history scan.
+- Frontend: ESLint, all 118 tests, production build and all 17 production HTTP
+  smoke checks pass. Existing react-datepicker sourcemap and ~741 KB minified
+  chunk warnings remain outside this checkpoint.
+- GitHub workflow passes actionlint. Redacted backend/frontend source and
+  GitHub-workflow scans found no secrets. Ignored local data and historical Git
+  commits are not certified by these source-only scans.
+- The pinned official MySQL Docker tag exists. GitHub/GitLab workflows run after
+  publication; their actual remote results must be checked separately. These
+  local verification results are not a green remote pipeline.
+
+## Remaining gates
+
+Stage 3 is published as `9ce96b1`, Stage 4 as `5dd3983`, and Stage 5 as
+`c516f6f` to GitLab/GitHub. Stage 6 limits/performance work was then approved,
+implemented and verified locally; the owner also approved committing and pushing
+it to both remotes on 2026-10-21. See
+[RESOURCE_LIMITS_STAGE6.md](RESOURCE_LIMITS_STAGE6.md) for the current results.
+The implementation/test runs did not apply V2/V3 to the original developer DB;
+subsequent user-started application runs are not inspected by this checkpoint.
+
+Stage 6 was published as `0cdc3b1`. The owner approved Stage 7 implementation on
+2026-10-22. Its code, tests, operation templates and procedures are prepared
+locally: [PRODUCTION_OPERATIONS.md](PRODUCTION_OPERATIONS.md).
+Current checkpoint: 520 regular backend tests passed (one manual test skipped),
+217 frontend tests and 17 HTTP smoke checks passed, and 27 real-MySQL tests
+passed on each isolated MySQL 8.4.11/8.0.37 server. Both JARs build; 136 runtime
+dependencies have zero OSV matches at this timestamp. Four Linux-specific backup
+wrapper cases remain unrun locally, not silently counted as passes.
+Do not deploy publicly yet: real hosting/TLS, off-host restore, alerts, Linux
+service validation and Stage 8 browser/release acceptance remain required.
+No real SMTP delivery, live provider requests or public deployment was performed
+by these verification checks.
+
+## Stage 8 — published acceptance checkpoint (2026-10-22)
+
+Stage 7 was committed as `d69a500` and pushed to both remotes by approval.
+Its GitHub frontend/backend/Linux-operations workflow is confirmed successful.
+Stage 8 adds isolated browser/API acceptance, source/artifact identification
+and regression fixes for proxy routing, case-independent transaction history
+and narrow profile menus. See [FINAL_ACCEPTANCE_STAGE8.md](FINAL_ACCEPTANCE_STAGE8.md)
+for results, limitations and repeatable commands. No original DB or hosting
+settings were changed. Stage 8 is published as `cbecc30` in GitLab/GitHub; all four
+GitHub Actions jobs passed on that exact revision. Current GitLab CI remains
+unverified. New commits need separate checks; [CURRENT_STATUS.md](CURRENT_STATUS.md)
+is the current documentation entry point rather than earlier checkpoints.
+Real hosting/TLS, off-host recovery, alerting and rollout are still release gates.

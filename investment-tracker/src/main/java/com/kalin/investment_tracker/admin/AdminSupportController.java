@@ -3,10 +3,17 @@ package com.kalin.investment_tracker.admin;
 import com.kalin.investment_tracker.support.SupportTicketDtos;
 import com.kalin.investment_tracker.support.SupportTicketService;
 import com.kalin.investment_tracker.support.SupportTicketStatus;
+import com.kalin.investment_tracker.shared.web.PageResponse;
 import com.kalin.investment_tracker.user.User;
 import jakarta.mail.MessagingException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotBlank;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -41,88 +48,92 @@ public class AdminSupportController {
     }
 
     @GetMapping("/users")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.UserSummary>> users(
-            @RequestParam(defaultValue = "") String query,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+    public ResponseEntity<PageResponse<AdminDtos.UserSummary>> users(
+            @RequestParam(defaultValue = "") @Size(max = ApiRequestLimits.ITEM_TEXT_LENGTH) String query,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(service.searchUsers(query, page, size)));
+        return ResponseEntity.ok(PageResponse.from(service.searchUsers(query, page, size)));
     }
 
     @GetMapping("/users/{userId}")
     public ResponseEntity<AdminDtos.UserDetails> userDetails(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
-            @RequestHeader(SUPPORT_REASON_HEADER) String reason,
+            @PathVariable @Positive Integer userId,
+            @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
             HttpServletRequest request
     ) {
         return ResponseEntity.ok(service.getUserDetails(actor, userId, reason, request.getRemoteAddr()));
     }
 
     @GetMapping("/users/{userId}/portfolio")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.PortfolioItem>> portfolio(
+    public ResponseEntity<PageResponse<AdminDtos.PortfolioItem>> portfolio(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
-            @RequestHeader(SUPPORT_REASON_HEADER) String reason,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @PathVariable @Positive Integer userId,
+            @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size,
             HttpServletRequest request
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(
+        return ResponseEntity.ok(PageResponse.from(
                 service.getPortfolio(actor, userId, reason, page, size, request.getRemoteAddr())
         ));
     }
 
     @GetMapping("/users/{userId}/tracked-items")
-    public ResponseEntity<List<AdminDtos.TrackedItem>> trackedItems(
+    public ResponseEntity<PageResponse<AdminDtos.TrackedItem>> trackedItems(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
-            @RequestHeader(SUPPORT_REASON_HEADER) String reason,
-            HttpServletRequest request
+            @PathVariable @Positive Integer userId,
+            @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
+            HttpServletRequest request,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(service.getTrackedItems(actor, userId, reason, request.getRemoteAddr()));
+        return ResponseEntity.ok(PageResponse.from(service.getTrackedItems(actor, userId, reason, request.getRemoteAddr(), page, size)));
     }
 
     @GetMapping("/users/{userId}/sessions")
-    public ResponseEntity<List<AdminDtos.Session>> sessions(
+    public ResponseEntity<PageResponse<AdminDtos.Session>> sessions(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
-            @RequestHeader(SUPPORT_REASON_HEADER) String reason,
-            HttpServletRequest request
+            @PathVariable @Positive Integer userId,
+            @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
+            HttpServletRequest request,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(service.getSessions(actor, userId, reason, request.getRemoteAddr()));
+        return ResponseEntity.ok(PageResponse.from(service.getSessions(actor, userId, reason, request.getRemoteAddr(), page, size)));
     }
 
     @GetMapping("/users/{userId}/activity")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.Activity>> userActivity(
+    public ResponseEntity<PageResponse<AdminDtos.Activity>> userActivity(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
-            @RequestHeader(SUPPORT_REASON_HEADER) String reason,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "30") int size,
+            @PathVariable @Positive Integer userId,
+            @RequestHeader(SUPPORT_REASON_HEADER) @NotBlank @Size(max = 500) String reason,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "30") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size,
             HttpServletRequest request
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(
+        return ResponseEntity.ok(PageResponse.from(
                 service.getUserActivity(actor, userId, reason, page, size, request.getRemoteAddr())
         ));
     }
 
     @GetMapping("/audit")
     @PreAuthorize("hasAuthority('ADMIN')")
-    public ResponseEntity<AdminDtos.PageResponse<AdminDtos.Activity>> audit(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+    public ResponseEntity<PageResponse<AdminDtos.Activity>> audit(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "50") @Min(1) @Max(ApiRequestLimits.PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(service.getAdministrativeAudit(page, size)));
+        return ResponseEntity.ok(PageResponse.from(service.getAdministrativeAudit(page, size)));
     }
 
     @GetMapping("/tickets")
-    public ResponseEntity<AdminDtos.PageResponse<SupportTicketDtos.TicketResponse>> tickets(
+    public ResponseEntity<PageResponse<SupportTicketDtos.TicketResponse>> tickets(
             @RequestParam(required = false) SupportTicketStatus status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(ApiRequestLimits.SUPPORT_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(AdminDtos.PageResponse.from(
+        return ResponseEntity.ok(PageResponse.from(
                 supportTicketService.findAll(status, page, size)
         ));
     }
@@ -134,7 +145,7 @@ public class AdminSupportController {
 
     @PatchMapping("/tickets/{ticketId}/status")
     public ResponseEntity<SupportTicketDtos.TicketResponse> ticketStatus(
-            @PathVariable Long ticketId,
+            @PathVariable @Positive Long ticketId,
             @RequestBody @Valid SupportTicketDtos.StatusRequest body
     ) {
         return ResponseEntity.ok(supportTicketService.updateStatus(ticketId, body.status()));
@@ -142,7 +153,7 @@ public class AdminSupportController {
 
     @DeleteMapping("/tickets/{ticketId}")
     public ResponseEntity<SupportTicketDtos.ActionResponse> removeTicket(
-            @PathVariable Long ticketId
+            @PathVariable @Positive Long ticketId
     ) {
         return ResponseEntity.ok(supportTicketService.remove(ticketId));
     }
@@ -151,7 +162,7 @@ public class AdminSupportController {
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<AdminDtos.ActionResult> supportRole(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
+            @PathVariable @Positive Integer userId,
             @RequestBody @Valid AdminDtos.SupportRoleRequest body,
             HttpServletRequest request
     ) {
@@ -164,7 +175,7 @@ public class AdminSupportController {
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<AdminDtos.ActionResult> accountLocked(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
+            @PathVariable @Positive Integer userId,
             @RequestBody @Valid AdminDtos.LockRequest body,
             HttpServletRequest request
     ) {
@@ -176,7 +187,7 @@ public class AdminSupportController {
     @PostMapping("/users/{userId}/revoke-sessions")
     public ResponseEntity<AdminDtos.ActionResult> revokeSessions(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
+            @PathVariable @Positive Integer userId,
             @RequestBody @Valid AdminDtos.ReasonRequest body,
             HttpServletRequest request
     ) {
@@ -188,7 +199,7 @@ public class AdminSupportController {
     @PostMapping("/users/{userId}/resend-activation")
     public ResponseEntity<AdminDtos.ActionResult> resendActivation(
             @AuthenticationPrincipal User actor,
-            @PathVariable Integer userId,
+            @PathVariable @Positive Integer userId,
             @RequestBody @Valid AdminDtos.ReasonRequest body,
             HttpServletRequest request
     ) throws MessagingException {

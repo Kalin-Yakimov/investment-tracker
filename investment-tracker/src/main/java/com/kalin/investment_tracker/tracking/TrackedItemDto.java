@@ -1,0 +1,31 @@
+package com.kalin.investment_tracker.tracking;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import com.kalin.investment_tracker.pricing.PriceFreshnessDto;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class TrackedItemDto {
+    private Long id;
+    private String itemName;
+    private String marketHashName;
+    private String csItemId;
+    private int quantity;
+    private BigDecimal price;
+    private BigDecimal boughtPrice;
+    private LocalDate boughtDate;
+    private Boolean showInDashboard;
+    private BigDecimal priceNotification;
+    private Boolean steamFoundCheck;
+    private String image;
+    private BigDecimal price24h;
+    private PriceFreshnessDto priceFreshness;
+}

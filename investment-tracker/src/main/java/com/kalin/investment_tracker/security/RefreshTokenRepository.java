@@ -12,6 +12,10 @@ import java.util.Optional;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, String> {
 
+    // Resolve only the immutable owner ID; never load stale session/account entities before locking.
+    @Query("select token.session.user.id from RefreshToken token where token.tokenHash = :hash")
+    Optional<Integer> findOwnerIdByTokenHash(@Param("hash") String hash);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 

@@ -1,6 +1,6 @@
 package com.kalin.investment_tracker.user;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.kalin.investment_tracker.model.Item;
+import com.kalin.investment_tracker.item.Item;
 import com.kalin.investment_tracker.role.Role;
 import jakarta.persistence.*;
 import lombok.*;
@@ -42,7 +42,9 @@ public class User implements UserDetails, Principal {
     @ManyToMany(fetch = FetchType.EAGER)
     private List<Role> roles;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    // Security-state refreshes must not load/lock an account's entire portfolio.
+    @OneToMany(mappedBy = "user", cascade = {CascadeType.PERSIST, CascadeType.MERGE,
+            CascadeType.REMOVE, CascadeType.DETACH}, orphanRemoval = true)
     @JsonManagedReference
     private  List<Item> items;
 

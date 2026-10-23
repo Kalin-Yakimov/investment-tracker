@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+com.kalin.investment_tracker.operations.ProductionSettingsValidator

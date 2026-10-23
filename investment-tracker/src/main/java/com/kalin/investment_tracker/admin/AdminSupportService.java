@@ -1,17 +1,18 @@
 package com.kalin.investment_tracker.admin;
 
 import com.kalin.investment_tracker.auth.AuthenticationService;
-import com.kalin.investment_tracker.model.Item;
-import com.kalin.investment_tracker.repository.CsItemRepository;
-import com.kalin.investment_tracker.repository.ItemRepository;
-import com.kalin.investment_tracker.repository.MarketPriceSnapshotRepository;
+import com.kalin.investment_tracker.exception.ExternalServiceException;
+import com.kalin.investment_tracker.item.Item;
+import com.kalin.investment_tracker.catalogue.CsItemRepository;
+import com.kalin.investment_tracker.item.ItemRepository;
+import com.kalin.investment_tracker.pricing.MarketPriceSnapshotRepository;
 import com.kalin.investment_tracker.role.Role;
 import com.kalin.investment_tracker.role.RoleNames;
 import com.kalin.investment_tracker.role.RoleRepository;
 import com.kalin.investment_tracker.security.AuthSessionRepository;
 import com.kalin.investment_tracker.security.AuthSessionService;
-import com.kalin.investment_tracker.service.CsItemService;
-import com.kalin.investment_tracker.service.SteamPriceService;
+import com.kalin.investment_tracker.catalogue.CsItemService;
+import com.kalin.investment_tracker.pricing.PriceFeedService;
 import com.kalin.investment_tracker.user.User;
 import com.kalin.investment_tracker.user.UserRepository;
 import jakarta.mail.MessagingException;
@@ -20,6 +21,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import com.kalin.investment_tracker.validation.ApiRequestLimits;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
@@ -33,6 +35,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Supplier;
 
 @Service
 @RequiredArgsConstructor
@@ -56,7 +60,7 @@ public class AdminSupportService {
     private final ActivityEventService activityEventService;
     private final AuthenticationService authenticationService;
     private final CsItemService csItemService;
-    private final SteamPriceService steamPriceService;
+    private final PriceFeedService priceFeedService;
     private final SystemJobStatusService jobStatusService;
     private final TaskExecutor applicationTaskExecutor;
 
@@ -85,11 +89,12 @@ public class AdminSupportService {
 
     @Transactional(readOnly = true)
     public Page<AdminDtos.UserSummary> searchUsers(String query, int page, int size) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         String cleanQuery = query == null ? "" : query.trim();
         Pageable pageable = PageRequest.of(
-                Math.max(0, page),
-                Math.min(Math.max(1, size), 50),
-                Sort.by(Sort.Direction.DESC, "createdDate")
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdDate", "id")
         );
         return userRepository.searchForAdministration(cleanQuery, pageable).map(this::toUserSummary);
     }
@@ -102,14 +107,7 @@ public class AdminSupportService {
             String ipAddress
     ) {
         User target = requireAccessibleTarget(actor, userId);
-        activityEventService.recordSupportAccess(
-                actor,
-                target,
-                "SUPPORT_VIEW_OPENED",
-                reason,
-                "Opened the read-only support view",
-                ipAddress
-        );
+        recordSupportViewAccess(actor, target, reason, ipAddress);
         return new AdminDtos.UserDetails(
                 toUserSummary(target),
                 authSessionRepository.findLastActivityForUser(target.getId())
@@ -125,12 +123,13 @@ public class AdminSupportService {
             int size,
             String ipAddress
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
         Pageable pageable = PageRequest.of(
-                Math.max(0, page),
-                Math.min(Math.max(1, size), 50),
-                Sort.by(Sort.Direction.DESC, "date")
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "date", "id")
         );
         Page<Item> items = itemRepository.findPortfolioForAdministration(userId, pageable);
         return items.map(item -> {
@@ -149,16 +148,17 @@ public class AdminSupportService {
     }
 
     @Transactional
-    public List<AdminDtos.TrackedItem> getTrackedItems(
+    public org.springframework.data.domain.Page<AdminDtos.TrackedItem> getTrackedItems(
             User actor,
             Integer userId,
             String reason,
-            String ipAddress
+            String ipAddress, int page, int size
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
-        List<Item> items = itemRepository.findSteamTrackedItemsByUserId(userId);
-        return items.stream()
+        var items = itemRepository.findTrackedPage(userId, false, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
+        return items
                 .map(item -> {
                     var catalogueItem = item.getCatalogueItem();
                     return new AdminDtos.TrackedItem(
@@ -172,26 +172,25 @@ public class AdminSupportService {
                             item.getPriceNotification(),
                             catalogueItem != null ? catalogueItem.getImage() : null
                     );
-                })
-                .toList();
+                });
     }
 
     @Transactional
-    public List<AdminDtos.Session> getSessions(
+    public Page<AdminDtos.Session> getSessions(
             User actor,
             Integer userId,
             String reason,
-            String ipAddress
+            String ipAddress, int page, int size
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
         boolean actorIsAdmin = hasRole(actor, RoleNames.ADMIN);
         return authSessionRepository
-                .findByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(
+                .findByUserIdAndRevokedAtIsNullAndExpiresAtAfter(
                         target.getId(),
-                        LocalDateTime.now()
+                        LocalDateTime.now(), PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lastUsedAt", "id"))
                 )
-                .stream()
                 .map(session -> new AdminDtos.Session(
                         session.getId(),
                         session.getCreatedAt(),
@@ -200,8 +199,7 @@ public class AdminSupportService {
                         session.isRemembered(),
                         session.getUserAgent(),
                         actorIsAdmin ? session.getIpAddress() : null
-                ))
-                .toList();
+                ));
     }
 
     @Transactional
@@ -213,9 +211,10 @@ public class AdminSupportService {
             int size,
             String ipAddress
     ) {
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.SUPPORT_PAGE_SIZE);
         User target = requireAccessibleTarget(actor, userId);
         recordSupportViewAccess(actor, target, reason, ipAddress);
-        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 50));
+        Pageable pageable = PageRequest.of(page, size);
         return activityEventRepository
                 .findByTargetUserIdOrderByCreatedAtDesc(target.getId(), pageable)
                 .map(this::toActivity);
@@ -223,15 +222,14 @@ public class AdminSupportService {
 
     @Transactional(readOnly = true)
     public Page<AdminDtos.Activity> getAdministrativeAudit(int page, int size) {
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(1, size), 100);
-        Pageable pageable = PageRequest.of(safePage, safeSize);
+        ApiRequestLimits.requirePage(page, size, ApiRequestLimits.PAGE_SIZE);
+        Pageable pageable = PageRequest.of(page, size);
         List<AdminDtos.Activity> groupedEvents = groupAdministrativeAuditEvents(
                 activityEventRepository.findByCategoryInOrderByCreatedAtDesc(ADMINISTRATIVE_AUDIT_CATEGORIES)
         ).stream().map(this::toActivity).toList();
 
-        int fromIndex = Math.min(safePage * safeSize, groupedEvents.size());
-        int toIndex = Math.min(fromIndex + safeSize, groupedEvents.size());
+        int fromIndex = (int) Math.min(pageable.getOffset(), groupedEvents.size());
+        int toIndex = Math.min(fromIndex + size, groupedEvents.size());
         return new PageImpl<>(groupedEvents.subList(fromIndex, toIndex), pageable, groupedEvents.size());
     }
 
@@ -244,7 +242,8 @@ public class AdminSupportService {
             String ipAddress
     ) {
         requireAdmin(actor);
-        User target = requireUser(userId);
+        User target = userRepository.findLockedById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         if (hasRole(target, RoleNames.ADMIN)) {
             throw new IllegalArgumentException("Administrator accounts do not need the SUPPORT role");
         }
@@ -285,7 +284,8 @@ public class AdminSupportService {
             String ipAddress
     ) {
         requireAdmin(actor);
-        User target = requireUser(userId);
+        User target = userRepository.findLockedById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         if (target.getId().equals(actor.getId())) {
             throw new IllegalArgumentException("You cannot lock your own administrator account");
         }
@@ -316,7 +316,10 @@ public class AdminSupportService {
             String reason,
             String ipAddress
     ) {
-        User target = requireAccessibleTarget(actor, userId);
+        User target = userRepository.findLockedById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User account was not found"));
+        requireAccessibleTarget(actor, target);
+        authSessionService.revokeAllForUser(target.getId());
         activityEventService.recordAdminAction(
                 actor,
                 target,
@@ -325,7 +328,6 @@ public class AdminSupportService {
                 "Revoked all active authentication sessions",
                 ipAddress
         );
-        authSessionService.revokeAllForUser(target.getId());
         return new AdminDtos.ActionResult("All active sessions were revoked");
     }
 
@@ -349,71 +351,59 @@ public class AdminSupportService {
                 "Requested a new account activation code",
                 ipAddress
         );
-        return new AdminDtos.ActionResult("A new activation code was sent");
+        return new AdminDtos.ActionResult("A new activation code was requested");
     }
 
     public AdminDtos.ActionResult startCatalogueSync(User actor, String reason, String ipAddress) {
-        String cleanReason = activityEventService.requireReason(reason);
-        if ("RUNNING".equals(jobStatusService.get(SystemJobStatusService.CATALOGUE_SYNC).status())) {
-            throw new IllegalArgumentException("A catalogue synchronization is already running");
-        }
-        activityEventService.recordSystemAction(
-                actor,
-                "CATALOGUE_SYNC_STARTED",
-                cleanReason,
-                "Started a manual CS item catalogue synchronization",
-                ipAddress
-        );
-        jobStatusService.started(SystemJobStatusService.CATALOGUE_SYNC, "Manual synchronization is running");
-        applicationTaskExecutor.execute(() -> {
-            try {
-                csItemService.fetchAndSaveItems();
-                jobStatusService.succeeded(
-                        SystemJobStatusService.CATALOGUE_SYNC,
-                        "Catalogue synchronization completed successfully"
-                );
-            } catch (Exception exception) {
-                jobStatusService.failed(SystemJobStatusService.CATALOGUE_SYNC, safeMessage(exception));
-            }
-        });
+        submitSystemJob(actor, reason, ipAddress, SystemJobStatusService.CATALOGUE_SYNC,
+                "CATALOGUE_SYNC_STARTED", "Started a manual CS item catalogue synchronization", () -> {
+                    csItemService.fetchAndSaveItems();
+                    return "Catalogue synchronization completed successfully";
+                });
         return new AdminDtos.ActionResult("Catalogue synchronization started");
     }
 
     public AdminDtos.ActionResult startPriceUpdate(User actor, String reason, String ipAddress) {
-        String cleanReason = activityEventService.requireReason(reason);
-        if ("RUNNING".equals(jobStatusService.get(SystemJobStatusService.PRICE_UPDATE).status())) {
-            throw new IllegalArgumentException("A price update is already running");
-        }
-        activityEventService.recordSystemAction(
-                actor,
-                "PRICE_UPDATE_STARTED",
-                cleanReason,
-                "Started a manual update for all tracked prices",
-                ipAddress
-        );
-        jobStatusService.started(SystemJobStatusService.PRICE_UPDATE, "Manual price update is running");
-        applicationTaskExecutor.execute(() -> {
-            try {
-                int recordedSnapshots = steamPriceService.forceUpdateAllTrackedItems();
-                jobStatusService.succeeded(
-                        SystemJobStatusService.PRICE_UPDATE,
-                        recordedSnapshots > 0
-                                ? "Recorded " + recordedSnapshots + " new price observations"
-                                : "No new price observations were available from CSGOTrader"
-                );
-            } catch (Exception exception) {
-                jobStatusService.failed(SystemJobStatusService.PRICE_UPDATE, safeMessage(exception));
-            }
+        submitSystemJob(actor, reason, ipAddress, SystemJobStatusService.PRICE_UPDATE,
+                "PRICE_UPDATE_STARTED", "Started a manual update for all tracked prices", () -> {
+            int count = priceFeedService.forceUpdateAllTrackedItems();
+            return count > 0 ? "Stored " + count + " daily price observations"
+                    : "No newer price observations were available from CSGOTrader";
         });
         return new AdminDtos.ActionResult("Price update started");
     }
 
+    private void submitSystemJob(User actor, String reason, String ipAddress, String job, String action,
+                                 String description, Supplier<String> operation) {
+        String cleanReason = activityEventService.requireReason(reason);
+        if (!jobStatusService.tryStart(job, "Manual operation is running")) {
+            throw new IllegalArgumentException("This operation is already running");
+        }
+        try {
+            activityEventService.recordSystemAction(actor, action, cleanReason, description, ipAddress);
+            applicationTaskExecutor.execute(() -> {
+                try { jobStatusService.succeeded(job, operation.get()); }
+                catch (Exception failure) { jobStatusService.failed(job, safeMessage(failure)); }
+            });
+        } catch (RejectedExecutionException busy) {
+            jobStatusService.failed(job, "The background task queue is full; try again later");
+            throw new ExternalServiceException("The background task queue is full; try again later");
+        } catch (RuntimeException failure) {
+            jobStatusService.failed(job, "The operation could not be started");
+            throw failure;
+        }
+    }
+
     private User requireAccessibleTarget(User actor, Integer userId) {
         User target = requireUser(userId);
+        requireAccessibleTarget(actor, target);
+        return target;
+    }
+
+    private void requireAccessibleTarget(User actor, User target) {
         if (!hasRole(actor, RoleNames.ADMIN) && hasRole(target, RoleNames.ADMIN)) {
             throw new AccessDeniedException("Support accounts cannot inspect administrator accounts");
         }
-        return target;
     }
 
     private void recordSupportViewAccess(User actor, User target, String reason, String ipAddress) {
@@ -508,7 +498,6 @@ public class AdminSupportService {
     }
 
     private String safeMessage(Exception exception) {
-        String message = exception.getMessage();
-        return message == null || message.isBlank() ? "The operation failed" : message;
+        return exception instanceof ExternalServiceException ? exception.getMessage() : "The operation failed; try again later";
     }
 }

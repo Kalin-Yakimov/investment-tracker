@@ -1,12 +1,22 @@
 plugins {
 	id 'java'
 	id 'jacoco'
-	id 'org.springframework.boot' version '3.5.16'
-	id 'io.spring.dependency-management' version '1.1.5'
+	id 'org.springframework.boot' version '4.1.1'
+	id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'com.kalin'
 version = '0.0.1-SNAPSHOT'
+
+// Same-line security patches newer than the Boot 4.1.1 BOM. Review/remove when
+// the next Boot BOM includes them; keep each Jackson family aligned as a whole.
+ext['jackson-bom.version'] = '3.1.8'
+ext['jackson-2-bom.version'] = '2.21.8'
+ext['tomcat.version'] = '11.0.27'
+
+springBoot {
+	mainClass = 'com.kalin.investment_tracker.InvestmentTrackerApplication'
+}
 
 java {
 	sourceCompatibility = '21'
@@ -22,20 +32,25 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'com.github.ben-manes.caffeine:caffeine'
-	// https://mvnrepository.com/artifact/org.projectlombok/lombok
-	compileOnly 'org.projectlombok:lombok:1.18.30'
-	annotationProcessor 'org.projectlombok:lombok:1.18.30'
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	runtimeOnly 'org.flywaydb:flyway-mysql'
 	runtimeOnly 'com.mysql:mysql-connector-j'
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+	testImplementation 'org.mockito:mockito-junit-jupiter'
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
@@ -45,8 +60,56 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// Fast H2 tests are not evidence of MySQL SQL compatibility; mysqlTest runs the real migrations.
+	systemProperty 'spring.flyway.enabled', 'false'
+	systemProperty 'spring.jpa.hibernate.ddl-auto', 'create-drop'
+	exclude '**/mysql/**'
 	finalizedBy tasks.named('jacocoTestReport')
 }
+
+tasks.register('mysqlTest', Test) {
+	description = 'Runs migrations and auth concurrency tests against an explicitly isolated MySQL database.'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform()
+	include '**/mysql/**'
+	outputs.upToDateWhen { false }
+	doFirst {
+		if (!System.getenv('MYSQL_TEST_URL')) {
+			throw new GradleException('MYSQL_TEST_URL is required. Use scripts/Test-MySql.ps1; never use the application database.')
+		}
+	}
+}
+
+tasks.register('databaseMigration', JavaExec) {
+	description = 'Explicit database maintenance without starting the application or background jobs.'
+	group = 'verification'
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'com.kalin.investment_tracker.migration.DatabaseMigrationTool'
+	args providers.gradleProperty('migrationAction').getOrElse('verify'),
+		 providers.gradleProperty('migrationDatabase').getOrElse('UNCONFIRMED')
+}
+
+// A separate maintenance entry point; deploying the app never requires Gradle or DDL credentials.
+tasks.register('migrationBootJar', org.springframework.boot.gradle.tasks.bundling.BootJar) {
+	group = 'build'
+	archiveClassifier = 'migrations'
+	targetJavaVersion = JavaVersion.VERSION_21
+	mainClass = 'com.kalin.investment_tracker.migration.DatabaseMigrationTool'
+	classpath sourceSets.main.runtimeClasspath
+}
+
+// Test-only server: H2 + synthetic accounts + mocked outbound providers, never in bootJar.
+tasks.register('acceptanceServer', JavaExec) {
+	group = 'verification'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.kalin.investment_tracker.acceptance.AcceptanceTestServer'
+	environment 'ACCEPTANCE_TEST_MODE', 'isolated-loopback'
+}
+
+apply from: 'gradle/dependency-audit.gradle'
 
 jacoco {
 	toolVersion = '0.8.12'

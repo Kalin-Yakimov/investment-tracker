@@ -1,0 +1,22 @@
+[Unit]
+Description=Encrypted off-host Investment Tracker database operation (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=investment-backup
+Group=investment-backup
+EnvironmentFile=/etc/investment-backup/backup.env
+ExecStart=/bin/bash /opt/investment-ops/backup/backup-mysql.sh %i
+StateDirectory=investment-backup
+StateDirectoryMode=0700
+CacheDirectory=investment-backup
+Environment=RESTIC_CACHE_DIR=/var/cache/investment-backup
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+TimeoutStartSec=2h
+# No automatic retries or deletions. Monitor failures AND the last-success age.

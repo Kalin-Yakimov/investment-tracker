@@ -1,6 +1,7 @@
 package com.kalin.investment_tracker.security;
 
 import com.kalin.investment_tracker.user.User;
+import com.kalin.investment_tracker.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,7 @@ class AuthSessionServiceTest {
     private AuthSessionRepository authSessionRepository;
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
+    @Mock private UserRepository userRepository;
 
     private AuthSessionService service;
     private User user;
@@ -40,7 +42,7 @@ class AuthSessionServiceTest {
         AuthSessionProperties properties = new AuthSessionProperties();
         properties.setRememberedRefreshDays(60);
         properties.setSessionRefreshHours(24);
-        service = new AuthSessionService(authSessionRepository, refreshTokenRepository, properties);
+        service = new AuthSessionService(authSessionRepository, refreshTokenRepository, properties, userRepository);
 
         user = User.builder()
                 .id(1)
@@ -53,6 +55,7 @@ class AuthSessionServiceTest {
 
     @Test
     void rememberedSessionIsCreatedForSixtyDaysAndOnlyTokenHashIsStored() {
+        when(userRepository.findLockedById(1)).thenReturn(Optional.of(user));
         var issued = service.createSession(user, true, "Browser", "127.0.0.1");
 
         assertTrue(issued.session().isRemembered());
@@ -79,6 +82,9 @@ class AuthSessionServiceTest {
                 .build();
         when(refreshTokenRepository.findByTokenHash(sha256(rawToken)))
                 .thenReturn(Optional.of(current));
+        when(refreshTokenRepository.findOwnerIdByTokenHash(sha256(rawToken))).thenReturn(Optional.of(1));
+        when(userRepository.findLockedById(1)).thenReturn(Optional.of(user));
+        when(authSessionRepository.touchActiveSession(any(), any())).thenReturn(1);
 
         var rotated = service.rotateRefreshToken(rawToken);
 
@@ -102,6 +108,8 @@ class AuthSessionServiceTest {
                 .build();
         when(refreshTokenRepository.findByTokenHash(sha256(rawToken)))
                 .thenReturn(Optional.of(usedToken));
+        when(refreshTokenRepository.findOwnerIdByTokenHash(sha256(rawToken))).thenReturn(Optional.of(1));
+        when(userRepository.findLockedById(1)).thenReturn(Optional.of(user));
 
         assertThrows(InvalidRefreshTokenException.class,
                 () -> service.rotateRefreshToken(rawToken));

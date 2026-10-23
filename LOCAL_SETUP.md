@@ -12,9 +12,9 @@ Install the following tools before cloning the project:
 |---|---:|---|
 | Git for Windows | Current stable version | Clone and update the repository |
 | Java JDK | 21 | Run and build the Spring Boot backend |
-| Node.js | 20.x | Run and build the React frontend |
-| npm | Included with Node.js 20 | Install frontend dependencies |
-| MySQL Server | 8.0 or newer | Store application data |
+| Node.js | 24 LTS, at least 24.15 | Run and build the React frontend |
+| npm | Included with Node.js 24 | Install frontend dependencies |
+| MySQL Server | 8.4.11 LTS recommended | Store application data |
 | MySQL Workbench | Optional | Graphical database administration |
 
 IntelliJ IDEA and Visual Studio Code are optional. The project can be started entirely from two PowerShell windows.
@@ -29,7 +29,19 @@ npm --version
 mysql --version
 ```
 
-Java must report version 21. Node.js should report a 20.x version. Gradle does not need a separate installation because `gradlew.bat` downloads Gradle 8.8 when it is first used.
+Java must report version 21. Use Node.js 24 LTS (24.15 or newer). Node.js 20 is
+not supported by the current frontend toolchain. A compatible Node.js 22.22.2+
+installation is also accepted, but Node.js 24 LTS is recommended for a new setup.
+Gradle does not need a separate installation because `gradlew.bat` downloads
+Gradle 8.14.6 when it is first used and verifies its distribution checksum.
+Spring Boot is 4.1.1. Existing MySQL 8.0.37 was also verified, but it is not the
+recommended target for a fresh production installation. The upgrade does not
+replace a system MySQL service automatically.
+
+Download the Windows x64 `.msi` installer from [the official Node.js site](https://nodejs.org/en/download),
+choose the 24 LTS line and keep the normal installer defaults. After installing,
+close and reopen PowerShell and your IDE before checking `node --version`.
+Only a normal Node.js installation is required; no machine-specific runtime paths are configured.
 
 ## 2. Clone the repository
 
@@ -51,7 +63,7 @@ For local development, create the database and a dedicated application user. Rep
 ```sql
 CREATE DATABASE investment
   CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
+  COLLATE utf8mb4_0900_ai_ci;
 
 CREATE USER 'investment_app'@'localhost'
   IDENTIFIED BY 'REPLACE_WITH_A_STRONG_LOCAL_PASSWORD';
@@ -64,7 +76,13 @@ FLUSH PRIVILEGES;
 
 Using the MySQL `root` account also works locally, but a dedicated user is safer and makes the required permissions clearer.
 
-Do not manually create the application tables on a new development installation. With the default local setting `JPA_DDL_AUTO=update`, Hibernate creates and updates them when the backend starts. The database itself must already exist.
+Do not manually create application tables. Flyway creates them from versioned
+SQL and Hibernate uses `validate`, never automatic `update`. The database itself
+must already exist. An existing non-empty database must first pass the explicit
+adoption procedure in [DATABASE_MIGRATIONS.md](docs/DATABASE_MIGRATIONS.md).
+The user granted full schema permissions above is a **local-development**
+convenience, not the production runtime privilege policy. Production separates
+migration credentials from the restricted runtime account.
 
 ## 4. Prepare the required private values
 
@@ -148,10 +166,17 @@ Copy-Item .env.example .env
 The default local value is:
 
 ```text
-REACT_APP_API_URL=http://localhost:8080
+VITE_API_URL=http://localhost:8080
 ```
 
-Do not place database, Gmail or JWT secrets in any React variable. React variables are included in the browser build and can be read by users.
+`VITE_ITEM_SEARCH_DEBOUNCE_MS=1000` configures the existing one-second search
+delay. The previous `REACT_APP_API_URL` and `REACT_APP_ITEM_SEARCH_DEBOUNCE_MS`
+names remain supported as fallbacks, so an existing ignored `.env` does not
+need to be edited just to migrate. Explicit `VITE_` settings take precedence.
+
+Do not place database, Gmail or JWT secrets in any frontend variable. `VITE_`
+variables are public and included in the browser build. Restart the frontend
+after changing its `.env`; backend secret configuration is separate and unchanged.
 
 Return to the repository root before following the next sections:
 
@@ -168,9 +193,25 @@ cd investment-tracker
 .\gradlew.bat bootRun
 ```
 
-On the first run, Gradle downloads the required build files. The backend then connects to MySQL, creates missing local tables and synchronizes the CS item catalogue. Internet access is required and the first catalogue synchronization can take longer than later startups.
+On the first run, Gradle downloads the required build files. The backend connects
+to MySQL, applies pending Flyway migrations, validates the schema and synchronizes
+the CS item catalogue. A non-empty database without migration history fails
+safely instead of being changed automatically. Internet access is required and
+the first catalogue synchronization can take longer than later startups.
 
 The backend is ready when the console reports that Tomcat started on port 8080.
+
+Swagger is disabled by default. To use local API documentation, start the same
+backend with the explicit developer profile instead:
+
+```powershell
+.\gradlew.bat bootRun --args="--spring.profiles.active=dev"
+```
+
+This profile binds the backend to loopback and enables local docs, not a test
+database. Existing DB/mail settings and normal startup jobs still apply.
+See [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) for Authorize, safe test
+accounts and production restrictions. Never combine `dev` with `prod`.
 
 ## 8. Start the frontend
 
@@ -184,7 +225,12 @@ npm start
 
 `npm ci` installs exactly the dependency versions recorded in `package-lock.json`. Run it after a new clone or when the lock file changes.
 
-The browser should open `http://localhost:3000`. Keep both PowerShell windows open while using the application.
+Open `http://localhost:3000` in your browser. Vite is bound to localhost on port
+3000 and will fail clearly if that port is already in use instead of silently
+choosing another port. Keep both PowerShell windows open while using the application.
+
+If `npm ci` reports an unsupported Node version, update Node.js first; do not
+disable `engine-strict` or use `--force`/`--legacy-peer-deps` to bypass it.
 
 ## 9. Create the initial administrator
 
@@ -208,7 +254,9 @@ Check the following:
 - portfolio records can be created and displayed;
 - PriceTracker can search the synchronized catalogue;
 - the Support Panel appears for the configured administrator;
-- local API documentation opens at `http://localhost:8080/swagger-ui.html`.
+- when explicitly started with `dev`, local API documentation opens at
+  `http://127.0.0.1:8080/swagger-ui.html`; it remains unavailable in normal/default
+  and production mode.
 
 Activation messages can initially appear in the Gmail Spam folder.
 
@@ -221,15 +269,31 @@ cd investment-tracker
 .\gradlew.bat test
 ```
 
-Frontend production build:
+Frontend verification:
 
 ```powershell
 cd react\investment-tracker
 npm ci
+npm run lint
+npm test
 npm run build
+npm run smoke:build
 ```
 
-The React development tooling may print maintenance warnings from Create React App. A successful build must still finish with `Compiled successfully`.
+`npm test` runs Vitest once and exits; `npm run test:watch` enables watch mode.
+`npm run verify` runs lint, tests, build and production HTTP smoke together.
+The smoke check opens a temporary loopback port and closes it after checking
+the built files; it does not start the backend or access your database.
+Production output remains
+in `react/investment-tracker/build/`. `npm run preview` serves that output locally
+on port 3000 for checking; it is not a production hosting server.
+
+Create React App and its maintenance warnings are no longer part of the setup.
+See [the tooling migration notes](docs/FRONTEND_TOOLING.md) for verification and
+remaining limitations.
+The final browser checklist is in [MANUAL_VERIFICATION.md](docs/MANUAL_VERIFICATION.md).
+GitLab verification requires no personal application secrets; it does not
+deploy the website. See [FINAL_VERIFICATION.md](docs/FINAL_VERIFICATION.md).
 
 ## 12. Back up the local database
 
@@ -246,6 +310,20 @@ Git stores the source code, not the contents of MySQL. Without a database backup
 Store the export in an encrypted backup location. A database export can contain email addresses, password hashes, tokens and user activity; it must not be committed or shared publicly.
 
 ### Command-line method
+
+For Windows PowerShell, the repository also provides a helper that prompts for
+the password and creates a uniquely named file in the ignored `backups/database`
+folder. Run it from the repository root with your actual database username:
+
+```powershell
+.\scripts\Backup-LocalDatabase.ps1 -Username investment_app
+```
+
+Add `-WhatIf` to preview the destination without connecting to MySQL. See
+[DATABASE_MIGRATIONS.md](docs/DATABASE_MIGRATIONS.md) for restore verification and
+the verified-backup and explicit-adoption procedure. Every application profile
+now uses Flyway migrations and Hibernate `validate`. Do not start against an
+unadopted non-empty database until those checks have succeeded.
 
 Run this in **Command Prompt**, not PowerShell, and enter the database password when requested:
 
@@ -267,7 +345,9 @@ From **Command Prompt**:
 mysql -u investment_app -p investment < investment_backup.sql
 ```
 
-Restore the database before starting the backend. With the local `update` setting, Hibernate can then add schema changes required by the checked-out application version.
+Restore the database before starting the backend. For a Flyway-managed database,
+validate its migration history; never switch back to Hibernate `update`.
+Follow the adoption/recovery procedure in `docs/DATABASE_MIGRATIONS.md`.
 
 ## 14. What must be saved before reinstalling Windows
 
@@ -294,7 +374,9 @@ Confirm `DB_USERNAME` and `DB_PASSWORD`, verify that MySQL Server is running, an
 
 ### The database is unknown
 
-Create the empty `investment` database. Hibernate creates tables but does not create the MySQL database itself.
+Create the empty `investment` database. Flyway creates tables but not the MySQL
+database itself. If an existing database has no migration history, follow the
+adoption procedure rather than enabling automatic baseline or Hibernate update.
 
 ### Port 8080 or 3000 is already in use
 
@@ -320,7 +402,7 @@ The default instructions describe local development and demonstration. Before a 
 - set exact trusted values in `CORS_ALLOWED_ORIGINS`;
 - use a dedicated least-privilege database account;
 - store secrets in the hosting platform's secret manager;
-- use database migrations and change `JPA_DDL_AUTO` to `validate`;
+- keep Flyway migrations and Hibernate `validate`; use separate migration credentials;
 - disable or protect development-only endpoints;
 - arrange encrypted database backups and log retention;
 - never use example values as real production secrets.

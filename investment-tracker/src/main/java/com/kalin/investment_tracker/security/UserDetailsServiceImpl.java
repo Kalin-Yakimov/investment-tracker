@@ -17,7 +17,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     @Transactional
     public UserDetails loadUserByUsername(String userEmail) throws UsernameNotFoundException {
-        return repository.findByEmail(userEmail)
+        return repository.findByEmailIgnoreCase(userEmail)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
     }
 }

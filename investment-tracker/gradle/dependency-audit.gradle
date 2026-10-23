@@ -1,0 +1,75 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
+import java.time.Instant
+
+def inventoryFile = layout.buildDirectory.file('reports/security/runtime-dependencies.json')
+def auditFile = layout.buildDirectory.file('reports/security/runtime-osv-audit.json')
+
+tasks.register('runtimeDependencyInventory') {
+    description = 'Writes public Maven runtime coordinates, never source code, credentials or database data.'
+    group = 'verification'
+    outputs.file(inventoryFile)
+    outputs.upToDateWhen { false }
+    doLast {
+        def packages = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.collect {
+            [name: "${it.moduleVersion.id.group}:${it.name}".toString(), version: it.moduleVersion.id.version]
+        }.unique().sort { a, b -> a.name <=> b.name }
+        def output = inventoryFile.get().asFile
+        output.parentFile.mkdirs()
+        output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(packages)), 'UTF-8')
+        logger.lifecycle("Runtime inventory: ${packages.size()} Maven components; no secrets or source contents")
+    }
+}
+
+tasks.register('runtimeDependencyAudit') {
+    description = 'Queries OSV using public runtime coordinates only. Requires network; fails on findings or unavailable results.'
+    group = 'verification'
+    dependsOn tasks.named('runtimeDependencyInventory')
+    outputs.file(auditFile)
+    outputs.upToDateWhen { false }
+    doLast {
+        def output = auditFile.get().asFile
+        // Mark an interrupted/unavailable check explicitly, rather than leaving an older green report.
+        output.setText(JsonOutput.toJson([checkedAt: Instant.now().toString(), complete: false]), 'UTF-8')
+        def packages = new JsonSlurper().parse(inventoryFile.get().asFile, 'UTF-8')
+        def client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+        def findings = []
+        packages.collate(100).each { batch ->
+            def body = JsonOutput.toJson([queries: batch.collect {
+                [package: [ecosystem: 'Maven', name: it.name], version: it.version]
+            }])
+            def request = HttpRequest.newBuilder(URI.create('https://api.osv.dev/v1/querybatch'))
+                    .timeout(Duration.ofSeconds(30)).header('Content-Type', 'application/json')
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build()
+            def response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            if (response.statusCode() != 200) {
+                throw new GradleException("OSV unavailable (HTTP ${response.statusCode()}); audit is not complete")
+            }
+            def result = new JsonSlurper().parseText(response.body())
+            if (!(result.results instanceof List) || result.results.size() != batch.size()) {
+                throw new GradleException('Incomplete OSV response; audit is not complete')
+            }
+            result.results.eachWithIndex { entry, index ->
+                if (entry.next_page_token) {
+                    throw new GradleException('OSV results are paginated; manual follow-up required, audit is not complete')
+                }
+                entry.vulns?.each { finding ->
+                    findings << [name: batch[index].name, version: batch[index].version, id: finding.id,
+                                 url: "https://osv.dev/vulnerability/${finding.id}".toString()]
+                }
+            }
+        }
+        def report = [checkedAt: Instant.now().toString(), complete: true, scanner: 'OSV',
+                      packageCount: packages.size(), findingCount: findings.size(), findings: findings]
+        output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)), 'UTF-8')
+        logger.lifecycle("OSV runtime audit: ${packages.size()} packages; ${findings.size()} advisory matches")
+        if (!findings.isEmpty()) {
+            findings.each { logger.lifecycle("${it.name}:${it.version} ${it.id}") }
+            throw new GradleException('Dependency advisories require review; matches alone do not prove exploitability. See build/reports/security/runtime-osv-audit.json')
+        }
+    }
+}

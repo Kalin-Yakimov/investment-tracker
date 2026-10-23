@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class SystemJobStatusService {
@@ -24,28 +25,25 @@ public class SystemJobStatusService {
         jobs.put(PRICE_UPDATE, notRun);
     }
 
-    public void started(String jobName, String message) {
-        jobs.put(jobName, new AdminDtos.JobState("RUNNING", LocalDateTime.now(), null, message));
+    public boolean tryStart(String jobName, String message) {
+        AtomicBoolean claimed = new AtomicBoolean();
+        jobs.compute(jobName, (name, previous) -> {
+            if (previous != null && "RUNNING".equals(previous.status())) return previous;
+            claimed.set(true);
+            return new AdminDtos.JobState("RUNNING", LocalDateTime.now(),
+                    previous == null ? null : previous.completedAt(), message);
+        });
+        return claimed.get();
     }
 
     public void succeeded(String jobName, String message) {
-        AdminDtos.JobState previous = get(jobName);
-        jobs.put(jobName, new AdminDtos.JobState(
-                "SUCCESS",
-                previous.startedAt(),
-                LocalDateTime.now(),
-                message
-        ));
+        jobs.computeIfPresent(jobName, (name, previous) -> new AdminDtos.JobState(
+                "SUCCESS", previous.startedAt(), LocalDateTime.now(), message));
     }
 
     public void failed(String jobName, String message) {
-        AdminDtos.JobState previous = get(jobName);
-        jobs.put(jobName, new AdminDtos.JobState(
-                "FAILED",
-                previous.startedAt(),
-                LocalDateTime.now(),
-                message
-        ));
+        jobs.computeIfPresent(jobName, (name, previous) -> new AdminDtos.JobState(
+                "FAILED", previous.startedAt(), previous.completedAt(), message));
     }
 
     public AdminDtos.JobState get(String jobName) {

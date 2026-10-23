@@ -1,0 +1,94 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+stages:
+  - verify
+
+default:
+  interruptible: true
+  timeout: 20 minutes
+
+operations:verify:
+  stage: verify
+  image: python:3.13-slim-bookworm
+  script:
+    - python3 -m unittest discover -s ops/tests -v
+
+browser:verify:
+  stage: verify
+  image: mcr.microsoft.com/playwright:v1.64.1-noble
+  variables:
+    GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle-ci"
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends openjdk-21-jdk-headless
+    - chmod +x investment-tracker/gradlew
+    - cd react/investment-tracker
+    - npm ci --no-fund
+    - npm run test:e2e
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit: react/investment-tracker/playwright-report/results.xml
+    paths:
+      - react/investment-tracker/test-results/
+
+frontend:verify:
+  stage: verify
+  image: node:24.20.0-bookworm-slim
+  variables:
+    # Only public defaults. This job does not need any application secrets.
+    VITE_API_URL: "http://localhost:8080"
+    VITE_ITEM_SEARCH_DEBOUNCE_MS: "1000"
+  script:
+    - cd react/investment-tracker
+    - npm ci --no-fund
+    - npm run lint
+    - node --test ../../scripts/tests/verification-manifest.test.mjs
+    - npm test -- --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml
+    - npm run build
+    - npm run smoke:build
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit: react/investment-tracker/reports/vitest-junit.xml
+    paths:
+      - react/investment-tracker/reports/vitest-junit.xml
+
+backend:verify:
+  stage: verify
+  image: eclipse-temurin:21-jdk-jammy
+  services:
+    - name: mysql:8.4.11
+      alias: mysql
+  variables:
+    GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle-ci"
+    MYSQL_DATABASE: investment_test_ci
+    MYSQL_ROOT_HOST: "%"
+    MYSQL_ROOT_PASSWORD: ephemeral-ci-only
+    MYSQL_TEST_URL: jdbc:mysql://mysql:3306/investment_test_ci
+    MYSQL_TEST_USERNAME: root
+    MYSQL_TEST_PASSWORD: ephemeral-ci-only
+  script:
+    - cd investment-tracker
+    - chmod +x gradlew
+    - ./gradlew --no-daemon --console=plain test mysqlTest bootJar migrationBootJar
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit:
+        - investment-tracker/build/test-results/test/TEST-*.xml
+        - investment-tracker/build/test-results/mysqlTest/TEST-*.xml
+    paths:
+      - investment-tracker/build/reports/tests/test/
+      - investment-tracker/build/reports/tests/mysqlTest/
+      - investment-tracker/build/reports/jacoco/test/
+
+# No deployment, real database, SMTP credentials, backups, .env files or build
+# binaries are uploaded. These are verification jobs, not a production release.

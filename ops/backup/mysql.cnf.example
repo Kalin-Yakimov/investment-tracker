@@ -1,0 +1,8 @@
+# Private file owned by investment-backup, mode 600. No real values in Git.
+[client]
+host=127.0.0.1
+port=3306
+user=investment_backup
+password=REPLACE_OUTSIDE_GIT
+protocol=TCP
+# For a remote database require ssl-mode=VERIFY_IDENTITY and a trusted ssl-ca.

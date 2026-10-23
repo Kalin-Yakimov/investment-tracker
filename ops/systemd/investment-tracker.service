@@ -1,0 +1,30 @@
+[Unit]
+Description=Investment Tracker backend (single instance)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=investment
+Group=investment
+WorkingDirectory=/opt/investment/current
+EnvironmentFile=/etc/investment/runtime.env
+Environment=SPRING_PROFILES_ACTIVE=prod
+ExecStart=/usr/bin/java -Xms256m -Xmx768m -jar /opt/investment/current/backend.jar --spring.profiles.active=prod
+Restart=on-failure
+RestartSec=10s
+KillSignal=SIGTERM
+TimeoutStopSec=120
+SuccessExitStatus=143
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

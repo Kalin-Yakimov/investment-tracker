@@ -1,0 +1,118 @@
+.custom-navbar-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 1050;
+  background: rgba(12, 16, 23, 0.85);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.custom-navbar {
+  padding: 0.8rem 0;
+}
+
+.logo-brand {
+  text-decoration: none;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.25rem;
+  transition: opacity 0.2s ease;
+}
+
+.logo-text {
+  background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+
+.logo-icon {
+  font-size: 1.3rem;
+}
+
+.nav-pill-link {
+  color: #8b949e;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.nav-pill-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.nav-pill-link.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #3884ff 0%, #1f4e78 100%);
+  border-color: rgba(56, 132, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(56, 132, 255, 0.25);
+}
+
+/* Profile Avatar & Popover Styling */
+.profile-nav-btn {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.2s ease !important;
+}
+
+.profile-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 0.85rem;
+  background: linear-gradient(135deg, #3884ff 0%, #1f4e78 100%) !important;
+}
+
+.profile-avatar-lg {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #3884ff 0%, #1f4e78 100%) !important;
+}
+
+.profile-popover-card {
+  width: 240px;
+  background: #121620 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(16px);
+  z-index: 99999 !important;
+}
+
+.popover-item-btn {
+  background: transparent !important;
+  border: none !important;
+  transition: background 0.15s ease !important;
+}
+
+.popover-item-btn:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+
+/* Keep the account menu anchored to the right edge, not clipped off the left
+   when navigation wraps on a narrow screen. Desktop layout is unchanged. */
+@media (max-width: 991.98px) {
+  .navbar-account-actions { margin-left: auto; }
+  .navbar-primary-links {
+    order: 3;
+    width: 100%;
+    margin-top: 0.5rem;
+    justify-content: center;
+  }
+  .navbar-primary-links .nav-pill-link {
+    flex: 1;
+    text-align: center;
+    padding-inline: 0.65rem;
+  }
+}

@@ -1,0 +1,293 @@
+import TablePagination from "../../shared/components/TablePagination";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import PortfolioApi from "./PortfolioApi";
+import useRequestScope from "../../shared/hooks/useRequestScope";
+import { isRequestCanceled } from "../../shared/utils/RequestScope";
+import { Table } from "react-bootstrap";
+import Card from "../../shared/components/Card";
+import RequestError from "../../shared/components/RequestError";
+import { requestErrorMessage } from "../../shared/api/requestFeedback";
+import { formatCalendarDate } from "../../shared/utils/calendarDate";
+
+export default function PortfolioItemDetailsPage() {
+  const navigate = useNavigate();
+  const scope = useRequestScope();
+  const [item, setItem] = useState({
+    itemName: "",
+    itemStatus: "",
+    date: "",
+    quantity: "",
+    price: "",
+    image: null,
+  });
+  const [activeItem, setActiveItem] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const requestedHistoryPage = useRef(0);
+  const { id } = useParams();
+  const itemsPerPage = 10;
+
+  const loadItem = useCallback(async () => {
+    const request = scope.begin("item");
+    if (!request) return;
+    setLoading(true);
+    setError("");
+    scope.cancel("history");
+    try {
+      const result = await PortfolioApi.getItem(id, { signal: request.signal });
+      if (!request.isCurrent()) return;
+      setItem(result);
+      setActiveItem(result);
+    } catch (error) {
+      if (request.isCurrent() && !isRequestCanceled(error)) {
+        setError(error.response?.status === 404 ? "Item not found" : requestErrorMessage(error, "Item details could not be loaded."));
+      }
+    } finally {
+      if (request.isCurrent()) setLoading(false);
+      request.finish();
+    }
+  }, [id, scope]);
+
+  const loadItemHistory = useCallback(
+    async (page = 0) => {
+      const request = scope.begin("history");
+      if (!request) return;
+      setHistoryLoading(true);
+      setHistoryError(""); requestedHistoryPage.current = page;
+      try {
+        const result = await PortfolioApi.getItemByName(
+          item.itemName,
+          page,
+          itemsPerPage,
+          { signal: request.signal },
+        );
+        if (!request.isCurrent()) return;
+        setHistory(result.content || []);
+        setHistoryTotalPages(result.totalPages || 0);
+        setCurrentPage(page);
+      } catch (error) {
+        if (request.isCurrent() && !isRequestCanceled(error)) setHistoryError(requestErrorMessage(error, "Transaction history could not be loaded."));
+      } finally {
+        if (request.isCurrent()) setHistoryLoading(false);
+        request.finish();
+      }
+    },
+    [item.itemName, itemsPerPage, scope],
+  );
+
+  useEffect(() => {
+    loadItem();
+    return () => scope.cancel("item");
+  }, [loadItem, scope]);
+
+  useEffect(() => {
+    if (item.itemName) {
+      loadItemHistory();
+    }
+    return () => scope.cancel("history");
+  }, [item.itemName, loadItemHistory, scope]);
+
+  const deleteItem = async () => {
+    const request = scope.begin("delete", { replace: false, abortable: false });
+    if (!request) return;
+    setActionError("");
+    try {
+      const targetId = activeItem?.id || id;
+      await PortfolioApi.deleteItem(targetId);
+      if (request.isCurrent()) navigate("/", { replace: true });
+    } catch (error) {
+      if (request.isCurrent() && !isRequestCanceled(error)) setActionError(requestErrorMessage(error, "The item could not be deleted.", { mutation: true }));
+    } finally { request.finish(); }
+  };
+
+  const handleHistoryPageChange = (page) => {
+    if (page === currentPage) return;
+    loadItemHistory(page);
+  };
+
+
+  if (loading) {
+    return (
+      <div className="container mt-5 text-center">
+        <div className="alert alert-info py-3">⚡ Loading item details...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mt-5 text-center">
+        <div className="alert alert-danger mb-3" role="alert">
+          {error}
+        </div>
+        <button className="btn btn-outline-light me-2" onClick={loadItem}>Retry item details</button>
+        <Link className="btn btn-primary" to={"/"}>
+          Back to Portfolio
+        </Link>
+      </div>
+    );
+  }
+
+  const currentItem = activeItem || item;
+  const isBought = currentItem.itemStatus === "BOUGHT";
+  const totalPrice = Number(currentItem.price || 0) * Number(currentItem.quantity || 1);
+
+  return (
+    <div className="container mt-4 mb-5">
+      <RequestError message={actionError} />
+      <div className="card shadow-lg p-4">
+        {/* Header Title */}
+        <div className="d-flex align-items-center justify-content-between mb-4">
+          <h2 className="text-white mb-0">Item Details</h2>
+        </div>
+
+        {/* Thumbnail & Key Metrics Row */}
+        <div className="row g-4 mb-4 align-items-center">
+          <div className="col-12 col-md-4 text-center">
+            <div className="p-4 rounded-3 d-inline-block shadow-sm" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", minWidth: "220px" }}>
+              {currentItem.image ? (
+                <img
+                  src={currentItem.image}
+                  alt={currentItem.itemName}
+                  style={{ width: "180px", height: "180px", objectFit: "contain" }}
+                />
+              ) : (
+                <div className="text-muted py-5">📷 No Image</div>
+              )}
+              <h5 className="text-white mt-3 mb-0 fw-bold">{currentItem.itemName}</h5>
+            </div>
+          </div>
+
+          <div className="col-12 col-md-8">
+            <div className="row g-3">
+              <div className="col-6 col-sm-4">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Quantity</span>
+                  <div className="stat-value text-white">{currentItem.quantity}</div>
+                </div>
+              </div>
+              <div className="col-6 col-sm-4">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Unit Price</span>
+                  <div className="stat-value text-info">€{Number(currentItem.price).toFixed(2)}</div>
+                </div>
+              </div>
+              <div className="col-12 col-sm-4">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Total Value</span>
+                  <div className="stat-value text-success">€{totalPrice.toFixed(2)}</div>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Record Date</span>
+                  <div className="stat-value text-white fs-5">{formatCalendarDate(currentItem.date)}</div>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="portfolio-stat-card p-3">
+                  <span className="stat-label">Status</span>
+                  <div className={`stat-value fs-5 ${isBought ? "text-success" : "text-danger"}`}>
+                    {isBought ? "Bought" : "Sold"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="d-flex gap-2 mt-4">
+              <Link className="btn btn-secondary px-4" to={"/"}>
+                ⬅️ Back to Portfolio
+              </Link>
+              <Link className="btn btn-primary px-4" to={`/editItem/${currentItem.id || id}`}>
+                Edit Item
+              </Link>
+              <button className="btn btn-danger px-4 ms-auto" onClick={deleteItem} disabled={scope.isPending("delete")}>
+                🗑️ Delete Item
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Transaction History Section */}
+        <div className="border-top pt-4 mt-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <h4 className="text-white mb-0">Transaction History for {item.itemName}</h4>
+          </div>
+
+          {historyError ? <RequestError message={historyError} onRetry={() => loadItemHistory(requestedHistoryPage.current)} retryLabel="Retry transaction history" pending={historyLoading} /> : historyLoading ? (
+            <div className="alert alert-info py-2">Loading transaction logs...</div>
+          ) : history.length > 0 ? (
+            <Card>
+              <Table hover responsive className="portfolio-table align-middle">
+                <thead>
+                  <tr>
+                    <th scope="col" style={{ width: "60px" }}>Item</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Date</th>
+                    <th scope="col" className="text-center">Quantity</th>
+                    <th scope="col" className="text-end">Unit Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((historyItem, index) => {
+                    const hBought = historyItem.itemStatus === "BOUGHT";
+                    const isSelected = (activeItem?.id && historyItem.id === activeItem.id) || (!activeItem?.id && index === 0);
+                    return (
+                      <tr
+                        key={historyItem.id || index}
+                        onClick={() => setActiveItem(historyItem)}
+                        className="portfolio-row-clickable"
+                        style={{
+                          cursor: "pointer",
+                          backgroundColor: isSelected ? "rgba(56, 132, 255, 0.15)" : undefined,
+                        }}
+                      >
+                        <td>
+                          {historyItem.image ? (
+                            <img
+                              src={historyItem.image}
+                              alt={historyItem.itemName}
+                              className="portfolio-item-thumb"
+                            />
+                          ) : (
+                            <div className="portfolio-item-thumb-placeholder">📷</div>
+                          )}
+                        </td>
+                        <td className="fw-semibold"><button type="button" className="item-name-action" aria-pressed={isSelected}
+                          aria-label={`Select transaction ${historyItem.id}: ${historyItem.itemName}`} onClick={event => { event.stopPropagation(); setActiveItem(historyItem); }}>{historyItem.itemName}</button></td>
+                        <td>
+                          <span className={`badge-status ${hBought ? "badge-bought" : "badge-sold"}`}>
+                            {hBought ? "Bought" : "Sold"}
+                          </span>
+                        </td>
+                        <td className="text-muted small">{formatCalendarDate(historyItem.date)}</td>
+                        <td className="text-center font-mono">{historyItem.quantity}</td>
+                        <td className="text-end font-mono fw-bold">
+                          €{Number(historyItem.price).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+              <TablePagination currentPage={currentPage} totalPages={historyTotalPages} onPageChange={handleHistoryPageChange} label="History pagination" />
+            </Card>
+          ) : (
+            <div className="alert alert-warning py-3" role="alert">
+              No previous transaction history records found for this item.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

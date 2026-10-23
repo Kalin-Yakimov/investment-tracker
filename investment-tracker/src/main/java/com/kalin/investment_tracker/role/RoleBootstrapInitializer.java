@@ -37,7 +37,7 @@ public class RoleBootstrapInitializer implements ApplicationRunner {
             return;
         }
 
-        User user = userRepository.findByEmailIgnoreCase(adminEmail).orElse(null);
+        User user = userRepository.findLockedByEmail(adminEmail).orElse(null);
         if (user == null) {
             log.warn("Bootstrap administrator account '{}' does not exist yet", adminEmail);
             return;

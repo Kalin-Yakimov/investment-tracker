@@ -6,9 +6,17 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface AuthSessionRepository extends JpaRepository<AuthSession, String> {
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update AuthSession session set session.lastUsedAt = :now
+             where session.id = :id and session.revokedAt is null and session.expiresAt > :now
+            """)
+    int touchActiveSession(@Param("id") String id, @Param("now") LocalDateTime now);
 
     boolean existsByIdAndUserIdAndRevokedAtIsNullAndExpiresAtAfter(
             String id,
@@ -16,7 +24,7 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, String
             LocalDateTime now
     );
 
-    @Modifying
+    @Modifying(flushAutomatically = true)
     @Query("""
             update AuthSession session
                set session.revokedAt = :revokedAt
@@ -37,9 +45,9 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, String
 
     long countByUserIdAndRevokedAtIsNullAndExpiresAtAfter(Integer userId, LocalDateTime now);
 
-    List<AuthSession> findByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(
+    Page<AuthSession> findByUserIdAndRevokedAtIsNullAndExpiresAtAfter(
             Integer userId,
-            LocalDateTime now
+            LocalDateTime now, Pageable pageable
     );
 
     @Query("""

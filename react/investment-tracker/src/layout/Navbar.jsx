@@ -1,12 +1,14 @@
-import React, { useEffect, useState, useRef } from "react";
-import "../styles/Navbar.css";
+import { useEffect, useState, useRef } from "react";
+import "./Navbar.css";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import UserService from "../service/UserService";
-import ChangePasswordModal from "../auth/ChangePasswordModal";
-import ChangeUsernameModal from "../auth/ChangeUsernameModal";
-import ContactUsModal from "../auth/ContactUsModal";
+import AuthService from "../features/auth/AuthService";
+import useRequestScope from "../shared/hooks/useRequestScope";
+import ChangePasswordModal from "../features/auth/components/ChangePasswordModal";
+import ChangeUsernameModal from "../features/auth/components/ChangeUsernameModal";
+import ContactUsModal from "../features/contact/ContactUsModal";
 
 export default function Navbar() {
+  const scope = useRequestScope({ guardSession: false });
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassModal, setShowChangePassModal] = useState(false);
@@ -16,11 +18,12 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const menuRef = useRef(null);
+  const previousOwner = useRef(null);
 
   useEffect(() => {
-    const updateLoginState = () => setIsLoggedIn(UserService.isAuthenticated());
+    const updateLoginState = () => setIsLoggedIn(AuthService.isAuthenticated());
     updateLoginState();
-    return UserService.subscribe(updateLoginState);
+    return AuthService.subscribe(updateLoginState);
   }, [location, refreshUser]);
 
   useEffect(() => {
@@ -34,13 +37,25 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = async () => {
+    const request = scope.begin("logout", { replace: false, abortable: false });
+    if (!request) return;
     setShowProfileMenu(false);
-    await UserService.logout();
-    navigate("/login");
+    setShowChangePassModal(false);
+    setShowChangeUserModal(false);
+    setShowContactModal(false);
+    try {
+      await AuthService.logout();
+    } catch {
+      // Axios failures can carry Authorization headers; never log the request object.
+      console.error("Sign out failed; server-side revocation could not be confirmed.");
+    } finally {
+      if (request.isCurrent() && !AuthService.isAuthenticated()) navigate("/login");
+      request.finish();
+    }
   };
 
   const getUserInfo = () => {
-    return UserService.getCurrentUser() || {
+    return AuthService.getCurrentUser() || {
       name: "User Account",
       email: "user@account.com",
       authorities: [],
@@ -48,6 +63,18 @@ export default function Navbar() {
   };
 
   const userInfo = getUserInfo();
+
+  useEffect(() => {
+    if (previousOwner.current !== userInfo.id) {
+      setShowProfileMenu(false);
+      setShowChangeUserModal(false);
+      setShowContactModal(false);
+      // Password-change success briefly remains visible after its own logout.
+      // A new account must never inherit the previous account's modal or timer.
+      if (userInfo.id != null) setShowChangePassModal(false);
+    }
+    previousOwner.current = userInfo.id;
+  }, [userInfo.id]);
 
   return (
     <>
@@ -59,7 +86,7 @@ export default function Navbar() {
               <span className="logo-text">Investment Tracker</span>
             </Link>
 
-            <div className="d-flex align-items-center gap-2 mx-auto">
+            <div className="d-flex align-items-center gap-2 mx-auto navbar-primary-links">
               {isLoggedIn && (
                 <>
                   <Link
@@ -84,7 +111,7 @@ export default function Navbar() {
               )}
             </div>
 
-            <div className="d-flex align-items-center gap-3">
+            <div className="d-flex align-items-center gap-3 navbar-account-actions">
               {isLoggedIn ? (
                 <div className="position-relative" ref={menuRef}>
                   <button
@@ -114,7 +141,7 @@ export default function Navbar() {
                       </div>
 
                       <div className="d-flex flex-column gap-1">
-                        {UserService.hasAnyAuthority("ADMIN", "SUPPORT") && (
+                        {AuthService.hasAnyAuthority("ADMIN", "SUPPORT") && (
                           <button
                             className="popover-item-btn d-flex align-items-center gap-2 btn text-start w-100 py-2 px-3 text-white rounded-2"
                             onClick={() => {
