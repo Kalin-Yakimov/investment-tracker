@@ -17,6 +17,8 @@ vi.mock("react-chartjs-2", () => ({ Line: () => null }));
 const page = (name) => ({ content: [{ id: 1, itemName: name, itemStatus: "BOUGHT", quantity: 1, price: 2 }], totalPages: 2 });
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  window.scrollY = 0;
   AuthService.getSessionVersion.mockReturnValue(1);
   PriceTrackerApi.getTrackedItems.mockResolvedValue({ content: [], number: 0, totalElements: 0, totalPages: 0 });
   PriceTrackerApi.getPriceHistory.mockResolvedValue([]);
@@ -50,8 +52,80 @@ test("pagination does not reload unrelated pinned items or portfolio totals", as
   expect(PortfolioApi.getUserItems.mock.calls[1].slice(0, 3)).toEqual([1, 10, "newest_date"]);
   expect(PriceTrackerApi.getTrackedItems).toHaveBeenCalledTimes(1);
   expect(PortfolioApi.getPortfolioSummary).toHaveBeenCalledTimes(1);
+  expect(window.scrollTo).not.toHaveBeenCalled();
   unmount();
   expect(globalThis.IntersectionObserver.mock.results[0].value.disconnect).toHaveBeenCalled();
+});
+
+test("restores the return scroll once after both tables load, not on later filters or pagination", async () => {
+  const ledger = deferred();
+  const pinned = deferred();
+  PortfolioApi.getUserItems.mockReturnValueOnce(ledger.promise).mockResolvedValue(page("Returned record"));
+  PriceTrackerApi.getTrackedItems.mockReturnValueOnce(pinned.promise);
+  render(<MemoryRouter><PortfolioOverviewPage initialPage={1} initialScrollTop={640} /></MemoryRouter>);
+  expect(window.scrollTo).not.toHaveBeenCalled();
+  await act(async () => ledger.resolve(page("Returned record")));
+  expect(window.scrollTo).not.toHaveBeenCalled();
+  await act(async () => pinned.resolve({ content: [], number: 0, totalElements: 0 }));
+  expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 640, left: 0, behavior: "instant" });
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "bought" } });
+  await waitFor(() => expect(screen.getByText("Page 1 of 2")).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() => expect(screen.getByText("Page 2 of 2")).toBeInTheDocument());
+  expect(window.scrollTo).toHaveBeenCalledTimes(1);
+});
+
+test("remembers the current viewport when opening a portfolio record", async () => {
+  PortfolioApi.getUserItems.mockResolvedValue(page("Opened record"));
+  const onItemOpen = vi.fn();
+  render(<MemoryRouter><PortfolioOverviewPage onItemOpen={onItemOpen} /></MemoryRouter>);
+  await screen.findByRole("button", { name: "Opened record" });
+  window.scrollY = 380;
+  fireEvent.click(screen.getByRole("button", { name: "Opened record" }));
+  expect(onItemOpen).toHaveBeenCalledExactlyOnceWith(380);
+});
+
+test("returning from an item loads the remembered portfolio page without affecting pinned loading", async () => {
+  PortfolioApi.getUserItems.mockResolvedValue(page("Returned record"));
+  const onPageLoaded = vi.fn();
+  render(<MemoryRouter><PortfolioOverviewPage initialPage={1} onPageLoaded={onPageLoaded} /></MemoryRouter>);
+  await screen.findByText("Returned record");
+  expect(PortfolioApi.getUserItems.mock.calls[0].slice(0, 3)).toEqual([1, 10, "newest_date"]);
+  expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+  expect(onPageLoaded).toHaveBeenCalledWith(1);
+  expect(PriceTrackerApi.getTrackedItems).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "bought" } });
+  await waitFor(() => expect(PortfolioApi.getUserItems).toHaveBeenLastCalledWith(0, 10, "bought", { signal: expect.any(AbortSignal) }));
+  expect(PriceTrackerApi.getTrackedItems).toHaveBeenCalledTimes(1);
+});
+
+test("a removed last portfolio page falls back to the nearest remaining page", async () => {
+  PortfolioApi.getUserItems.mockResolvedValueOnce({ content: [], totalPages: 2 })
+    .mockResolvedValueOnce(page("Last remaining page"));
+  const onPageLoaded = vi.fn();
+  render(<MemoryRouter><PortfolioOverviewPage initialPage={2} onPageLoaded={onPageLoaded} /></MemoryRouter>);
+  await screen.findByText("Last remaining page");
+  expect(PortfolioApi.getUserItems.mock.calls.map(call => call[0])).toEqual([2, 1]);
+  expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+  expect(onPageLoaded).toHaveBeenCalledWith(1);
+  expect(PriceTrackerApi.getTrackedItems).toHaveBeenCalledTimes(1);
+});
+
+test("deleting the final portfolio record returns an empty first page without repeated requests", async () => {
+  PortfolioApi.getUserItems.mockResolvedValue({ content: [], totalPages: 0 });
+  const onPageLoaded = vi.fn();
+  render(<MemoryRouter><PortfolioOverviewPage initialPage={2} onPageLoaded={onPageLoaded} /></MemoryRouter>);
+  await screen.findByText(/No portfolio items registered/);
+  expect(PortfolioApi.getUserItems).toHaveBeenCalledTimes(1);
+  expect(onPageLoaded).toHaveBeenCalledWith(0);
+});
+
+test("portfolio omits the optional CSGOTrader footer while retaining the required FX link", async () => {
+  PortfolioApi.getUserItems.mockResolvedValue(page("Ledger record"));
+  render(<MemoryRouter><PortfolioOverviewPage /></MemoryRouter>);
+  await screen.findByText("Ledger record");
+  expect(screen.queryByRole("link", { name: "CSGOTrader", exact: true })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Rates by ExchangeRate-API", exact: true })).toBeInTheDocument();
 });
 
 test("failed loading is not an empty portfolio and a retry can recover", async () => {

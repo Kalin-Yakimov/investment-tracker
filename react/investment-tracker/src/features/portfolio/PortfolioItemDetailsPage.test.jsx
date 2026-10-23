@@ -61,3 +61,14 @@ test("an unavailable portfolio item retains the error view without loading its h
     log.mockRestore();
   }
 });
+
+test("deletion returns through the client router instead of reloading the application", async () => {
+  PortfolioApi.deleteItem.mockResolvedValue({ message: "Deleted" });
+  render(<MemoryRouter initialEntries={["/viewItem/7"]}><Routes>
+    <Route path="/viewItem/:id" element={<PortfolioItemDetailsPage />} />
+    <Route path="/" element={<h1>Returned portfolio</h1>} />
+  </Routes></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /Delete Item/ }));
+  await screen.findByRole("heading", { name: "Returned portfolio" });
+  expect(PortfolioApi.deleteItem).toHaveBeenCalledWith(7);
+});

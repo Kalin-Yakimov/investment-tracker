@@ -1,6 +1,6 @@
 import TablePagination from "../../shared/components/TablePagination";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import PortfolioApi from "./PortfolioApi";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import { isRequestCanceled } from "../../shared/utils/RequestScope";
@@ -11,6 +11,7 @@ import { requestErrorMessage } from "../../shared/api/requestFeedback";
 import { formatCalendarDate } from "../../shared/utils/calendarDate";
 
 export default function PortfolioItemDetailsPage() {
+  const navigate = useNavigate();
   const scope = useRequestScope();
   const [item, setItem] = useState({
     itemName: "",
@@ -100,7 +101,7 @@ export default function PortfolioItemDetailsPage() {
     try {
       const targetId = activeItem?.id || id;
       await PortfolioApi.deleteItem(targetId);
-      if (request.isCurrent()) window.location.href = "/";
+      if (request.isCurrent()) navigate("/", { replace: true });
     } catch (error) {
       if (request.isCurrent() && !isRequestCanceled(error)) setActionError(requestErrorMessage(error, "The item could not be deleted.", { mutation: true }));
     } finally { request.finish(); }

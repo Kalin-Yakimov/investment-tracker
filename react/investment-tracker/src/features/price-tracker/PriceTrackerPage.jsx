@@ -76,7 +76,7 @@ export default function PriceTrackerPage() {
       {/* Centered Custom Delete Confirmation Modal */}
       <TrackerDeleteModal {...state} pending={scope.isPending("tracked-change")}
         onRemoved={() => setRestoreSearchFocus(true)} />
-      <PriceAttribution />
+      <PriceAttribution includePriceSource={false} />
     </div>
   );
 }

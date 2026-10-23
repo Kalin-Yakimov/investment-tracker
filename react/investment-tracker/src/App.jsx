@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, lazy, Suspense } from "react";
 import { Routes, Route, useParams, useLocation } from "react-router-dom";
 import RouteErrorBoundary from "./shared/components/RouteErrorBoundary";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -32,6 +32,34 @@ function App() {
   const [refresh, SetRefresh] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [, setAuthVersion] = useState(0);
+  const [portfolioPosition, setPortfolioPosition] = useState({ owner: null, page: 0, scrollTop: null });
+
+  // A temporary return position for the portfolio -> details -> edit workflow,
+  // not URL/F5 state or a cache of user records.
+  const rememberPortfolioPage = useCallback((page) => {
+    const owner = AuthService.getCurrentUser()?.id;
+    setPortfolioPosition(previous => previous.owner === owner && previous.page === page
+      ? previous : { owner, page, scrollTop: previous.owner === owner ? previous.scrollTop : null });
+  }, []);
+
+  const rememberPortfolioScroll = useCallback((scrollTop) => {
+    const owner = AuthService.getCurrentUser()?.id;
+    setPortfolioPosition(previous => ({
+      owner, page: previous.owner === owner ? previous.page : 0, scrollTop,
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (location.pathname !== "/" && !/^\/(viewItem|editItem)\/[^/]+\/?$/.test(location.pathname)) {
+      setPortfolioPosition(previous => previous.owner === null ? previous : { owner: null, page: 0, scrollTop: null });
+    }
+  }, [location.pathname]);
+
+  // Main routes start at the top. Portfolio restores its own return position
+  // only after its asynchronously loaded content is ready.
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location.pathname]);
 
   useEffect(() => {
     let mounted = true;
@@ -43,6 +71,7 @@ function App() {
   }, []);
 
   const handleItemAdded = () => {
+    setPortfolioPosition({ owner: null, page: 0, scrollTop: null });
     SetRefresh((previous) => !previous);
   };
 
@@ -83,7 +112,11 @@ function App() {
               <ProtectedRoute key={owner}>
                 <>
                   <RegisterPortfolioItem onItemAdded={handleItemAdded} />
-                  <PortfolioOverviewPage key={refresh} />
+                  <PortfolioOverviewPage key={refresh}
+                    initialPage={portfolioPosition.owner === owner ? portfolioPosition.page : 0}
+                    initialScrollTop={portfolioPosition.owner === owner ? portfolioPosition.scrollTop : null}
+                    onItemOpen={rememberPortfolioScroll}
+                    onPageLoaded={rememberPortfolioPage} />
                 </>
               </ProtectedRoute>
             }

@@ -85,6 +85,62 @@ test("ordinary accounts and support cannot bypass API ownership or admin roles",
     data: { enabled: true, reason: "Unauthorized fixture mutation attempt" } })).status()).toBe(403);
 });
 
+test("portfolio detail return, edit and deletion retain the list position without URL or reload persistence", async ({ page, request }, testInfo) => {
+  const role = testInfo.project.name.startsWith("desktop") ? "support" : "admin";
+  const login = await request.post(`${API}/api/v1/auth/authenticate`, { data: { email: accounts[role], password: PASSWORD } });
+  expect(login.status()).toBe(200);
+  const headers = { Authorization: `Bearer ${(await login.json()).token}` };
+  const prefix = `Return page ${testInfo.project.name}`;
+  const records = [];
+  for (let number = 1; number <= 22; number++) {
+    const created = await request.post(`${API}/item`, { headers,
+      data: { itemName: `${prefix} ${String(number).padStart(2, "0")}`, itemStatus: "BOUGHT", date: "01.10.2026", quantity: 1, price: "3.25" } });
+    expect(created.status()).toBe(200);
+    records.push(await created.json());
+  }
+  await signIn(page, role);
+  const pagination = page.getByRole("navigation", { name: "Portfolio pagination" });
+  await pagination.getByRole("button", { name: "2", exact: true }).click();
+  const name = records[11].itemName;
+  await page.getByRole("button", { name, exact: true }).scrollIntoViewIfNeeded();
+  async function openRecord() {
+    // Capture the actual click position: mobile focus/tap can move the viewport
+    // slightly after Playwright has scrolled the target into view.
+    const [scrollTop] = await Promise.all([
+      page.evaluate(() => new Promise(resolve => window.addEventListener("click", () => resolve(window.scrollY), { capture: true, once: true }))),
+      page.getByRole("button", { name, exact: true }).click(),
+    ]);
+    return scrollTop;
+  }
+  const returnScrollTop = await openRecord();
+  expect(returnScrollTop).toBeGreaterThan(0);
+  await expect(page.getByRole("heading", { name: "Item Details", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.goBack();
+  await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(returnScrollTop, 0);
+  const editReturnScrollTop = await openRecord();
+  await page.getByRole("link", { name: "Edit Item", exact: true }).click();
+  await page.getByLabel("Quantity", { exact: true }).fill("3");
+  await page.getByRole("button", { name: "Update Item", exact: true }).click();
+  await page.getByRole("link", { name: /Back to Portfolio/ }).click();
+  await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(editReturnScrollTop, 0);
+  await page.getByRole("button", { name, exact: true }).click();
+  await page.getByRole("button", { name: /Delete Item/ }).click();
+  await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await pagination.getByRole("button", { name: "3", exact: true }).click();
+  await page.getByRole("button", { name: records[0].itemName, exact: true }).click();
+  await page.getByRole("button", { name: /Delete Item/ }).click();
+  await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(pagination.getByRole("button", { name: "3", exact: true })).toHaveCount(0);
+  await expect(page).toHaveURL("http://127.0.0.1:14173/");
+  await page.reload();
+  await expect(pagination.getByRole("button", { name: "1", exact: true })).toHaveAttribute("aria-current", "page");
+});
+
 test("sign-out revokes both independently issued sessions", async ({ request }) => {
   const tokens = [];
   for (let i = 0; i < 2; i++) {
@@ -219,8 +275,10 @@ test("registration, mailbox activation and a fresh real session work together", 
 test("page layout stays within the viewport and navigation remains reachable", async ({ page }) => {
   await signIn(page);
   for (const link of ["Steam Price Tracker", "Inventory Calculator", "Portfolio Overview"]) {
+    await page.mouse.wheel(0, 600);
     await page.getByRole("link", { name: link, exact: true }).click();
     await expect(page.getByRole("link", { name: link, exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   }
   for (const width of [320, 615, 900, 1280]) {

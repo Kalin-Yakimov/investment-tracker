@@ -1,6 +1,6 @@
 import PortfolioApi from "./PortfolioApi";
 import PriceTrackerApi from "../price-tracker/PriceTrackerApi";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import usePriceHistories from "../../shared/hooks/usePriceHistories";
@@ -12,11 +12,13 @@ import { requestErrorMessage } from "../../shared/api/requestFeedback";
 import PriceAttribution from "../../shared/components/PriceAttribution";
 import "./styles/PortfolioOverviewPage.css";
 import "../price-tracker/styles/PriceTrackerPage.css";
-export default function PortfolioOverviewPage() {
+export default function PortfolioOverviewPage({ initialPage = 0, initialScrollTop = null, onPageLoaded, onItemOpen } = {}) {
   const scope = useRequestScope();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const portfolioPageToLoad = useRef(initialPage);
+  const returnScrollTop = useRef(initialScrollTop);
   const [itemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [portfolioError, setPortfolioError] = useState("");
@@ -52,11 +54,27 @@ export default function PortfolioOverviewPage() {
       setPortfolioError("");
       try {
         setLoading(true);
-        const result = await PortfolioApi.getUserItems(page, itemsPerPage, filter, { signal: request.signal });
-        if (!request.isCurrent()) return;
-        setItems(result.content || []);
-        setTotalPages(result.totalPages || 0);
-        setCurrentPage(page);
+        let requestedPage = page;
+        for (;;) {
+          lastPortfolioRequest.current = { page: requestedPage, filter };
+          const result = await PortfolioApi.getUserItems(requestedPage, itemsPerPage, filter, { signal: request.signal });
+          if (!request.isCurrent()) return;
+          const total = result.totalPages || 0;
+          const lastPage = Math.max(0, total - 1);
+          // Deleting the last row may remove a whole page. Fall back only as far
+          // as necessary; pinned items keep their independent request/state.
+          if (total > 0 && requestedPage > lastPage) {
+            requestedPage = lastPage;
+            continue;
+          }
+          const loadedPage = total > 0 ? requestedPage : 0;
+          setItems(result.content || []);
+          setTotalPages(total);
+          setCurrentPage(loadedPage);
+          portfolioPageToLoad.current = loadedPage;
+          onPageLoaded?.(loadedPage);
+          break;
+        }
       } catch (error) {
         if (request.isCurrent() && !isRequestCanceled(error)) {
           setPortfolioError(requestErrorMessage(error, "Portfolio history could not be loaded."));
@@ -66,7 +84,7 @@ export default function PortfolioOverviewPage() {
         request.finish();
       }
     },
-    [itemsPerPage, filterSortOption, scope],
+    [itemsPerPage, filterSortOption, scope, onPageLoaded],
   );
 
   const loadPinnedItems = useCallback(async (page = 0) => {
@@ -90,7 +108,7 @@ export default function PortfolioOverviewPage() {
   }, [scope]);
 
   useEffect(() => {
-    loadItems(0, filterSortOption);
+    loadItems(portfolioPageToLoad.current, filterSortOption);
     return () => scope.cancel("portfolio");
   }, [filterSortOption, loadItems, scope]);
 
@@ -98,6 +116,14 @@ export default function PortfolioOverviewPage() {
     loadPinnedItems();
     return () => scope.cancel("pinned");
   }, [loadPinnedItems, scope]);
+
+  useLayoutEffect(() => {
+    if (loading || pinnedLoading || returnScrollTop.current === null) return;
+    // Restore once, after the rows give the page its real height. Later filters,
+    // pagination and pinned infinite-scroll updates must not move the viewport.
+    window.scrollTo({ top: returnScrollTop.current, left: 0, behavior: "instant" });
+    returnScrollTop.current = null;
+  }, [loading, pinnedLoading]);
 
   // IntersectionObserver for Infinite Scroll on Pinned Items
   useEffect(() => {
@@ -120,6 +146,7 @@ export default function PortfolioOverviewPage() {
   }, [pinnedLoading, pinnedError, pinnedVisibleCount, pinnedTotal, pinnedPage, loadPinnedItems]);
 
   const handleRowClick = (id) => {
+    onItemOpen?.(window.scrollY);
     navigate(`/viewItem/${id}`);
   };
 
@@ -198,7 +225,7 @@ export default function PortfolioOverviewPage() {
         totalPages={totalPages}
         handlePageChange={handlePageChange}
         filterSortOption={filterSortOption}
-        setFilterSortOption={setFilterSortOption}
+        setFilterSortOption={option => { portfolioPageToLoad.current = 0; setFilterSortOption(option); }}
         loading={loading}
         error={portfolioError}
         onRetry={() => loadItems(lastPortfolioRequest.current.page, lastPortfolioRequest.current.filter)}
@@ -224,7 +251,7 @@ export default function PortfolioOverviewPage() {
         onRetry={() => loadPinnedItems(lastPinnedPage.current)}
         isUnpinPending={id => scope.isPending("unpin:" + id)}
       />
-      <PriceAttribution />
+      <PriceAttribution includePriceSource={false} />
     </div>
   );
 }

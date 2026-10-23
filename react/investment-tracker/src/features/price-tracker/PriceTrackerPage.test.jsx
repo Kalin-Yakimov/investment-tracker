@@ -25,6 +25,14 @@ beforeEach(() => {
   PriceTrackerApi.getPriceHistory.mockResolvedValue([]);
 });
 
+test("tracker omits the optional price-source footer but retains the required currency attribution", async () => {
+  render(<PriceTrackerPage />);
+  await screen.findByText("Case One");
+  expect(screen.queryByRole("link", { name: "CSGOTrader", exact: true })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Rates by ExchangeRate-API", exact: true }))
+    .toHaveAttribute("href", "https://www.exchangerate-api.com");
+});
+
 test("bookmark changes do not refetch unchanged histories or allow overlapping writes", async () => {
   const pending = deferred();
   PriceTrackerApi.toggleBookmark.mockReturnValue(pending.promise);
