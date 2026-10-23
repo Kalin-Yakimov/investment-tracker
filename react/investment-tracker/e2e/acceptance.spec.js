@@ -16,6 +16,27 @@ async function signIn(page, role = "user") {
 
 async function profileMenu(page) { await page.locator(".profile-nav-btn").click(); }
 
+async function expectReturnTarget(page, target, offsetTop = null) {
+  await expect(target).toBeInViewport();
+  await expect.poll(() => target.evaluate(async (element, savedOffset) => {
+    const positions = [];
+    for (let frame = 0; frame < 10; frame++) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      positions.push(element.getBoundingClientRect().top);
+    }
+    const rect = element.getBoundingClientRect();
+    const inset = Math.max(0, document.querySelector("header.custom-navbar-wrapper").getBoundingClientRect().bottom) + 8;
+    const offset = Math.min(Math.max(inset, savedOffset ?? inset), Math.max(inset, window.innerHeight - rect.height - 8));
+    const documentTop = window.scrollY + rect.top;
+    const maximum = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const expectedTop = documentTop - Math.min(maximum, Math.max(0, documentTop - offset));
+    // Allow CSS-pixel rounding, but detect a wrong target or a late scroll jump.
+    return { positioned: Math.abs(rect.top - expectedTop) <= 3,
+      stable: Math.max(...positions) - Math.min(...positions) <= 3,
+      visible: rect.bottom > inset && rect.top < window.innerHeight };
+  }, offsetTop)).toEqual({ positioned: true, stable: true, visible: true });
+}
+
 test.beforeEach(async ({ page, request }) => {
   pageErrors.set(page, []);
   page.on("pageerror", error => pageErrors.get(page).push(error.message));
@@ -86,6 +107,7 @@ test("ordinary accounts and support cannot bypass API ownership or admin roles",
 });
 
 test("portfolio detail return, edit and deletion retain the list position without URL or reload persistence", async ({ page, request }, testInfo) => {
+  test.setTimeout(60000);
   const role = testInfo.project.name.startsWith("desktop") ? "support" : "admin";
   const login = await request.post(`${API}/api/v1/auth/authenticate`, { data: { email: accounts[role], password: PASSWORD } });
   expect(login.status()).toBe(200);
@@ -99,46 +121,86 @@ test("portfolio detail return, edit and deletion retain the list position withou
     records.push(await created.json());
   }
   await signIn(page, role);
+  expect(await page.evaluate(() => history.scrollRestoration)).toBe("manual");
+  // Different response order must not restore against a loading placeholder.
+  await page.route("**/get-user-items?**", async route => { await new Promise(resolve => setTimeout(resolve, 150)); await route.continue(); });
+  await page.route("**/portfolio-summary", async route => { await new Promise(resolve => setTimeout(resolve, 350)); await route.continue(); });
   const pagination = page.getByRole("navigation", { name: "Portfolio pagination" });
   await pagination.getByRole("button", { name: "2", exact: true }).click();
   const name = records[11].itemName;
   await page.getByRole("button", { name, exact: true }).scrollIntoViewIfNeeded();
-  async function openRecord() {
-    // Capture the actual click position: mobile focus/tap can move the viewport
-    // slightly after Playwright has scrolled the target into view.
-    const [scrollTop] = await Promise.all([
-      page.evaluate(() => new Promise(resolve => window.addEventListener("click", () => resolve(window.scrollY), { capture: true, once: true }))),
-      page.getByRole("button", { name, exact: true }).click(),
+  const recordRow = recordName => page.getByRole("row").filter({ has: page.getByRole("button", { name: recordName, exact: true }) });
+  const table = page.locator(".portfolio-table-card").filter({ has: page.getByRole("heading", { name: "Portfolio History", exact: true }) });
+  async function openRecord(recordName = name) {
+    const [offsetTop] = await Promise.all([
+      page.evaluate(() => new Promise(resolve => window.addEventListener("click", event => resolve(event.target.closest("tr").getBoundingClientRect().top), { capture: true, once: true }))),
+      page.getByRole("button", { name: recordName, exact: true }).click(),
     ]);
-    return scrollTop;
+    return offsetTop;
   }
-  const returnScrollTop = await openRecord();
-  expect(returnScrollTop).toBeGreaterThan(0);
+  const returnOffset = await openRecord();
   await expect(page.getByRole("heading", { name: "Item Details", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await page.goBack();
   await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(returnScrollTop, 0);
-  const editReturnScrollTop = await openRecord();
+  await expectReturnTarget(page, recordRow(name), returnOffset);
+
+  const addedOffset = await openRecord();
+  const added = await request.post(`${API}/item`, { headers,
+    data: { itemName: `${prefix} added`, itemStatus: "BOUGHT", date: "02.10.2026", quantity: 1, price: "3.25" } });
+  expect(added.status()).toBe(200);
+  await page.goBack();
+  await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
+  await expectReturnTarget(page, recordRow(name), addedOffset);
+
+  const removedOffset = await openRecord();
+  expect((await request.delete(`${API}/item/${records[12].id}`, { headers })).status()).toBe(200);
+  await page.goBack();
+  await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
+  await expectReturnTarget(page, recordRow(name), removedOffset);
+
+  const editReturnOffset = await openRecord();
   await page.getByRole("link", { name: "Edit Item", exact: true }).click();
   await page.getByLabel("Quantity", { exact: true }).fill("3");
   await page.getByRole("button", { name: "Update Item", exact: true }).click();
   await page.getByRole("link", { name: /Back to Portfolio/ }).click();
   await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(editReturnScrollTop, 0);
-  await page.getByRole("button", { name, exact: true }).click();
+  await expectReturnTarget(page, recordRow(name), editReturnOffset);
+
+  await openRecord(records[10].itemName);
+  expect((await request.put(`${API}/item/${records[10].id}`, { headers,
+    data: { itemName: records[10].itemName, itemStatus: "BOUGHT", date: "03.10.2026", quantity: 1, price: "3.25" } })).status()).toBe(200);
+  await page.getByRole("link", { name: /Back to Portfolio/ }).click();
+  await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("button", { name: records[10].itemName, exact: true })).toHaveCount(0);
+  await expectReturnTarget(page, table);
+
+  await openRecord();
   await page.getByRole("button", { name: /Delete Item/ }).click();
   await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await expectReturnTarget(page, table);
   await pagination.getByRole("button", { name: "3", exact: true }).click();
   await page.getByRole("button", { name: records[0].itemName, exact: true }).click();
   await page.getByRole("button", { name: /Delete Item/ }).click();
   await expect(pagination.getByRole("button", { name: "2", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(pagination.getByRole("button", { name: "3", exact: true })).toHaveCount(0);
+  await expectReturnTarget(page, table);
   await expect(page).toHaveURL("http://127.0.0.1:14173/");
   await page.reload();
   await expect(pagination.getByRole("button", { name: "1", exact: true })).toHaveAttribute("aria-current", "page");
+  await pagination.getByRole("button", { name: "2", exact: true }).click();
+  await openRecord(records[1].itemName);
+  const remaining = await request.get(`${API}/get-user-items?page=0&size=100`, { headers });
+  expect(remaining.status()).toBe(200);
+  for (const record of (await remaining.json()).content) {
+    expect((await request.delete(`${API}/item/${record.id}`, { headers })).status()).toBe(200);
+  }
+  await page.goBack();
+  await expect(page.getByText(/No portfolio items registered/)).toBeVisible();
+  await expect(pagination).toHaveCount(0);
+  await expectReturnTarget(page, table);
 });
 
 test("sign-out revokes both independently issued sessions", async ({ request }) => {

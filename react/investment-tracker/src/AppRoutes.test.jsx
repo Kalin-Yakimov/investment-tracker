@@ -9,11 +9,11 @@ import deferred from "./testUtils/deferred";
 // subscriptions here to verify routing/access without requesting backend data.
 vi.mock("./features/auth/pages/LoginPage", () => ({ default: () => <h1>Login test view</h1> }));
 vi.mock("./features/auth/pages/RegistrationPage", () => ({ default: () => <h1>Registration test view</h1> }));
-vi.mock("./features/portfolio/PortfolioOverviewPage", () => ({ default: ({ initialPage, initialScrollTop, onPageLoaded, onItemOpen }) => <>
+vi.mock("./features/portfolio/PortfolioOverviewPage", () => ({ default: ({ initialPage, initialReturnAnchor, onPageLoaded, onItemOpen }) => <>
   <h1>Portfolio test view</h1><output data-testid="portfolio-page">{initialPage + 1}</output>
-  <output data-testid="portfolio-scroll">{initialScrollTop ?? "none"}</output>
+  <output data-testid="portfolio-scroll">{initialReturnAnchor?.offsetTop ?? "none"}</output>
   <button onClick={() => onPageLoaded(1)}>Select second portfolio page</button>
-  <Link to="/viewItem/42" onClick={() => onItemOpen(640)}>Open portfolio record</Link>
+  <Link to="/viewItem/42" onClick={() => onItemOpen({ itemId: "42", offsetTop: 640 })}>Open portfolio record</Link>
 </> }));
 vi.mock("./features/portfolio/components/RegisterPortfolioItem", () => ({ default: ({ onItemAdded }) => <button onClick={onItemAdded}>Register test record</button> }));
 vi.mock("./features/portfolio/PortfolioItemDetailsPage", () => ({ default: () => <>
@@ -54,6 +54,21 @@ afterEach(() => {
 });
 
 describe("application route and profile access", () => {
+  it("owns history scrolling while mounted and restores the previous browser policy on unmount", async () => {
+    const previous = Object.getOwnPropertyDescriptor(window.history, "scrollRestoration");
+    Object.defineProperty(window.history, "scrollRestoration", { configurable: true, writable: true, value: "auto" });
+    try {
+      signedIn(); const view = mount("/");
+      await screen.findByRole("heading", { name: "Portfolio test view" });
+      expect(window.history.scrollRestoration).toBe("manual");
+      view.unmount();
+      expect(window.history.scrollRestoration).toBe("auto");
+    } finally {
+      if (previous) Object.defineProperty(window.history, "scrollRestoration", previous);
+      else delete window.history.scrollRestoration;
+    }
+  });
+
   it("remembers only the portfolio return page through details/edit, then resets on another feature", async () => {
     signedIn(); mount("/");
     await screen.findByRole("heading", { name: "Portfolio test view" });

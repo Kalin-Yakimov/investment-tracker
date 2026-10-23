@@ -1,6 +1,6 @@
 import PortfolioApi from "./PortfolioApi";
 import PriceTrackerApi from "../price-tracker/PriceTrackerApi";
-import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import useRequestScope from "../../shared/hooks/useRequestScope";
 import usePriceHistories from "../../shared/hooks/usePriceHistories";
@@ -10,15 +10,15 @@ import PinnedMarketItemsSection from "./components/PinnedMarketItemsSection";
 import RequestError from "../../shared/components/RequestError";
 import { requestErrorMessage } from "../../shared/api/requestFeedback";
 import PriceAttribution from "../../shared/components/PriceAttribution";
+import usePortfolioReturnScroll from "./hooks/usePortfolioReturnScroll";
 import "./styles/PortfolioOverviewPage.css";
 import "../price-tracker/styles/PriceTrackerPage.css";
-export default function PortfolioOverviewPage({ initialPage = 0, initialScrollTop = null, onPageLoaded, onItemOpen } = {}) {
+export default function PortfolioOverviewPage({ initialPage = 0, initialReturnAnchor = null, onPageLoaded, onItemOpen } = {}) {
   const scope = useRequestScope();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(initialPage);
   const portfolioPageToLoad = useRef(initialPage);
-  const returnScrollTop = useRef(initialScrollTop);
   const [itemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [portfolioError, setPortfolioError] = useState("");
@@ -28,6 +28,9 @@ export default function PortfolioOverviewPage({ initialPage = 0, initialScrollTo
   const [pinnedActionError, setPinnedActionError] = useState("");
   const [summaryError, setSummaryError] = useState("");
   const navigate = useNavigate();
+  const { sectionRef, registerRow, captureAnchor } = usePortfolioReturnScroll(
+    initialReturnAnchor, !loading && !pinnedLoading && !scope.isPending("summary"),
+  );
 
   // Portfolio Filtering & Sorting State
   const [filterSortOption, setFilterSortOption] = useState("newest_date");
@@ -117,14 +120,6 @@ export default function PortfolioOverviewPage({ initialPage = 0, initialScrollTo
     return () => scope.cancel("pinned");
   }, [loadPinnedItems, scope]);
 
-  useLayoutEffect(() => {
-    if (loading || pinnedLoading || returnScrollTop.current === null) return;
-    // Restore once, after the rows give the page its real height. Later filters,
-    // pagination and pinned infinite-scroll updates must not move the viewport.
-    window.scrollTo({ top: returnScrollTop.current, left: 0, behavior: "instant" });
-    returnScrollTop.current = null;
-  }, [loading, pinnedLoading]);
-
   // IntersectionObserver for Infinite Scroll on Pinned Items
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -146,7 +141,7 @@ export default function PortfolioOverviewPage({ initialPage = 0, initialScrollTo
   }, [pinnedLoading, pinnedError, pinnedVisibleCount, pinnedTotal, pinnedPage, loadPinnedItems]);
 
   const handleRowClick = (id) => {
-    onItemOpen?.(window.scrollY);
+    onItemOpen?.(captureAnchor(id));
     navigate(`/viewItem/${id}`);
   };
 
@@ -221,6 +216,8 @@ export default function PortfolioOverviewPage({ initialPage = 0, initialScrollTo
 
       {/* Main Portfolio Table Card */}
       <PortfolioHistorySection
+        sectionRef={sectionRef}
+        registerRow={registerRow}
         currentPage={currentPage}
         totalPages={totalPages}
         handlePageChange={handlePageChange}

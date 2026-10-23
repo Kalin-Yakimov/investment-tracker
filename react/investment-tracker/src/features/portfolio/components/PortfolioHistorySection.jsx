@@ -3,9 +3,9 @@ import { Table } from "react-bootstrap";
 import { formatDateDDMMYYYY } from "../utils/portfolioFormat";
 import RequestError from "../../../shared/components/RequestError";
 
-export default function PortfolioHistorySection({ currentPage, totalPages, handlePageChange, filterSortOption, setFilterSortOption, loading, error, onRetry, items, sortedFilteredItems, handleRowClick }) {
+export default function PortfolioHistorySection({ sectionRef, registerRow, currentPage, totalPages, handlePageChange, filterSortOption, setFilterSortOption, loading, error, onRetry, items, sortedFilteredItems, handleRowClick }) {
   return (
-      <div className="card portfolio-table-card shadow-lg p-4 mb-5">
+      <div ref={sectionRef} className="card portfolio-table-card shadow-lg p-4 mb-5">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
           <h3 className="portfolio-table-title mb-0">Portfolio History</h3>
 
@@ -69,6 +69,7 @@ export default function PortfolioHistorySection({ currentPage, totalPages, handl
                     return (
                       <tr
                         key={item.id}
+                        ref={element => registerRow?.(item.id, element)}
                         onClick={() => handleRowClick(item.id)}
                         className="portfolio-row-clickable"
                       >

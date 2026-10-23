@@ -32,28 +32,37 @@ function App() {
   const [refresh, SetRefresh] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [, setAuthVersion] = useState(0);
-  const [portfolioPosition, setPortfolioPosition] = useState({ owner: null, page: 0, scrollTop: null });
+  const [portfolioPosition, setPortfolioPosition] = useState({ owner: null, page: 0, anchor: null });
 
   // A temporary return position for the portfolio -> details -> edit workflow,
   // not URL/F5 state or a cache of user records.
   const rememberPortfolioPage = useCallback((page) => {
     const owner = AuthService.getCurrentUser()?.id;
     setPortfolioPosition(previous => previous.owner === owner && previous.page === page
-      ? previous : { owner, page, scrollTop: previous.owner === owner ? previous.scrollTop : null });
+      ? previous : { owner, page, anchor: previous.owner === owner ? previous.anchor : null });
   }, []);
 
-  const rememberPortfolioScroll = useCallback((scrollTop) => {
+  const rememberPortfolioAnchor = useCallback((anchor) => {
     const owner = AuthService.getCurrentUser()?.id;
     setPortfolioPosition(previous => ({
-      owner, page: previous.owner === owner ? previous.page : 0, scrollTop,
+      owner, page: previous.owner === owner ? previous.page : 0, anchor,
     }));
   }, []);
 
   useEffect(() => {
     if (location.pathname !== "/" && !/^\/(viewItem|editItem)\/[^/]+\/?$/.test(location.pathname)) {
-      setPortfolioPosition(previous => previous.owner === null ? previous : { owner: null, page: 0, scrollTop: null });
+      setPortfolioPosition(previous => previous.owner === null ? previous : { owner: null, page: 0, anchor: null });
     }
   }, [location.pathname]);
+
+  // The application owns history scrolling; native Back restoration must not
+  // compete with our asynchronous list restoration.
+  useLayoutEffect(() => {
+    if (!("scrollRestoration" in window.history)) return;
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    return () => { window.history.scrollRestoration = previous; };
+  }, []);
 
   // Main routes start at the top. Portfolio restores its own return position
   // only after its asynchronously loaded content is ready.
@@ -71,7 +80,7 @@ function App() {
   }, []);
 
   const handleItemAdded = () => {
-    setPortfolioPosition({ owner: null, page: 0, scrollTop: null });
+    setPortfolioPosition({ owner: null, page: 0, anchor: null });
     SetRefresh((previous) => !previous);
   };
 
@@ -114,8 +123,8 @@ function App() {
                   <RegisterPortfolioItem onItemAdded={handleItemAdded} />
                   <PortfolioOverviewPage key={refresh}
                     initialPage={portfolioPosition.owner === owner ? portfolioPosition.page : 0}
-                    initialScrollTop={portfolioPosition.owner === owner ? portfolioPosition.scrollTop : null}
-                    onItemOpen={rememberPortfolioScroll}
+                    initialReturnAnchor={portfolioPosition.owner === owner ? portfolioPosition.anchor : null}
+                    onItemOpen={rememberPortfolioAnchor}
                     onPageLoaded={rememberPortfolioPage} />
                 </>
               </ProtectedRoute>

@@ -18,6 +18,7 @@ const page = (name) => ({ content: [{ id: 1, itemName: name, itemStatus: "BOUGHT
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(3000);
   window.scrollY = 0;
   AuthService.getSessionVersion.mockReturnValue(1);
   PriceTrackerApi.getTrackedItems.mockResolvedValue({ content: [], number: 0, totalElements: 0, totalPages: 0 });
@@ -57,17 +58,23 @@ test("pagination does not reload unrelated pinned items or portfolio totals", as
   expect(globalThis.IntersectionObserver.mock.results[0].value.disconnect).toHaveBeenCalled();
 });
 
-test("restores the return scroll once after both tables load, not on later filters or pagination", async () => {
+test("restores the row anchor once after tables and totals load, not on later filters or pagination", async () => {
   const ledger = deferred();
   const pinned = deferred();
+  const summary = deferred();
+  PortfolioApi.getPortfolioSummary.mockReturnValueOnce(summary.promise);
   PortfolioApi.getUserItems.mockReturnValueOnce(ledger.promise).mockResolvedValue(page("Returned record"));
   PriceTrackerApi.getTrackedItems.mockReturnValueOnce(pinned.promise);
-  render(<MemoryRouter><PortfolioOverviewPage initialPage={1} initialScrollTop={640} /></MemoryRouter>);
+  render(<MemoryRouter><PortfolioOverviewPage initialPage={1} initialReturnAnchor={{ itemId: "1", offsetTop: 160 }} /></MemoryRouter>);
   expect(window.scrollTo).not.toHaveBeenCalled();
   await act(async () => ledger.resolve(page("Returned record")));
+  vi.spyOn(screen.getByRole("button", { name: "Returned record" }).closest("tr"), "getBoundingClientRect")
+    .mockReturnValue({ top: 800, height: 48 });
   expect(window.scrollTo).not.toHaveBeenCalled();
   await act(async () => pinned.resolve({ content: [], number: 0, totalElements: 0 }));
-  expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 640, left: 0, behavior: "instant" });
+  expect(window.scrollTo).not.toHaveBeenCalled();
+  await act(async () => summary.resolve({ count: 1, totalInvestmentValue: 2 }));
+  await waitFor(() => expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 640, left: 0, behavior: "instant" }));
   fireEvent.change(screen.getByRole("combobox"), { target: { value: "bought" } });
   await waitFor(() => expect(screen.getByText("Page 1 of 2")).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -75,14 +82,16 @@ test("restores the return scroll once after both tables load, not on later filte
   expect(window.scrollTo).toHaveBeenCalledTimes(1);
 });
 
-test("remembers the current viewport when opening a portfolio record", async () => {
+test("remembers the opened record and its viewport offset", async () => {
   PortfolioApi.getUserItems.mockResolvedValue(page("Opened record"));
   const onItemOpen = vi.fn();
   render(<MemoryRouter><PortfolioOverviewPage onItemOpen={onItemOpen} /></MemoryRouter>);
   await screen.findByRole("button", { name: "Opened record" });
+  vi.spyOn(screen.getByRole("button", { name: "Opened record" }).closest("tr"), "getBoundingClientRect")
+    .mockReturnValue({ top: 160, height: 48 });
   window.scrollY = 380;
   fireEvent.click(screen.getByRole("button", { name: "Opened record" }));
-  expect(onItemOpen).toHaveBeenCalledExactlyOnceWith(380);
+  expect(onItemOpen).toHaveBeenCalledExactlyOnceWith({ itemId: "1", offsetTop: 160 });
 });
 
 test("returning from an item loads the remembered portfolio page without affecting pinned loading", async () => {
